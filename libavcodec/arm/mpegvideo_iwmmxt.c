@@ -95,6 +95,7 @@ static void dct_unquantize_h263_intra_iwmmxt(MpegEncContext *s,
 
 void MPV_common_init_iwmmxt(MpegEncContext *s)
 {
+    int mm_flags = av_get_cpu_flags();
     if (!(mm_flags & AV_CPU_FLAG_IWMMXT)) return;
 
     s->dct_unquantize_h263_intra = dct_unquantize_h263_intra_iwmmxt;
