@@ -83,11 +83,11 @@ static int decode_nal_slice(HEVCContext *s, GetBitContext *gb)
             }
         }
 
-        if (s->sps->scaling_list_enable_flag
-            || s->sps->deblocking_filter_in_aps_enabled_flag
-            || (s->sps->sample_adaptive_offset_enabled_flag
-                && !sh->slice_sao_interleaving_flag)
-            || s->sps->adaptive_loop_filter_enabled_flag) {
+        if (s->sps->scaling_list_enable_flag ||
+            s->sps->deblocking_filter_in_aps_enabled_flag ||
+            (s->sps->sample_adaptive_offset_enabled_flag &&
+             !sh->slice_sao_interleaving_flag) ||
+            s->sps->adaptive_loop_filter_enabled_flag) {
             sh->aps_id = get_ue_golomb(gb);
             if (sh->aps_id >= MAX_APS_COUNT || s->aps_list[sh->aps_id] == NULL) {
                 av_log(s->avctx, AV_LOG_ERROR, "APS id out of range: %d\n", sh->aps_id);
@@ -136,9 +136,9 @@ static int decode_nal_slice(HEVCContext *s, GetBitContext *gb)
 
     /*
     if (s->sps->seq_loop_filter_across_slices_enabled_flag
-        && (sh->slice_adaptive_loop_filter_flag
-            || sh->slice_sample_adaptive_offset_flag
-            || !sh->disable_deblocking_filter_flag)) {
+        && (sh->slice_adaptive_loop_filter_flag ||
+            sh->slice_sample_adaptive_offset_flag ||
+            !sh->disable_deblocking_filter_flag)) {
         av_log(s->avctx, AV_LOG_ERROR,
                "TODO: slice_loop_filter_across_slices_enabled_flag\n");
         goto err;
