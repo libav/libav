@@ -36,7 +36,8 @@ typedef struct {
  */
 static int hevc_parse_nal_unit(HEVCParserContext *hpc, uint8_t **poutbuf,
                                int *poutbuf_size, const uint8_t *buf,
-                               int buf_size) {
+                               int buf_size)
+{
     ParseContext *pc = &hpc->pc;
     int mask = 0xFFFFFF;
     int skipped = 0;
@@ -57,7 +58,7 @@ static int hevc_parse_nal_unit(HEVCParserContext *hpc, uint8_t **poutbuf,
         }
     }
 
-    buf += header;
+    buf      += header;
     buf_size -= header;
     *poutbuf = (uint8_t*)buf;
 
@@ -70,8 +71,8 @@ static int hevc_parse_nal_unit(HEVCParserContext *hpc, uint8_t **poutbuf,
                 pc->frame_start_found = 0;
                 pc->state = -1;
                 // The start code is three bytes long
-                *poutbuf_size = (i - 2) - skipped;
-                return header + (i - 2);
+                *poutbuf_size = i - 2 - skipped;
+                return header + i - 2;
             case EMULATION_CODE:
                 skipped++;
 
@@ -117,7 +118,7 @@ static int hevc_parse(AVCodecParserContext *s,
     combine_next = (next != END_NOT_FOUND) ? *poutbuf_size : next;
 
     if (ff_combine_frame(pc, combine_next, poutbuf, poutbuf_size) < 0) {
-        *poutbuf = NULL;
+        *poutbuf      = NULL;
         *poutbuf_size = 0;
         return buf_size;
     }
@@ -129,7 +130,7 @@ static int hevc_init(AVCodecParserContext *s)
 {
     HEVCParserContext *hpc = s->priv_data;
     hpc->nal_buffer_size = 0;
-    hpc->nal_buffer = NULL;
+    hpc->nal_buffer      = NULL;
     return 0;
 }
 

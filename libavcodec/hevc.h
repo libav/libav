@@ -34,7 +34,7 @@
  * Enable to diverge from the spec when the reference encoder
  * does so.
  */
-#define SUPPORT_ENCODER 1
+#define REFERENCE_ENCODER_QUIRKS 1
 
 /**
  * Table 7-3: NAL unit type codes
@@ -149,7 +149,7 @@ typedef struct {
 
     uint8_t long_term_ref_pics_present_flag;
 
-#if SUPPORT_ENCODER
+#if REFERENCE_ENCODER_QUIRKS
     uint8_t amvp_mode_flag[4];
 #endif
 
@@ -160,10 +160,7 @@ typedef struct {
     uint8_t loop_filter_across_tiles_enabled_flag;
 
 
-    /**
-     * Inferred parameters
-     */
-
+    // Inferred parameters
     int Log2CtbSize;
     int PicWidthInCtbs;
     int PicHeightInCtbs;
@@ -175,10 +172,6 @@ typedef struct {
 } SPS;
 
 typedef struct {
-    /**
-     * Coded parameters
-     */
-
     int sps_id; ///< seq_parameter_set_id
 
     uint8_t sign_data_hiding_flag;
@@ -186,7 +179,7 @@ typedef struct {
 
     uint8_t cabac_init_present_flag;
 
-#if SUPPORT_ENCODER
+#if REFERENCE_ENCODER_QUIRKS
     uint8_t entropy_coding_mode_flag;
 #endif
 
@@ -227,10 +220,7 @@ typedef struct {
     uint8_t pps_extension_flag;
     uint8_t pps_extension_data_flag;
 
-    /**
-     * Inferred parameters
-     */
-
+    // Inferred parameters
     int SliceGranularity;
 } PPS;
 
@@ -242,7 +232,7 @@ typedef struct {
 } APS;
 
 typedef enum {
-#if SUPPORT_ENCODER
+#if REFERENCE_ENCODER_QUIRKS
     I_SLICE = 0,
     P_SLICE = 1,
     B_SLICE = 2
@@ -281,7 +271,7 @@ typedef struct {
 
     uint8_t slice_loop_filter_across_slices_enabled_flag;
 
-#if SUPPORT_ENCODER
+#if REFERENCE_ENCODER_QUIRKS
     uint8_t tile_marker_flag;
 #endif
 
@@ -306,7 +296,7 @@ typedef struct HEVCCabacContext {
     uint16_t range; ///< codIRange
     uint16_t offset; ///< codIOffset
 
-    SyntaxElement elem;
+    enum SyntaxElement elem;
 
     uint8_t (*state)[2];
 

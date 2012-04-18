@@ -20,8 +20,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "hevc.h"
 #include "golomb.h"
+#include "hevc.h"
 
 /**
  * Section 7.3.3.1
@@ -56,7 +56,7 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
 
     SPS *sps = av_mallocz(sizeof(SPS));
     int sps_id = 0;
-#if SUPPORT_ENCODER
+#if REFERENCE_ENCODER_QUIRKS
     int max_cu_depth = 0;
 #endif
     av_log(s->avctx, AV_LOG_DEBUG, "Decoding SPS\n");
@@ -64,8 +64,8 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
     memset(sps->short_term_rps_list, 0, sizeof(sps->short_term_rps_list));
 
     // Default values
-    sps->num_tile_columns = 1;
-    sps->num_tile_rows = 1;
+    sps->num_tile_columns     = 1;
+    sps->num_tile_rows        = 1;
     sps->uniform_spacing_flag = 1;
 
     // Coded parameters
@@ -73,27 +73,26 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
     sps->profile_idc = get_bits(gb, 8);
     skip_bits(gb, 8); // reserved_zero_8bits
     sps->level_idc = get_bits(gb, 8);
-    sps_id = get_ue_golomb(gb);
+    sps_id         = get_ue_golomb(gb);
     if (sps_id >= MAX_SPS_COUNT) {
         av_log(s->avctx, AV_LOG_ERROR, "SPS id out of range: %d\n", sps_id);
         goto err;
     }
 
     sps->chroma_format_idc = get_ue_golomb(gb);
-    if (sps->chroma_format_idc == 3) {
+    if (sps->chroma_format_idc == 3)
         sps->separate_colour_plane_flag = get_bits1(gb);
-    }
 
     sps->max_temporal_layers = get_bits(gb, 3) + 1;
 
-    sps->pic_width_in_luma_samples = get_ue_golomb(gb);
+    sps->pic_width_in_luma_samples  = get_ue_golomb(gb);
     sps->pic_height_in_luma_samples = get_ue_golomb(gb);
 
     sps->pic_cropping_flag = get_bits1(gb);
     if (sps->pic_cropping_flag) {
-        sps->pic_crop.left_offset = get_ue_golomb(gb);
-        sps->pic_crop.right_offset = get_ue_golomb(gb);
-        sps->pic_crop.top_offset = get_ue_golomb(gb);
+        sps->pic_crop.left_offset   = get_ue_golomb(gb);
+        sps->pic_crop.right_offset  = get_ue_golomb(gb);
+        sps->pic_crop.top_offset    = get_ue_golomb(gb);
         sps->pic_crop.bottom_offset = get_ue_golomb(gb);
     }
 
@@ -112,8 +111,8 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
 
     for (int i = 0; i < sps->max_temporal_layers; i++) {
         sps->temporal_layer[i].max_dec_pic_buffering = get_ue_golomb(gb);
-        sps->temporal_layer[i].num_reorder_pics = get_ue_golomb(gb);
-        sps->temporal_layer[i].max_latency_increase = get_ue_golomb(gb);
+        sps->temporal_layer[i].num_reorder_pics      = get_ue_golomb(gb);
+        sps->temporal_layer[i].max_latency_increase  = get_ue_golomb(gb);
     }
 
     sps->restricted_ref_pic_lists_flag = get_bits1(gb);
@@ -121,19 +120,19 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
         sps->lists_modification_present_flag = get_bits1(gb);
     }
 
-    sps->log2_min_coding_block_size = get_ue_golomb(gb) + 3;
-    sps->log2_diff_max_min_coding_block_size = get_ue_golomb(gb);
-    sps->log2_min_transform_block_size = get_ue_golomb(gb) + 2;
+    sps->log2_min_coding_block_size             = get_ue_golomb(gb) + 3;
+    sps->log2_diff_max_min_coding_block_size    = get_ue_golomb(gb);
+    sps->log2_min_transform_block_size          = get_ue_golomb(gb) + 2;
     sps->log2_diff_max_min_transform_block_size = get_ue_golomb(gb);
 
-#if SUPPORT_ENCODER
+#if REFERENCE_ENCODER_QUIRKS
     if (sps->log2_min_coding_block_size == 3) {
         sps->inter_4x4_enabled_flag = get_bits1(gb);
     }
 #endif
 
     if (sps->pcm_enabled_flag) {
-        sps->pcm.log2_min_pcm_coding_block_size = get_ue_golomb(gb) + 3;
+        sps->pcm.log2_min_pcm_coding_block_size          = get_ue_golomb(gb) + 3;
         sps->pcm.log2_diff_max_min_pcm_coding_block_size = get_ue_golomb(gb);
     }
 
@@ -142,53 +141,50 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
 
     sps->scaling_list_enable_flag = get_bits1(gb);
 
-    sps->chroma_pred_from_luma_enabled_flag = get_bits1(gb);
-    sps->deblocking_filter_in_aps_enabled_flag = get_bits1(gb);
+    sps->chroma_pred_from_luma_enabled_flag         = get_bits1(gb);
+    sps->deblocking_filter_in_aps_enabled_flag      = get_bits1(gb);
     sps->seq_loop_filter_across_slices_enabled_flag = get_bits1(gb);
-    sps->asymmetric_motion_partitions_enabled_flag = get_bits1(gb);
-    sps->non_square_quadtree_enabled_flag = get_bits1(gb);
-    sps->sample_adaptive_offset_enabled_flag = get_bits1(gb);
+    sps->asymmetric_motion_partitions_enabled_flag  = get_bits1(gb);
+    sps->non_square_quadtree_enabled_flag           = get_bits1(gb);
+    sps->sample_adaptive_offset_enabled_flag        = get_bits1(gb);
 
     sps->adaptive_loop_filter_enabled_flag = get_bits1(gb);
-    if (sps->adaptive_loop_filter_enabled_flag) {
+    if (sps->adaptive_loop_filter_enabled_flag)
         sps->alf_coef_in_slice_flag = get_bits1(gb);
-    }
 
-    if (sps->pcm_enabled_flag) {
+    if (sps->pcm_enabled_flag)
         sps->pcm.loop_filter_disable_flag = get_bits1(gb);
-    }
 
     sps->temporal_id_nesting_flag = get_bits1(gb);
 
-#if !SUPPORT_ENCODER
-    if (sps->log2_min_coding_block_size == 3) {
+#if !REFERENCE_ENCODER_QUIRKS
+    if (sps->log2_min_coding_block_size == 3)
         sps->inter_4x4_enabled_flag = get_bits1(gb);
-    }
 #endif
 
     sps->num_short_term_ref_pic_sets = get_ue_golomb(gb);
     for (int i = 0; i < sps->num_short_term_ref_pic_sets; i++) {
-        if (ff_hevc_decode_short_term_rps(s, i, &sps->short_term_rps_list[i]) < 0) {
+        if (ff_hevc_decode_short_term_rps(s, i, &sps->short_term_rps_list[i]) < 0)
             goto err;
-        }
     }
 
     sps->long_term_ref_pics_present_flag = get_bits1(gb);
 
-#if SUPPORT_ENCODER
+#if REFERENCE_ENCODER_QUIRKS
     max_cu_depth = sps->log2_diff_max_min_coding_block_size
-        + ((sps->log2_min_coding_block_size > sps->log2_min_transform_block_size)
-           ? (sps->log2_min_coding_block_size - sps->log2_min_transform_block_size)
-           : 0);
-    for (int i = 0; i < max_cu_depth; i++) {
+                   + ((sps->log2_min_coding_block_size >
+                       sps->log2_min_transform_block_size)
+                      ? (sps->log2_min_coding_block_size
+                         - sps->log2_min_transform_block_size)
+                      : 0);
+    for (int i = 0; i < max_cu_depth; i++)
         sps->amvp_mode_flag[i] = get_bits1(gb);
-    }
 #endif
 
     sps->tiles_or_entropy_coding_sync_idc = get_bits(gb, 2);
     if (sps->tiles_or_entropy_coding_sync_idc == 1) {
         sps->num_tile_columns = get_ue_golomb(gb) + 1;
-        sps->num_tile_rows = get_ue_golomb(gb) + 1;
+        sps->num_tile_rows    = get_ue_golomb(gb) + 1;
 
         sps->uniform_spacing_flag = get_bits1(gb);
         if (!sps->uniform_spacing_flag) {
@@ -213,9 +209,9 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
 
 
     sps->column_width = av_malloc(sps->num_tile_columns * sizeof(int));
-    sps->row_height = av_malloc(sps->num_tile_rows * sizeof(int));
-    sps->col_bd = av_malloc((sps->num_tile_columns + 1) * sizeof(int));
-    sps->row_bd = av_malloc((sps->num_tile_rows + 1) * sizeof(int));
+    sps->row_height   = av_malloc(sps->num_tile_rows * sizeof(int));
+    sps->col_bd       = av_malloc((sps->num_tile_columns + 1) * sizeof(int));
+    sps->row_bd       = av_malloc((sps->num_tile_rows + 1) * sizeof(int));
     if (sps->column_width == NULL || sps->row_height == NULL ||
         sps->col_bd == NULL || sps->row_bd == NULL)
         goto err;
@@ -287,11 +283,11 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
 
     pps->cabac_init_present_flag = get_bits1(gb);
 
-#if SUPPORT_ENCODER
+#if REFERENCE_ENCODER_QUIRKS
     pps->entropy_coding_mode_flag = get_bits1(gb);
 #endif
 
-#if !SUPPORT_ENCODER
+#if !REFERENCE_ENCODER_QUIRKS
     pps->num_ref_idx_l0_default_active = get_ue_golomb(gb);
     pps->num_ref_idx_l1_default_active = get_ue_golomb(gb);
 #endif
@@ -299,24 +295,24 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
     pps->pic_init_qp_minus26 = get_se_golomb(gb);
 
     pps->constrained_intra_pred_flag = get_bits1(gb);
-    pps->enable_temporal_mvp_flag = get_bits1(gb);
-    pps->slice_granularity = get_bits(gb, 2);
+    pps->enable_temporal_mvp_flag    = get_bits1(gb);
+    pps->slice_granularity           = get_bits(gb, 2);
 
     pps->max_cu_qp_delta_depth = get_ue_golomb(gb);
 
     pps->cb_qp_offset = get_se_golomb(gb);
     pps->cr_qp_offset = get_se_golomb(gb);
 
-    pps->weighted_pred_flag = get_bits1(gb);
-    pps->weighted_bipred_idc = get_bits(gb, 2);
+    pps->weighted_pred_flag       = get_bits1(gb);
+    pps->weighted_bipred_idc      = get_bits(gb, 2);
     pps->output_flag_present_flag = get_bits1(gb);
 
     if (sps->tiles_or_entropy_coding_sync_idc == 1) {
-        pps->tiles.tile_info_present_flag = get_bits1(gb);
+        pps->tiles.tile_info_present_flag    = get_bits1(gb);
         pps->tiles.tile_control_present_flag = get_bits1(gb);
         if (pps->tiles.tile_info_present_flag) {
-            pps->tiles.num_tile_columns = get_ue_golomb(gb) + 1;
-            pps->tiles.num_tile_rows = get_ue_golomb(gb) + 1;
+            pps->tiles.num_tile_columns     = get_ue_golomb(gb) + 1;
+            pps->tiles.num_tile_rows        = get_ue_golomb(gb) + 1;
             pps->tiles.uniform_spacing_flag = get_bits1(gb);
             if (!pps->tiles.uniform_spacing_flag) {
                 for (int i = 0; i < pps->tiles.num_tile_columns - 1; i++) {
@@ -338,7 +334,6 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
 
     // if (slice_type != I_SLICE)
     pps->log2_parallel_merge_level = get_ue_golomb(gb) + 2;
-
 
     // Inferred parameters
     pps->SliceGranularity = pps->slice_granularity << 1;
@@ -406,13 +401,13 @@ static int decode_nal_sei_message(HEVCContext *s)
     int byte = 0xFF;
     av_log(s->avctx, AV_LOG_DEBUG, "Decoding SEI\n");
 
-    while (byte == 0xFF) {
+    while (byte == 0xFF)
         payload_type += (byte = get_bits(gb, 8));
-    }
+
     byte = 0xFF;
-    while (byte == 0xFF) {
+    while (byte == 0xFF)
         payload_size += (byte = get_bits(gb, 8));
-    }
+
     skip_bits(gb, 8*payload_size);
     return 0;
 }

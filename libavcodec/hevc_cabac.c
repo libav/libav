@@ -30,7 +30,7 @@
  */
 enum Binarization {
     FL_BIN = 0,
-#if SUPPORT_ENCODER
+#if REFERENCE_ENCODER_QUIRKS
     U_BIN,
 #endif
     EG_BIN,
@@ -43,7 +43,7 @@ enum Binarization {
 };
 
 static int fl_binarization(HEVCContext *s, int cMax);
-#if SUPPORT_ENCODER
+#if REFERENCE_ENCODER_QUIRKS
 static int u_binarization(HEVCContext *s, int unusued);
 #endif
 static int eg_binarization(HEVCContext *s, int k);
@@ -53,7 +53,7 @@ typedef int (*binarization_func)(HEVCContext *s, int arg);
 static const binarization_func binarization_funcs[BINARIZATION_COUNT] =
 {
     &fl_binarization,
-#if SUPPORT_ENCODER
+#if REFERENCE_ENCODER_QUIRKS
     &u_binarization,
 #endif
     &eg_binarization,
@@ -67,7 +67,7 @@ static const uint8_t binarization[][2] =
 {
     { FL_BIN, 1 },
     { FL_BIN, 1 },
-#if SUPPORT_ENCODER
+#if REFERENCE_ENCODER_QUIRKS
     { U_BIN, 0 },
 #else
     { FL_BIN, 3 },
@@ -200,17 +200,17 @@ static int decode_bin(HEVCContext *s, int bin_idx)
     int mps = state[0];
     int pstate = state[1];
 
-    int codIRangeLPS = lps_range[pstate][(cc->range >> 6) & 3];
+    int lpsrange = lps_range[pstate][(cc->range >> 6) & 3];
     int bin_val = 0;
 
     av_log(s->avctx, AV_LOG_DEBUG,
            "ctx_idx: %d, pstate: %d, mps: %d\n", ctx_idx, pstate, mps);
 
-    cc->range -= codIRangeLPS;
+    cc->range -= lpsrange;
     if (cc->offset >= cc->range) {
         bin_val = 1 - mps;
         cc->offset -= cc->range;
-        cc->range = codIRangeLPS;
+        cc->range = lpsrange;
     } else {
         bin_val = mps;
     }
@@ -234,7 +234,7 @@ static int decode_bin(HEVCContext *s, int bin_idx)
     return bin_val;
 }
 
-#ifdef SUPPORT_ENCODER
+#ifdef REFERENCE_ENCODER_QUIRKS
 /**
  * 9.2.2.1
  */
@@ -307,7 +307,7 @@ int ff_hevc_cabac_decode(HEVCContext *s, enum SyntaxElement elem)
 {
     HEVCCabacContext *cc = &s->cc;
 
-#if SUPPORT_ENCODER
+#if REFERENCE_ENCODER_QUIRKS
     int initialisation_type = s->sh.slice_type;
 #else
     int initialisation_type = (s->sh.slice_type + 1) % 3;

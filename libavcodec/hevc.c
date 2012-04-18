@@ -20,9 +20,9 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "hevc.h"
-#include "golomb.h"
 #include "libavutil/attributes.h"
+#include "golomb.h"
+#include "hevc.h"
 
 /**
  * Section 5.7
@@ -45,9 +45,9 @@ static int decode_nal_slice_header(HEVCContext *s)
 
     sh->first_slice_in_pic_flag = get_bits1(gb);
     if (!sh->first_slice_in_pic_flag) {
-        slice_address_length = av_ceil_log2_c(s->sps->PicWidthInCtbs
-                                              * s->sps->PicHeightInCtbs)
-                               + s->pps->SliceGranularity;
+        slice_address_length = av_ceil_log2_c(s->sps->PicWidthInCtbs *
+                                              s->sps->PicHeightInCtbs) +
+                               s->pps->SliceGranularity;
 
         sh->slice_address = get_bits(gb, slice_address_length);
     }
@@ -64,16 +64,14 @@ static int decode_nal_slice_header(HEVCContext *s)
         s->pps = s->pps_list[sh->pps_id];
         s->sps = s->sps_list[s->pps->sps_id];
 
-        if (s->pps->output_flag_present_flag) {
+        if (s->pps->output_flag_present_flag)
             sh->pic_output_flag = get_bits1(gb);
-        }
 
-        if (s->sps->separate_colour_plane_flag == 1) {
+        if (s->sps->separate_colour_plane_flag == 1)
             sh->colour_plane_id = get_bits(gb, 2);
-        }
 
         if (s->nal_unit_type == NAL_IDR_SLICE) {
-            sh->idr_pic_id = get_ue_golomb(gb);
+            sh->idr_pic_id                   = get_ue_golomb(gb);
             sh->no_output_of_prior_pics_flag = get_bits1(gb);
         } else {
             av_log(s->avctx, AV_LOG_ERROR, "TODO: nal_unit_type != NAL_IDR_SLICE\n");
@@ -81,7 +79,7 @@ static int decode_nal_slice_header(HEVCContext *s)
         }
 
         if (s->sps->sample_adaptive_offset_enabled_flag) {
-            sh->slice_sao_interleaving_flag = get_bits1(gb);
+            sh->slice_sao_interleaving_flag       = get_bits1(gb);
             sh->slice_sample_adaptive_offset_flag = get_bits1(gb);
             if (sh->slice_sao_interleaving_flag
                 && sh->slice_sample_adaptive_offset_flag) {
@@ -94,7 +92,7 @@ static int decode_nal_slice_header(HEVCContext *s)
             s->sps->deblocking_filter_in_aps_enabled_flag ||
             (s->sps->sample_adaptive_offset_enabled_flag &&
              !sh->slice_sao_interleaving_flag) ||
-#ifdef SUPPORT_ENCODER
+#ifdef REFERENCE_ENCODER_QUIRKS
             s->sps->sample_adaptive_offset_enabled_flag ||
 #endif
             s->sps->adaptive_loop_filter_enabled_flag) {
@@ -117,9 +115,8 @@ static int decode_nal_slice_header(HEVCContext *s)
         return -1;
     }
 
-    if (s->pps->cabac_init_present_flag && sh->slice_type != I_SLICE) {
+    if (s->pps->cabac_init_present_flag && sh->slice_type != I_SLICE)
         sh->cabac_init_flag = get_bits1(gb);
-    }
 
     if (!sh->entropy_slice_flag) {
         sh->slice_qp_delta = get_se_golomb(gb);
@@ -130,13 +127,10 @@ static int decode_nal_slice_header(HEVCContext *s)
         }
     }
 
-#if !SUPPORT_ENCODER
-    if (sh->slice_type != I_SLICE) {
+#if !REFERENCE_ENCODER_QUIRKS
+    if (sh->slice_type != I_SLICE)
 #endif
         sh->max_num_merge_cand = 5 - get_ue_golomb(gb);
-#if !SUPPORT_ENCODER
-    }
-#endif
 
     if (s->sps->adaptive_loop_filter_enabled_flag) {
         sh->slice_adaptive_loop_filter_flag = get_bits1(gb);
@@ -144,7 +138,7 @@ static int decode_nal_slice_header(HEVCContext *s)
         return -1;
     }
 
-#if !SUPPORT_ENCODER
+#if !REFERENCE_ENCODER_QUIRKS
     if (s->sps->seq_loop_filter_across_slices_enabled_flag
         && (sh->slice_adaptive_loop_filter_flag ||
             sh->slice_sample_adaptive_offset_flag ||
@@ -158,7 +152,7 @@ static int decode_nal_slice_header(HEVCContext *s)
             s->sps->seq_loop_filter_across_slices_enabled_flag;
 #endif
 
-#if SUPPORT_ENCODER
+#if REFERENCE_ENCODER_QUIRKS
     if (!sh->entropy_slice_flag)
         sh->tile_marker_flag = get_bits1(gb);
 
@@ -304,9 +298,8 @@ static int decode_nal_slice_data(HEVCContext *s)
 static int decode_nal_slice(HEVCContext *s)
 {
     int ret = 0;
-    if ((ret = decode_nal_slice_header(s)) < 0) {
+    if ((ret = decode_nal_slice_header(s)) < 0)
         return ret;
-    }
 
     ff_hevc_cabac_init(s);
 
@@ -341,7 +334,7 @@ static int decode_nal_unit(HEVCContext *s)
  * Note: avpkt->data must contain exactly one NAL unit
  */
 static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
-                            AVPacket *avpkt)
+                             AVPacket *avpkt)
 {
     HEVCContext *s = avctx->priv_data;
     GetBitContext *gb = &s->gb;
@@ -354,7 +347,7 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
     if (decode_nal_unit(s) <= 0) {
         av_log(s->avctx, AV_LOG_INFO, "Skipping NAL unit\n");
-        goto end;
+        return avpkt->size;
     }
 
     switch (s->nal_unit_type) {
@@ -376,11 +369,10 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         break;
     default:
         av_log(s->avctx, AV_LOG_INFO, "Skipping NAL unit\n");
-        goto end;
+        return avpkt->size;
     }
 
     av_log(s->avctx, AV_LOG_DEBUG, "%d bits left in unit\n", get_bits_left(gb));
-end:
     return avpkt->size;
 }
 
@@ -401,9 +393,8 @@ static av_cold int hevc_decode_free(AVCodecContext *avctx)
 
     for (int i = 0; i < MAX_SPS_COUNT; i++) {
         if (s->sps_list[i]) {
-            for (int j = 0; j < MAX_SHORT_TERM_RPS_COUNT; j++) {
+            for (int j = 0; j < MAX_SHORT_TERM_RPS_COUNT; j++)
                 av_freep(&s->sps_list[i]->short_term_rps_list[j]);
-            }
             av_freep(&s->sps_list[i]->column_width);
             av_freep(&s->sps_list[i]->row_height);
             av_freep(&s->sps_list[i]->col_bd);
@@ -412,13 +403,11 @@ static av_cold int hevc_decode_free(AVCodecContext *avctx)
         av_freep(&s->sps_list[i]);
     }
 
-    for (int i = 0; i < MAX_PPS_COUNT; i++) {
+    for (int i = 0; i < MAX_PPS_COUNT; i++)
         av_freep(&s->pps_list[i]);
-    }
 
-    for (int i = 0; i < MAX_APS_COUNT; i++) {
+    for (int i = 0; i < MAX_APS_COUNT; i++)
         av_freep(&s->aps_list[i]);
-    }
     return 0;
 }
 
@@ -427,14 +416,14 @@ static void hevc_decode_flush(AVCodecContext *avctx)
 }
 
 AVCodec ff_hevc_decoder = {
-    .name                  = "hevc",
-    .type                  = AVMEDIA_TYPE_VIDEO,
-    .id                    = AV_CODEC_ID_HEVC,
-    .priv_data_size        = sizeof(HEVCContext),
-    .init                  = hevc_decode_init,
-    .close                 = hevc_decode_free,
-    .decode                = hevc_decode_frame,
-    .capabilities          = 0,
-    .flush                 = hevc_decode_flush,
-    .long_name             = NULL_IF_CONFIG_SMALL("HEVC"),
+    .name           = "hevc",
+    .type           = AVMEDIA_TYPE_VIDEO,
+    .id             = AV_CODEC_ID_HEVC,
+    .priv_data_size = sizeof(HEVCContext),
+    .init           = hevc_decode_init,
+    .close          = hevc_decode_free,
+    .decode         = hevc_decode_frame,
+    .capabilities   = 0,
+    .flush          = hevc_decode_flush,
+    .long_name      = NULL_IF_CONFIG_SMALL("HEVC"),
 };
