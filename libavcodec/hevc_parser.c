@@ -80,6 +80,8 @@ static int hevc_parse_nal_unit(HEVCParserContext *hpc, uint8_t **poutbuf,
                     hpc->nal_buffer = av_fast_realloc(hpc->nal_buffer,
                                                       &hpc->nal_buffer_size,
                                                       buf_size - skipped);
+                    if (hpc->nal_buffer == NULL)
+                        return END_NOT_FOUND;
                     *poutbuf = hpc->nal_buffer;
                     memcpy(*poutbuf, buf, i - skipped - 1);
                 }

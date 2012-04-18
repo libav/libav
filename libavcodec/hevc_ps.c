@@ -32,6 +32,9 @@ int ff_hevc_decode_short_term_rps(HEVCContext *s, int idx, ShortTermRPS **prps)
 
     ShortTermRPS *rps = NULL;
     *prps = av_malloc(sizeof(ShortTermRPS));
+    if (*prps == NULL)
+        return -1;
+
     rps = *prps;
 
     rps->inter_ref_pic_set_prediction_flag = get_bits1(gb);
@@ -54,11 +57,15 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
 {
     GetBitContext *gb = &s->gb;
 
-    SPS *sps = av_mallocz(sizeof(SPS));
     int sps_id = 0;
 #if REFERENCE_ENCODER_QUIRKS
     int max_cu_depth = 0;
 #endif
+
+    SPS *sps = av_mallocz(sizeof(SPS));
+    if (sps == NULL)
+        goto err;
+
     av_log(s->avctx, AV_LOG_DEBUG, "Decoding SPS\n");
 
     memset(sps->short_term_rps_list, 0, sizeof(sps->short_term_rps_list));
@@ -258,9 +265,13 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
 {
     GetBitContext *gb = &s->gb;
 
-    PPS *pps = av_mallocz(sizeof(PPS));
     SPS *sps = 0;
     int pps_id = 0;
+
+    PPS *pps = av_mallocz(sizeof(PPS));
+    if (pps == NULL)
+        goto err;
+
     av_log(s->avctx, AV_LOG_DEBUG, "Decoding PPS\n");
 
     // Default values
@@ -351,8 +362,11 @@ int ff_hevc_decode_nal_aps(HEVCContext *s)
 {
     GetBitContext *gb = &s->gb;
 
-    APS *aps = av_mallocz(sizeof(APS));
     int aps_id = 0;
+
+    APS *aps = av_mallocz(sizeof(APS));
+    if (aps == NULL)
+        goto err;
 
     av_log(s->avctx, AV_LOG_DEBUG, "Decoding APS\n");
 
