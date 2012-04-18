@@ -157,8 +157,6 @@ typedef struct {
     int num_tile_columns;
     int num_tile_rows;
     uint8_t uniform_spacing_flag;
-    int *column_width;
-    int *row_height;
     uint8_t loop_filter_across_tiles_enabled_flag;
 
 
@@ -169,6 +167,11 @@ typedef struct {
     int Log2CtbSize;
     int PicWidthInCtbs;
     int PicHeightInCtbs;
+
+    int *column_width; ///< ColumnWidth
+    int *row_height; ///< RowHeight
+    int *col_bd; ///< ColBd
+    int *row_bd; ///< RowBd
 } SPS;
 
 typedef struct {
@@ -275,15 +278,51 @@ typedef struct {
     uint8_t disable_deblocking_filter_flag;
     int max_num_merge_cand; ///< 5 - 5_minus_max_num_merge_cand
     uint8_t slice_adaptive_loop_filter_flag;
+
+    uint8_t slice_loop_filter_across_slices_enabled_flag;
+
+#if SUPPORT_ENCODER
+    uint8_t tile_marker_flag;
+#endif
+
+    // Inferred parameters
+    uint8_t slice_qp; ///< SliceQP
+    int slice_ctb_addr_rs; ///< SliceCtbAddrRS
+    int slice_cb_addr_zs; ///< SliceCbAddrZS
 } SliceHeader;
+
+enum SyntaxElement {
+    SAO_MERGE_LEFT_FLAG = 0,
+    SAO_MERGE_UP_FLAG,
+    SAO_TYPE_IDX,
+    SAO_BAND_POSITION,
+    SAO_OFFSET,
+    ALF_CU_FLAG,
+    END_OF_SLICE_FLAG,
+    SPLIT_CODING_UNIT_FLAG
+};
+
+typedef struct HEVCCabacContext {
+    uint16_t range; ///< codIRange
+    uint16_t offset; ///< codIOffset
+
+    SyntaxElement elem;
+
+    uint8_t (*state)[2];
+
+    int max_bin_idx_ctx; ///< maxBinIdxCtx
+    const int8_t *ctx_idx_inc; ///< ctxIdxInc
+    int ctx_idx_offset; ///< ctxIdxOffset
+} HEVCCabacContext;
 
 typedef struct {
     AVCodecContext *avctx;
+    GetBitContext gb;
+    HEVCCabacContext cc;
+
     int nal_ref_flag;
     NALUnitType nal_unit_type;
     int temporal_id;
-
-    SliceHeader cur_slice_header;
 
     SPS *sps_list[MAX_SPS_COUNT];
     PPS *pps_list[MAX_PPS_COUNT];
@@ -292,13 +331,25 @@ typedef struct {
     SPS *sps;
     PPS *pps;
     APS *aps;
+
+    SliceHeader sh;
+
+    int ctb_addr_in_slice; ///< CtbAddrInSlice
+    int addr_up; ///< AddrUp
+    int num_pcm_block; ///< NumPCMBlock
+
+    int sao_merge_left_flag;
+    int sao_merge_up_flag;
 } HEVCContext;
 
-int ff_hevc_decode_short_term_rps(HEVCContext *s, GetBitContext *gb, int idx,
+int ff_hevc_decode_short_term_rps(HEVCContext *s, int idx,
                                   ShortTermRPS **prps);
-int ff_hevc_decode_nal_sps(HEVCContext *s, GetBitContext *gb);
-int ff_hevc_decode_nal_pps(HEVCContext *s, GetBitContext *gb);
-int ff_hevc_decode_nal_aps(HEVCContext *s, GetBitContext *gb);
-int ff_hevc_decode_nal_sei(HEVCContext *s, GetBitContext *gb);
+int ff_hevc_decode_nal_sps(HEVCContext *s);
+int ff_hevc_decode_nal_pps(HEVCContext *s);
+int ff_hevc_decode_nal_aps(HEVCContext *s);
+int ff_hevc_decode_nal_sei(HEVCContext *s);
+
+void ff_hevc_cabac_init(HEVCContext *s);
+int ff_hevc_cabac_decode(HEVCContext *s, enum SyntaxElement elem);
 
 #endif // AVCODEC_HEVC_H

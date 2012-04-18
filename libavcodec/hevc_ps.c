@@ -26,9 +26,10 @@
 /**
  * Section 7.3.3.1
  */
-int ff_hevc_decode_short_term_rps(HEVCContext *s, GetBitContext *gb, int idx,
-                                 ShortTermRPS **prps)
+int ff_hevc_decode_short_term_rps(HEVCContext *s, int idx, ShortTermRPS **prps)
 {
+    GetBitContext *gb = &s->gb;
+
     ShortTermRPS *rps = NULL;
     *prps = av_malloc(sizeof(ShortTermRPS));
     rps = *prps;
@@ -49,17 +50,23 @@ int ff_hevc_decode_short_term_rps(HEVCContext *s, GetBitContext *gb, int idx,
     return 0;
 }
 
-int ff_hevc_decode_nal_sps(HEVCContext *s, GetBitContext *gb)
+int ff_hevc_decode_nal_sps(HEVCContext *s)
 {
+    GetBitContext *gb = &s->gb;
+
     SPS *sps = av_mallocz(sizeof(SPS));
     int sps_id = 0;
 #if SUPPORT_ENCODER
     int max_cu_depth = 0;
 #endif
-
     av_log(s->avctx, AV_LOG_DEBUG, "Decoding SPS\n");
 
     memset(sps->short_term_rps_list, 0, sizeof(sps->short_term_rps_list));
+
+    // Default values
+    sps->num_tile_columns = 1;
+    sps->num_tile_rows = 1;
+    sps->uniform_spacing_flag = 1;
 
     // Coded parameters
 
@@ -161,7 +168,7 @@ int ff_hevc_decode_nal_sps(HEVCContext *s, GetBitContext *gb)
 
     sps->num_short_term_ref_pic_sets = get_ue_golomb(gb);
     for (int i = 0; i < sps->num_short_term_ref_pic_sets; i++) {
-        if (ff_hevc_decode_short_term_rps(s, gb, i, &sps->short_term_rps_list[i]) < 0) {
+        if (ff_hevc_decode_short_term_rps(s, i, &sps->short_term_rps_list[i]) < 0) {
             goto err;
         }
     }
@@ -185,7 +192,7 @@ int ff_hevc_decode_nal_sps(HEVCContext *s, GetBitContext *gb)
 
         sps->uniform_spacing_flag = get_bits1(gb);
         if (!sps->uniform_spacing_flag) {
-            av_log(s->avctx, AV_LOG_ERROR, "TODO2\n");
+            av_log(s->avctx, AV_LOG_ERROR, "TODO: !uniform_spacing_flag\n");
             for (int i = 0; i < sps->num_tile_columns - 1; i++) {
                 sps->column_width[i] = get_ue_golomb(gb);
             }
@@ -204,17 +211,57 @@ int ff_hevc_decode_nal_sps(HEVCContext *s, GetBitContext *gb)
     sps->PicHeightInCtbs = ROUNDED_DIV(sps->pic_height_in_luma_samples,
                                   (1 << sps->Log2CtbSize));
 
+
+    sps->column_width = av_malloc(sps->num_tile_columns * sizeof(int));
+    sps->row_height = av_malloc(sps->num_tile_rows * sizeof(int));
+    sps->col_bd = av_malloc((sps->num_tile_columns + 1) * sizeof(int));
+    sps->row_bd = av_malloc((sps->num_tile_rows + 1) * sizeof(int));
+    if (sps->column_width == NULL || sps->row_height == NULL ||
+        sps->col_bd == NULL || sps->row_bd == NULL)
+        goto err;
+
+    if (sps->uniform_spacing_flag) {
+        for (int i = 0; i < sps->num_tile_columns; i++) {
+            sps->column_width[i] =
+                ((i + 1) * sps->PicWidthInCtbs) / (sps->num_tile_columns) -
+                (i * sps->PicWidthInCtbs) / (sps->num_tile_columns);
+        }
+
+        for (int i = 0; i < sps->num_tile_rows; i++) {
+            sps->row_height[i] =
+                ((i + 1) * sps->PicWidthInCtbs) / (sps->num_tile_rows) -
+                (i * sps->PicWidthInCtbs) / (sps->num_tile_rows);
+        }
+    }
+
+    sps->col_bd[0] = 0;
+    for (int i = 0; i < sps->num_tile_columns; i++)
+        sps->col_bd[i+1] = sps->col_bd[i] + sps->column_width[i];
+
+    sps->row_bd[0] = 0;
+    for (int i = 0; i < sps->num_tile_rows; i++)
+        sps->row_bd[i+1] = sps->row_bd[i] + sps->row_height[i];
+
     av_free(s->sps_list[sps_id]);
     s->sps_list[sps_id] = sps;
     return 0;
 
 err:
+    for (int i = 0; i < MAX_SHORT_TERM_RPS_COUNT; i++)
+        av_free(sps->short_term_rps_list[i]);
+
+    av_free(sps->column_width);
+    av_free(sps->row_height);
+    av_free(sps->col_bd);
+    av_free(sps->row_bd);
     av_free(sps);
     return -1;
 }
 
-int ff_hevc_decode_nal_pps(HEVCContext *s, GetBitContext *gb)
+int ff_hevc_decode_nal_pps(HEVCContext *s)
 {
+    GetBitContext *gb = &s->gb;
+
     PPS *pps = av_mallocz(sizeof(PPS));
     SPS *sps = 0;
     int pps_id = 0;
@@ -305,10 +352,12 @@ err:
     return -1;
 }
 
-int ff_hevc_decode_nal_aps(HEVCContext *s, GetBitContext *gb)
+int ff_hevc_decode_nal_aps(HEVCContext *s)
 {
+    GetBitContext *gb = &s->gb;
+
     APS *aps = av_mallocz(sizeof(APS));
-    int aps_id;
+    int aps_id = 0;
 
     av_log(s->avctx, AV_LOG_DEBUG, "Decoding APS\n");
 
@@ -348,8 +397,10 @@ err:
     return -1;
 }
 
-static int decode_nal_sei_message(HEVCContext *s, GetBitContext *gb)
+static int decode_nal_sei_message(HEVCContext *s)
 {
+    GetBitContext *gb = &s->gb;
+
     int payload_type = 0;
     int payload_size = 0;
     int byte = 0xFF;
@@ -371,10 +422,10 @@ static int more_rbsp_data(GetBitContext *gb)
     return get_bits_left(gb) > 0 && show_bits(gb, 8) != 0x80;
 }
 
-int ff_hevc_decode_nal_sei(HEVCContext *s, GetBitContext *gb)
+int ff_hevc_decode_nal_sei(HEVCContext *s)
 {
     do {
-        decode_nal_sei_message(s, gb);
-    } while (more_rbsp_data(gb));
+        decode_nal_sei_message(s);
+    } while (more_rbsp_data(&s->gb));
     return 0;
 }

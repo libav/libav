@@ -29,12 +29,19 @@
  */
 #define INVERSE_RASTER_SCAN(a,b,c,d,e) ((e) ? ((a)%((d)/(b)))*(b) : ((a)/((d)/(b)))*(c))
 
-static int decode_nal_slice(HEVCContext *s, GetBitContext *gb)
+/**
+ * 7.3.3
+ */
+static int decode_nal_slice_header(HEVCContext *s)
 {
-    SliceHeader *sh = av_mallocz(sizeof(SliceHeader));
+    GetBitContext *gb = &s->gb;
+    SliceHeader *sh = &s->sh;
     int slice_address_length = 0;
 
     av_log(s->avctx, AV_LOG_INFO, "Decoding slice\n");
+
+
+    // Coded parameters
 
     sh->first_slice_in_pic_flag = get_bits1(gb);
     if (!sh->first_slice_in_pic_flag) {
@@ -52,7 +59,7 @@ static int decode_nal_slice(HEVCContext *s, GetBitContext *gb)
         sh->pps_id = get_ue_golomb(gb);
         if (sh->pps_id >= MAX_PPS_COUNT || s->pps_list[sh->pps_id] == NULL) {
             av_log(s->avctx, AV_LOG_ERROR, "PPS id out of range: %d\n", sh->pps_id);
-            goto err;
+            return -1;
         }
         s->pps = s->pps_list[sh->pps_id];
         s->sps = s->sps_list[s->pps->sps_id];
@@ -70,7 +77,7 @@ static int decode_nal_slice(HEVCContext *s, GetBitContext *gb)
             sh->no_output_of_prior_pics_flag = get_bits1(gb);
         } else {
             av_log(s->avctx, AV_LOG_ERROR, "TODO: nal_unit_type != NAL_IDR_SLICE\n");
-            goto err;
+            return -1;
         }
 
         if (s->sps->sample_adaptive_offset_enabled_flag) {
@@ -87,24 +94,27 @@ static int decode_nal_slice(HEVCContext *s, GetBitContext *gb)
             s->sps->deblocking_filter_in_aps_enabled_flag ||
             (s->sps->sample_adaptive_offset_enabled_flag &&
              !sh->slice_sao_interleaving_flag) ||
+#ifdef SUPPORT_ENCODER
+            s->sps->sample_adaptive_offset_enabled_flag ||
+#endif
             s->sps->adaptive_loop_filter_enabled_flag) {
             sh->aps_id = get_ue_golomb(gb);
             if (sh->aps_id >= MAX_APS_COUNT || s->aps_list[sh->aps_id] == NULL) {
                 av_log(s->avctx, AV_LOG_ERROR, "APS id out of range: %d\n", sh->aps_id);
-                goto err;
+                return -1;
             }
             s->aps = s->aps_list[sh->aps_id];
         }
 
         if (sh->slice_type != I_SLICE) {
             av_log(s->avctx, AV_LOG_ERROR, "TODO: slice_type != I_SLICE\n");
-            goto err;
+            return -1;
         }
     }
 
     if (s->pps == NULL) {
         av_log(s->avctx, AV_LOG_ERROR, "No PPS active while decoding slice\n");
-        goto err;
+        return -1;
     }
 
     if (s->pps->cabac_init_present_flag && sh->slice_type != I_SLICE) {
@@ -116,14 +126,14 @@ static int decode_nal_slice(HEVCContext *s, GetBitContext *gb)
         if (s->pps->deblocking_filter_control_present_flag) {
             av_log(s->avctx, AV_LOG_ERROR,
                    "TODO: deblocking_filter_control_present_flag\n");
-            goto err;
+            return -1;
         }
     }
 
 #if !SUPPORT_ENCODER
     if (sh->slice_type != I_SLICE) {
 #endif
-        sh->max_num_merge_cand = get_ue_golomb(gb);
+        sh->max_num_merge_cand = 5 - get_ue_golomb(gb);
 #if !SUPPORT_ENCODER
     }
 #endif
@@ -131,24 +141,176 @@ static int decode_nal_slice(HEVCContext *s, GetBitContext *gb)
     if (s->sps->adaptive_loop_filter_enabled_flag) {
         sh->slice_adaptive_loop_filter_flag = get_bits1(gb);
         av_log(s->avctx, AV_LOG_ERROR, "TODO: slice_adaptive_loop_filter_flag\n");
-        goto err;
+        return -1;
     }
 
-    /*
+#if !SUPPORT_ENCODER
     if (s->sps->seq_loop_filter_across_slices_enabled_flag
         && (sh->slice_adaptive_loop_filter_flag ||
             sh->slice_sample_adaptive_offset_flag ||
             !sh->disable_deblocking_filter_flag)) {
         av_log(s->avctx, AV_LOG_ERROR,
                "TODO: slice_loop_filter_across_slices_enabled_flag\n");
-        goto err;
-    }
-    */
-    return 0;
+        return -1;
+    } else
+#else
+        sh->slice_loop_filter_across_slices_enabled_flag =
+            s->sps->seq_loop_filter_across_slices_enabled_flag;
+#endif
 
-err:
-    av_free(sh);
-    return -1;
+#if SUPPORT_ENCODER
+    if (!sh->entropy_slice_flag)
+        sh->tile_marker_flag = get_bits1(gb);
+
+    align_get_bits(gb);
+#endif
+
+    // Inferred parameters
+    sh->slice_qp = 26 + s->pps->pic_init_qp_minus26 + sh->slice_qp_delta;
+    sh->slice_ctb_addr_rs = sh->slice_address >> s->pps->SliceGranularity;
+    sh->slice_cb_addr_zs = sh->slice_address <<
+                        ((s->sps->log2_diff_max_min_coding_block_size -
+                          s->pps->SliceGranularity) << 1);
+
+    return 0;
+}
+
+/**
+ * 7.3.4.2
+ */
+static int sao_offset_cabac(HEVCContext *s, int rx, int ry, int c_idx)
+{
+    int offset = ff_hevc_cabac_decode(s, SAO_TYPE_IDX);
+    av_log(s->avctx, AV_LOG_DEBUG, "sao_offset: %d\n", offset);
+    //TODO
+    return 0;
+}
+
+/**
+ * 7.3.4.1
+ */
+static int sao_unit_cabac(HEVCContext *s, int rx, int ry, int c_idx)
+{
+    if (rx > 0 && s->ctb_addr_in_slice != 0)
+        ff_hevc_cabac_decode(s, SAO_MERGE_LEFT_FLAG);
+    if (!s->sao_merge_left_flag) {
+        if (ry > 0 && (s->addr_up > 0 ||
+                       s->sh.slice_loop_filter_across_slices_enabled_flag))
+            ff_hevc_cabac_decode(s, SAO_MERGE_UP_FLAG);
+        if (!s->sao_merge_up_flag)
+            sao_offset_cabac(s, rx, rx, c_idx);
+    }
+    return 0;
+}
+
+/**
+ * 6.5.1
+ */
+static int ctb_addr_rs_to_ts(HEVCContext *s, int ctb_addr_rs)
+{
+    int ret = 0;
+    int tb_x = ctb_addr_rs % s->sps->PicWidthInCtbs;
+    int tb_y = ctb_addr_rs / s->sps->PicWidthInCtbs;
+    int tile_x = 0;
+    int tile_y = 0;
+
+    for (int j = 0; j < s->sps->num_tile_columns; j++) {
+        if ( tb_x < s->sps->col_bd[j + 1] ) {
+            tile_x = j;
+            break;
+        }
+    }
+
+    for (int j = 0; j < s->sps->num_tile_rows; j++) {
+        if( tb_y < s->sps->row_bd[j + 1] ) {
+            tile_y = j;
+            break;
+        }
+    }
+
+    ret = ctb_addr_rs - tb_x;
+    for (int j = 0; j < tile_x; j++ )
+        ret += s->sps->row_height[tile_y] * s->sps->column_width[j];
+    ret += (tb_y - s->sps->row_bd[tile_y]) * s->sps->column_width[tile_y] +
+           tb_x - s->sps->col_bd[tile_x];
+
+    return ret;
+}
+
+static int min_cb_addr_zs(HEVCContext *s, int x, int y)
+{
+    int tb_x = x >> s->sps->log2_diff_max_min_coding_block_size;
+    int tb_y = y >> s->sps->log2_diff_max_min_coding_block_size;
+    int ctb_addr_rs = s->sps->PicWidthInCtbs * tb_y + tb_x;
+    int ret = ctb_addr_rs_to_ts(s, ctb_addr_rs) << s->sps->log2_diff_max_min_coding_block_size;
+    int p = 0;
+    for (int i = 0; i < s->sps->log2_diff_max_min_coding_block_size; i++) {
+        int m = 1 << i;
+        p += (m & x ? m*m : 0) + (m & y ? 2*m*m : 0);
+        ret += p;
+    }
+    return ret;
+}
+
+/**
+ * 7.3.5
+ */
+static void coding_tree(HEVCContext *s, int x0, int y0, int log2_cb_size, int cb_depth)
+{
+    if ((x0 + (1 << log2_cb_size) <= s->sps->pic_width_in_luma_samples) &&
+        (y0 + (1 << log2_cb_size) <= s->sps->pic_height_in_luma_samples) &&
+        min_cb_addr_zs(s, x0 >> s->sps->log2_min_coding_block_size,
+                       y0 >> s->sps->log2_min_coding_block_size) >= s->sh.slice_cb_addr_zs &&
+        log2_cb_size > s->sps->log2_min_coding_block_size && s->num_pcm_block == 0)
+        {
+            int split_coding_unit_flag = ff_hevc_cabac_decode(s, SPLIT_CODING_UNIT_FLAG);
+            av_log(s->avctx, AV_LOG_DEBUG, "split_coding_unit_flag: %d\n",
+                   split_coding_unit_flag);
+        }
+}
+
+/**
+ * 7.3.4
+ */
+static int decode_nal_slice_data(HEVCContext *s)
+{
+    int ctb_size = 1 << s->sps->Log2CtbSize;
+    int ctb_addr_rs = s->sh.slice_ctb_addr_rs;
+    int ctb_addr_ts = ctb_addr_rs_to_ts(s, ctb_addr_rs);
+    int x_ctb, y_ctb;
+
+    do {
+        x_ctb = INVERSE_RASTER_SCAN(ctb_addr_rs, ctb_size, ctb_size, s->sps->pic_width_in_luma_samples, 0);
+        y_ctb = INVERSE_RASTER_SCAN(ctb_addr_rs, ctb_size, ctb_size, s->sps->pic_width_in_luma_samples, 1);
+        s->num_pcm_block = 0;
+        s->ctb_addr_in_slice = ctb_addr_rs - (s->sh.slice_address >> s->pps->SliceGranularity);
+        s->addr_up = ctb_addr_rs - s->sps->PicWidthInCtbs;
+        if (s->sh.slice_sao_interleaving_flag) {
+            if (s->sh.slice_sample_adaptive_offset_flag)
+                sao_unit_cabac(s, x_ctb, y_ctb, 0);
+            if (s->sh.sao_cb_enable_flag)
+                sao_unit_cabac(s, x_ctb, y_ctb, 1);
+            if (s->sh.sao_cr_enable_flag)
+                sao_unit_cabac(s, x_ctb, y_ctb, 2);
+        }
+        coding_tree(s, x_ctb, y_ctb, s->sps->Log2CtbSize, 0);
+        ctb_addr_ts++;
+        //TODO
+    } while (0);
+
+    return 0;
+}
+
+static int decode_nal_slice(HEVCContext *s)
+{
+    int ret = 0;
+    if ((ret = decode_nal_slice_header(s)) < 0) {
+        return ret;
+    }
+
+    ff_hevc_cabac_init(s);
+
+    return decode_nal_slice_data(s);
 }
 
 /**
@@ -156,8 +318,10 @@ err:
  * @return AVERROR_INVALIDDATA if the packet is not a valid NAL unit,
  * 0 if the unit should be skipped, 1 otherwise
  */
-static int decode_nal_unit(HEVCContext *s, GetBitContext *gb)
+static int decode_nal_unit(HEVCContext *s)
 {
+    GetBitContext *gb = &s->gb;
+
     if (get_bits1(gb) != 0) {
         return AVERROR_INVALIDDATA;
     }
@@ -180,41 +344,42 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
                             AVPacket *avpkt)
 {
     HEVCContext *s = avctx->priv_data;
-    GetBitContext gb;
+    GetBitContext *gb = &s->gb;
+
     *data_size = 0;
 
-    init_get_bits(&gb, avpkt->data, avpkt->size*8);
+    init_get_bits(gb, avpkt->data, avpkt->size*8);
 
     av_log(s->avctx, AV_LOG_DEBUG, "=================\n");
 
-    if (decode_nal_unit(s, &gb) <= 0) {
+    if (decode_nal_unit(s) <= 0) {
         av_log(s->avctx, AV_LOG_INFO, "Skipping NAL unit\n");
         goto end;
     }
 
     switch (s->nal_unit_type) {
     case NAL_SPS:
-        ff_hevc_decode_nal_sps(s, &gb);
+        ff_hevc_decode_nal_sps(s);
         break;
     case NAL_PPS:
-        ff_hevc_decode_nal_pps(s, &gb);
+        ff_hevc_decode_nal_pps(s);
         break;
     case NAL_APS:
-        ff_hevc_decode_nal_aps(s, &gb);
+        ff_hevc_decode_nal_aps(s);
         break;
     case NAL_SEI:
-        ff_hevc_decode_nal_sei(s, &gb);
+        ff_hevc_decode_nal_sei(s);
         break;
     case NAL_IDR_SLICE:
     case NAL_SLICE:
-        decode_nal_slice(s, &gb);
+        decode_nal_slice(s);
         break;
     default:
         av_log(s->avctx, AV_LOG_INFO, "Skipping NAL unit\n");
         goto end;
     }
 
-    av_log(s->avctx, AV_LOG_DEBUG, "%d bits left in unit\n", get_bits_left(&gb));
+    av_log(s->avctx, AV_LOG_DEBUG, "%d bits left in unit\n", get_bits_left(gb));
 end:
     return avpkt->size;
 }
@@ -239,6 +404,10 @@ static av_cold int hevc_decode_free(AVCodecContext *avctx)
             for (int j = 0; j < MAX_SHORT_TERM_RPS_COUNT; j++) {
                 av_freep(&s->sps_list[i]->short_term_rps_list[j]);
             }
+            av_freep(&s->sps_list[i]->column_width);
+            av_freep(&s->sps_list[i]->row_height);
+            av_freep(&s->sps_list[i]->col_bd);
+            av_freep(&s->sps_list[i]->row_bd);
         }
         av_freep(&s->sps_list[i]);
     }
