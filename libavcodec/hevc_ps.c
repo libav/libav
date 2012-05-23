@@ -149,6 +149,7 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
     sps->scaling_list_enable_flag = get_bits1(gb);
 
     sps->chroma_pred_from_luma_enabled_flag         = get_bits1(gb);
+    sps->transform_skip_enabled_flag                = get_bits1(gb);
     sps->deblocking_filter_in_aps_enabled_flag      = get_bits1(gb);
     sps->seq_loop_filter_across_slices_enabled_flag = get_bits1(gb);
     sps->asymmetric_motion_partitions_enabled_flag  = get_bits1(gb);
@@ -288,19 +289,15 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
     sps = s->sps_list[pps->sps_id];
 
     pps->sign_data_hiding_flag = get_bits1(gb);
-    if (pps->sign_data_hiding_flag) {
-        pps->sign_hiding_threshold = get_bits(gb, 4);
-    }
 
     pps->cabac_init_present_flag = get_bits1(gb);
 
 #if REFERENCE_ENCODER_QUIRKS
-    pps->entropy_coding_mode_flag = get_bits1(gb);
-#endif
-
-#if !REFERENCE_ENCODER_QUIRKS
-    pps->num_ref_idx_l0_default_active = get_ue_golomb(gb);
-    pps->num_ref_idx_l1_default_active = get_ue_golomb(gb);
+    pps->num_ref_idx_l0_default_active = get_bits(gb, 3);
+    pps->num_ref_idx_l1_default_active = get_bits(gb, 3);
+#else
+    pps->num_ref_idx_l0_default_active = get_ue_golomb(gb) + 1;
+    pps->num_ref_idx_l1_default_active = get_ue_golomb(gb) + 1;
 #endif
 
     pps->pic_init_qp_minus26 = get_se_golomb(gb);
@@ -309,7 +306,7 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
     pps->enable_temporal_mvp_flag    = get_bits1(gb);
     pps->slice_granularity           = get_bits(gb, 2);
 
-    pps->max_cu_qp_delta_depth = get_ue_golomb(gb);
+    pps->diff_cu_qp_delta_depth = get_ue_golomb(gb);
 
     pps->cb_qp_offset = get_se_golomb(gb);
     pps->cr_qp_offset = get_se_golomb(gb);
@@ -386,15 +383,12 @@ int ff_hevc_decode_nal_aps(HEVCContext *s)
         av_log(s->avctx, AV_LOG_ERROR, "aps_deblocking_filter_flag: Not supported\n");
         goto err;
     }
-    aps->aps_sao_interleaving_flag = get_bits1(gb);
-    if (!aps->aps_sao_interleaving_flag) {
-        av_log(s->avctx, AV_LOG_ERROR, "!aps_deblocking_filter_flag: Not supported\n");
-        goto err;
-    }
-    aps->aps_adaptive_loop_filter_flag = get_bits1(gb);
-    if (aps->aps_adaptive_loop_filter_flag) {
-        av_log(s->avctx, AV_LOG_ERROR, "aps_adaptive_loop_filter_flag: Not supported\n");
-        goto err;
+
+    for (int i = 0; i < 3; i++) {
+        aps->alf_aps_filter_flag[i] = get_bits1(gb);
+        if (aps->alf_aps_filter_flag[i]) {
+            av_log(s->avctx, AV_LOG_ERROR, "alf_aps_filter_flag: Not supported\n");
+        }
     }
 
     av_free(s->aps_list[aps_id]);

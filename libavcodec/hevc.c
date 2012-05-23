@@ -79,10 +79,8 @@ static int decode_nal_slice_header(HEVCContext *s)
         }
 
         if (s->sps->sample_adaptive_offset_enabled_flag) {
-            sh->slice_sao_interleaving_flag       = get_bits1(gb);
             sh->slice_sample_adaptive_offset_flag = get_bits1(gb);
-            if (sh->slice_sao_interleaving_flag
-                && sh->slice_sample_adaptive_offset_flag) {
+            if (sh->slice_sample_adaptive_offset_flag) {
                 sh->sao_cb_enable_flag = get_bits1(gb);
                 sh->sao_cr_enable_flag = get_bits1(gb);
             }
@@ -90,8 +88,7 @@ static int decode_nal_slice_header(HEVCContext *s)
 
         if (s->sps->scaling_list_enable_flag ||
             s->sps->deblocking_filter_in_aps_enabled_flag ||
-            (s->sps->sample_adaptive_offset_enabled_flag &&
-             !sh->slice_sao_interleaving_flag) ||
+            s->sps->sample_adaptive_offset_enabled_flag ||
 #ifdef REFERENCE_ENCODER_QUIRKS
             s->sps->sample_adaptive_offset_enabled_flag ||
 #endif
@@ -279,14 +276,14 @@ static int decode_nal_slice_data(HEVCContext *s)
         s->num_pcm_block = 0;
         s->ctb_addr_in_slice = ctb_addr_rs - (s->sh.slice_address >> s->pps->SliceGranularity);
         s->addr_up = ctb_addr_rs - s->sps->PicWidthInCtbs;
-        if (s->sh.slice_sao_interleaving_flag) {
-            if (s->sh.slice_sample_adaptive_offset_flag)
-                sao_unit_cabac(s, x_ctb, y_ctb, 0);
-            if (s->sh.sao_cb_enable_flag)
-                sao_unit_cabac(s, x_ctb, y_ctb, 1);
-            if (s->sh.sao_cr_enable_flag)
-                sao_unit_cabac(s, x_ctb, y_ctb, 2);
-        }
+        //if (s->sh.slice_sao_interleaving_flag) {
+        if (s->sh.slice_sample_adaptive_offset_flag)
+            sao_unit_cabac(s, x_ctb, y_ctb, 0);
+        if (s->sh.sao_cb_enable_flag)
+            sao_unit_cabac(s, x_ctb, y_ctb, 1);
+        if (s->sh.sao_cr_enable_flag)
+            sao_unit_cabac(s, x_ctb, y_ctb, 2);
+        //}
         coding_tree(s, x_ctb, y_ctb, s->sps->Log2CtbSize, 0);
         ctb_addr_ts++;
         //TODO

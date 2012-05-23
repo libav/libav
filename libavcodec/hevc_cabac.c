@@ -307,11 +307,7 @@ int ff_hevc_cabac_decode(HEVCContext *s, enum SyntaxElement elem)
 {
     HEVCCabacContext *cc = &s->cc;
 
-#if REFERENCE_ENCODER_QUIRKS
-    int initialisation_type = s->sh.slice_type;
-#else
-    int initialisation_type = (s->sh.slice_type + 1) % 3;
-#endif
+    int initialisation_type = 2 - s->sh.slice_type;
 
     if (s->sh.cabac_init_flag && s->sh.slice_type != I_SLICE)
         initialisation_type = 2;

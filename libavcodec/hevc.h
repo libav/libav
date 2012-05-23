@@ -27,10 +27,6 @@
 #include "get_bits.h"
 
 /**
- * NOTE: This decoder is based on the JCTVC-H1003 draft of the HEVC specification.
- */
-
-/**
  * Enable to diverge from the spec when the reference encoder
  * does so.
  */
@@ -130,6 +126,7 @@ typedef struct {
     int scaling_list_enable_flag;
 
     uint8_t chroma_pred_from_luma_enabled_flag;
+    uint8_t transform_skip_enabled_flag;
     uint8_t deblocking_filter_in_aps_enabled_flag;
 
     uint8_t seq_loop_filter_across_slices_enabled_flag;
@@ -175,13 +172,8 @@ typedef struct {
     int sps_id; ///< seq_parameter_set_id
 
     uint8_t sign_data_hiding_flag;
-    uint8_t sign_hiding_threshold;
 
     uint8_t cabac_init_present_flag;
-
-#if REFERENCE_ENCODER_QUIRKS
-    uint8_t entropy_coding_mode_flag;
-#endif
 
     int num_ref_idx_l0_default_active; ///< num_ref_idx_l0_default_active_minus1 + 1
     int num_ref_idx_l1_default_active; ///< num_ref_idx_l1_default_active_minus1 + 1
@@ -190,7 +182,7 @@ typedef struct {
     uint8_t constrained_intra_pred_flag;
     uint8_t enable_temporal_mvp_flag;
     uint8_t slice_granularity;
-    int max_cu_qp_delta_depth;
+    int diff_cu_qp_delta_depth;
     int cb_qp_offset;
     int cr_qp_offset;
     uint8_t weighted_pred_flag;
@@ -227,20 +219,13 @@ typedef struct {
 typedef struct {
     uint8_t aps_scaling_list_data_present_flag;
     uint8_t aps_deblocking_filter_flag;
-    uint8_t aps_sao_interleaving_flag;
-    uint8_t aps_adaptive_loop_filter_flag;
+    uint8_t alf_aps_filter_flag[3];
 } APS;
 
 typedef enum {
-#if REFERENCE_ENCODER_QUIRKS
-    I_SLICE = 0,
+    B_SLICE = 0,
     P_SLICE = 1,
-    B_SLICE = 2
-#else
-    P_SLICE = 0,
-    B_SLICE = 1,
     I_SLICE = 2
-#endif
 } SliceType;
 
 typedef struct {
@@ -256,7 +241,6 @@ typedef struct {
     int idr_pic_id;
     uint8_t no_output_of_prior_pics_flag;
 
-    uint8_t slice_sao_interleaving_flag;
     uint8_t slice_sample_adaptive_offset_flag;
     uint8_t sao_cb_enable_flag;
     uint8_t sao_cr_enable_flag;
