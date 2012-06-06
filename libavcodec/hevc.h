@@ -161,11 +161,18 @@ typedef struct {
     int Log2CtbSize;
     int PicWidthInCtbs;
     int PicHeightInCtbs;
+    int pic_width_in_min_cbs;
+    int pic_height_in_min_cbs;
 
     int *column_width; ///< ColumnWidth
     int *row_height; ///< RowHeight
     int *col_bd; ///< ColBd
     int *row_bd; ///< RowBd
+
+    int *ctb_addr_rs_to_ts; ///< CtbAddrRSToTS
+    int *ctb_addr_ts_to_rs; ///< CtbAddrTSToRS
+    int *tile_id; ///< TileId
+    int *min_cb_addr_zs; ///< MinCbAddrZS
 } SPS;
 
 typedef struct {
@@ -289,6 +296,15 @@ typedef struct HEVCCabacContext {
     int ctx_idx_offset; ///< ctxIdxOffset
 } HEVCCabacContext;
 
+enum SAOType {
+    SAO_NOT_APPLIED = 0,
+    SAO_0_EDGE = 1,
+    SAO_90_EDGE = 2,
+    SAO_135_EDGE = 3,
+    SAO_45_EDGE = 4,
+    SAO_BAND = 5
+};
+
 typedef struct {
     AVCodecContext *avctx;
     GetBitContext gb;
@@ -309,11 +325,18 @@ typedef struct {
     SliceHeader sh;
 
     int ctb_addr_in_slice; ///< CtbAddrInSlice
-    int addr_up; ///< AddrUp
     int num_pcm_block; ///< NumPCMBlock
 
-    int sao_merge_left_flag;
-    int sao_merge_up_flag;
+    int ctb_addr_rs; ///< CtbAddrRS
+    int ctb_addr_ts; ///< CtbAddrTS
+
+    uint8_t sao_merge_left_flag;
+    uint8_t sao_merge_up_flag;
+
+    uint8_t split_coding_unit_flag;
+
+    enum SAOType sao_type_idx[3];
+    int sao_band_position[3];
 } HEVCContext;
 
 int ff_hevc_decode_short_term_rps(HEVCContext *s, int idx,

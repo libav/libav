@@ -214,6 +214,8 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
                                   (1 << sps->Log2CtbSize));
     sps->PicHeightInCtbs = ROUNDED_DIV(sps->pic_height_in_luma_samples,
                                   (1 << sps->Log2CtbSize));
+    sps->pic_width_in_min_cbs = sps->pic_width_in_luma_samples / (1 << sps->log2_min_coding_block_size);
+    sps->pic_height_in_min_cbs = sps->pic_height_in_luma_samples / (1 << sps->log2_min_coding_block_size);
 
 
     sps->column_width = av_malloc(sps->num_tile_columns * sizeof(int));
@@ -246,6 +248,75 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
     for (int i = 0; i < sps->num_tile_rows; i++)
         sps->row_bd[i+1] = sps->row_bd[i] + sps->row_height[i];
 
+    /**
+     * 6.5
+     */
+    sps->ctb_addr_rs_to_ts = av_malloc(sps->PicWidthInCtbs *
+                                       sps->PicHeightInCtbs * sizeof(int));
+    sps->ctb_addr_ts_to_rs = av_malloc(sps->PicWidthInCtbs *
+                                       sps->PicHeightInCtbs * sizeof(int));
+    sps->tile_id = av_malloc(sps->PicWidthInCtbs *
+                             sps->PicHeightInCtbs * sizeof(int));
+    sps->min_cb_addr_zs = av_malloc(sps->pic_width_in_min_cbs *
+                                    sps->pic_height_in_min_cbs * sizeof(int));
+    if (sps->ctb_addr_rs_to_ts == NULL || sps->ctb_addr_ts_to_rs == NULL ||
+        sps->tile_id == NULL || sps->min_cb_addr_zs == NULL)
+        goto err;
+
+    for (int ctb_addr_rs = 0;
+         ctb_addr_rs < sps->PicWidthInCtbs * sps->PicHeightInCtbs;
+         ctb_addr_rs++) {
+        int tb_x = ctb_addr_rs % sps->PicWidthInCtbs;
+        int tb_y = ctb_addr_rs / sps->PicWidthInCtbs;
+        int tile_x = 0;
+        int tile_y = 0;
+        int val = 0;
+
+        for (int i = 0; i < sps->num_tile_columns; i++) {
+            if ( tb_x < sps->col_bd[i + 1] ) {
+                tile_x = i;
+                break;
+            }
+        }
+
+        for (int i = 0; i < sps->num_tile_rows; i++) {
+            if( tb_y < sps->row_bd[i + 1] ) {
+                tile_y = i;
+                break;
+            }
+        }
+
+        val = ctb_addr_rs - tb_x - (tb_y - sps->row_bd[tile_y])*sps->PicWidthInCtbs;
+        for (int i = 0; i < tile_x; i++ )
+            val += sps->row_height[tile_y] * sps->column_width[i];
+        val += (tb_y - sps->row_bd[tile_y]) * sps->column_width[tile_y] +
+               tb_x - sps->col_bd[tile_x];
+
+        sps->ctb_addr_rs_to_ts[ctb_addr_rs] = val;
+        sps->ctb_addr_ts_to_rs[val] = ctb_addr_rs;
+    }
+
+    for (int j = 0, tile_id = 0; j < sps->num_tile_rows; j++)
+        for (int i = 0; i < sps->num_tile_columns; i++, tile_id++)
+            for (int y = sps->row_bd[j]; y < sps->row_bd[j+1]; y++)
+                for (int x = sps->col_bd[j]; x < sps->col_bd[j+1]; x++)
+                    sps->tile_id[sps->ctb_addr_rs_to_ts[y*sps->PicWidthInCtbs + x]] =
+                        tile_id;
+
+    // Different from the spec, see http://hevc.kw.bbc.co.uk/trac/ticket/527
+    for (int y = 0; y < sps->pic_height_in_min_cbs; y++)
+        for (int x = 0; x < sps->pic_width_in_min_cbs; x++) {
+            int tb_x = x >> sps->log2_diff_max_min_coding_block_size;
+            int tb_y = y >> sps->log2_diff_max_min_coding_block_size;
+            int ctb_addr_rs = sps->PicWidthInCtbs * tb_y + tb_x;
+            int val = sps->ctb_addr_rs_to_ts[ctb_addr_rs] << sps->log2_diff_max_min_coding_block_size;
+            for (int i = 0; i < sps->log2_diff_max_min_coding_block_size; i++) {
+                int m = 1 << i;
+                val += (m & x ? m*m : 0) + (m & y ? 2*m*m : 0);
+            }
+            sps->min_cb_addr_zs[sps->pic_height_in_min_cbs * x + y] = val;
+        }
+
     av_free(s->sps_list[sps_id]);
     s->sps_list[sps_id] = sps;
     return 0;
@@ -258,6 +329,10 @@ err:
     av_free(sps->row_height);
     av_free(sps->col_bd);
     av_free(sps->row_bd);
+    av_free(sps->ctb_addr_rs_to_ts);
+    av_free(sps->ctb_addr_ts_to_rs);
+    av_free(sps->tile_id);
+    av_free(sps->min_cb_addr_zs);
     av_free(sps);
     return -1;
 }
