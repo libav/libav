@@ -61,7 +61,6 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
 #if REFERENCE_ENCODER_QUIRKS
     int max_cu_depth = 0;
 #endif
-
     SPS *sps = av_mallocz(sizeof(SPS));
     if (sps == NULL)
         goto err;
@@ -304,7 +303,7 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
                         tile_id;
 
     // Different from the spec, see http://hevc.kw.bbc.co.uk/trac/ticket/527
-    for (int y = 0; y < sps->pic_height_in_min_cbs; y++)
+    for (int y = 0; y < sps->pic_height_in_min_cbs; y++) {
         for (int x = 0; x < sps->pic_width_in_min_cbs; x++) {
             int tb_x = x >> sps->log2_diff_max_min_coding_block_size;
             int tb_y = y >> sps->log2_diff_max_min_coding_block_size;
@@ -316,6 +315,7 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
             }
             sps->min_cb_addr_zs[sps->pic_height_in_min_cbs * x + y] = val;
         }
+    }
 
     av_free(s->sps_list[sps_id]);
     s->sps_list[sps_id] = sps;

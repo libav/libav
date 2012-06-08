@@ -30,6 +30,51 @@
 #define INVERSE_RASTER_SCAN(a,b,c,d,e) ((e) ? ((a)%((d)/(b)))*(b) : ((a)/((d)/(b)))*(c))
 
 /**
+ * Value of the luma sample at position (x,y) in the 2D array tab.
+ */
+#define SAMPLE(tab,x,y) ((tab)[(x) * s->sps->pic_height_in_luma_samples + (y)])
+
+static int pic_arrays_init(HEVCContext *s)
+{
+    int pic_size = s->sps->pic_width_in_luma_samples * s->sps->pic_height_in_luma_samples;
+
+    for (int i = 0; i < 3; i++) {
+        s->sao_type_idx[i] = av_mallocz(pic_size * sizeof(enum SAOType));
+        s->sao_band_position[i] = av_mallocz(pic_size * sizeof(int));
+        if (s->sao_type_idx[i] == NULL || s->sao_band_position[i] == NULL)
+            return -1;
+    }
+
+    s->split_coding_unit_flag = av_mallocz(pic_size * sizeof(uint8_t));
+    s->cu.skip_flag = av_mallocz(pic_size * sizeof(uint8_t));
+    s->pu.prev_intra_luma_pred_flag = av_mallocz(pic_size * sizeof(uint8_t));
+    s->pu.mpm_idx = av_mallocz(pic_size * sizeof(int));
+    s->pu.rem_intra_luma_pred_mode = av_mallocz(pic_size * sizeof(uint8_t));
+    s->pu.intra_chroma_pred_mode = av_mallocz(pic_size * sizeof(int));
+    if (s->split_coding_unit_flag == NULL || s->cu.skip_flag == NULL ||
+        s->pu.prev_intra_luma_pred_flag == NULL || s->pu.mpm_idx == NULL ||
+        s->pu.rem_intra_luma_pred_mode == NULL || s->pu.intra_chroma_pred_mode == NULL)
+        return -1;
+
+    return 0;
+}
+
+static void pic_arrays_free(HEVCContext *s)
+{
+    for (int i = 0; i < 3; i++) {
+        av_freep(&s->sao_type_idx[i]);
+        av_freep(&s->sao_band_position[i]);
+    }
+
+    av_freep(&s->split_coding_unit_flag);
+    av_freep(&s->cu.skip_flag);
+    av_freep(&s->pu.prev_intra_luma_pred_flag);
+    av_freep(&s->pu.mpm_idx);
+    av_freep(&s->pu.rem_intra_luma_pred_mode);
+    av_freep(&s->pu.intra_chroma_pred_mode);
+}
+
+/**
  * 7.3.3
  */
 static int decode_nal_slice_header(HEVCContext *s)
@@ -62,7 +107,15 @@ static int decode_nal_slice_header(HEVCContext *s)
             return -1;
         }
         s->pps = s->pps_list[sh->pps_id];
-        s->sps = s->sps_list[s->pps->sps_id];
+        if (s->sps != s->sps_list[s->pps->sps_id]) {
+            s->sps = s->sps_list[s->pps->sps_id];
+            //TODO: Handle switching between different SPS better
+            pic_arrays_free(s);
+            if (pic_arrays_init(s) < 0) {
+                pic_arrays_free(s);
+                return -1;
+            }
+        }
 
         if (s->pps->output_flag_present_flag)
             sh->pic_output_flag = get_bits1(gb);
@@ -170,13 +223,14 @@ static int decode_nal_slice_header(HEVCContext *s)
  */
 static int sao_offset_cabac(HEVCContext *s, int rx, int ry, int c_idx)
 {
-    s->sao_type_idx[c_idx] = ff_hevc_cabac_decode(s, SAO_TYPE_IDX);
-    av_log(s->avctx, AV_LOG_DEBUG, "sao_type_idx: %d\n", s->sao_type_idx[c_idx]);
+    SAMPLE(s->sao_type_idx[c_idx], rx, ry) = ff_hevc_cabac_decode(s, SAO_TYPE_IDX);
+    av_log(s->avctx, AV_LOG_DEBUG, "sao_type_idx: %d\n",
+           SAMPLE(s->sao_type_idx[c_idx], rx, ry));
 
-    if (s->sao_type_idx[c_idx] == SAO_BAND)
-        s->sao_band_position[c_idx] = ff_hevc_cabac_decode(s, SAO_BAND_POSITION);
+    if (SAMPLE(s->sao_type_idx[c_idx], rx, ry) == SAO_BAND)
+        SAMPLE(s->sao_band_position[c_idx], rx, ry) = ff_hevc_cabac_decode(s, SAO_BAND_POSITION);
 
-    if (s->sao_type_idx[c_idx] != SAO_NOT_APPLIED)
+    if (SAMPLE(s->sao_type_idx[c_idx], rx, ry) != SAO_NOT_APPLIED)
         av_log(s->avctx, AV_LOG_ERROR, "TODO: sao_type_idx != 0\n");
     return 0;
 }
@@ -214,12 +268,146 @@ static av_always_inline int min_cb_addr_zs(HEVCContext *s, int x, int y)
 }
 
 /**
+ * 7.3.8
+ */
+static void transform_tree(HEVCContext *s, int x0, int y0, int log2_cb_size,
+                           int log2_trafo_width, int log2_trafo_height,
+                           int trafo_depth, int blk_idx)
+{
+}
+
+/**
+ * 7.3.7
+ */
+static void prediction_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
+{
+    s->pu.pcm_flag = 0;
+    if (SAMPLE(s->cu.skip_flag, x0, y0)) {
+        av_log(s->avctx, AV_LOG_ERROR, "TODO: slice_type != I_SLICE\n");
+        return;
+    } else if (s->cu.pred_mode == MODE_INTRA) {
+        //TODO: PCM stuff
+
+        //TODO: based on JCTVC-I0302 which doesn't seem to handle all cases
+        //to be checked again once it's part of the spec
+        int d0 = 1 << log2_cb_size;
+        if (!(x0 % d0) && !(y0 % d0)) {
+            int d1 = s->cu.part_mode == PART_2Nx2N ? d0 : (d0 >> 1);
+            for (int i = 0; i < d0; i += d1)
+                for (int j = 0; j < d0; j += d1)
+                    SAMPLE(s->pu.prev_intra_luma_pred_flag, x0 + j, y0 + i) =
+                        ff_hevc_cabac_decode(s, PREV_INTRA_LUMA_PRED_FLAG);
+
+            for (int i = 0; i < d0; i += d1) {
+                for (int j = 0; j < d0; j += d1) {
+                    if (SAMPLE(s->pu.prev_intra_luma_pred_flag, x0 + j, y0 + i)) {
+                        SAMPLE(s->pu.mpm_idx, x0 + j, y0 + i) =
+                            ff_hevc_cabac_decode(s, MPM_IDX);
+                    } else {
+                        SAMPLE(s->pu.rem_intra_luma_pred_mode, x0 + j, y0 + i) =
+                            ff_hevc_cabac_decode(s, REM_INTRA_LUMA_PRED_MODE);
+                    }
+                }
+            }
+        }
+        if (s->cu.part_mode == PART_2Nx2N) {
+            SAMPLE(s->pu.intra_chroma_pred_mode, x0, y0) =
+                ff_hevc_cabac_decode(s, INTRA_CHROMA_PRED_MODE);
+        } else if ((x0 % d0) && (y0 % d0)) {
+            SAMPLE(s->pu.intra_chroma_pred_mode, x0 - (d0 >> 1), y0 - (d0 >> 1)) =
+                ff_hevc_cabac_decode(s, INTRA_CHROMA_PRED_MODE);
+        }
+    } else {
+        av_log(s->avctx, AV_LOG_ERROR, "TODO: pred_mode != MODE_INTRA\n");
+        return;
+    }
+}
+
+/**
  * 7.3.6
  */
 static void coding_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
 {
-    int curr_cb_addr_ts = min_cb_addr_zs(s, x0 >> s->sps->log2_min_coding_block_size, y0 >> s->sps->log2_min_coding_block_size);
-    
+    int cb_size = 1 << log2_cb_size;
+    int x1, y1, x2, y2, x3, y3;
+
+    s->cu.no_residual_data_flag = 0;
+
+    s->cu.pred_mode = MODE_INTRA;
+    s->cu.part_mode = PART_2Nx2N;
+    s->cu.intra_split_flag = 0;
+
+    if (s->sh.slice_type != I_SLICE) {
+        av_log(s->avctx, AV_LOG_ERROR, "TODO: slice_type != I_SLICE\n");
+        return;
+        //SAMPLE(s->cu.skip_flag, x0, y0) = ff_hevc_cabac_decode(s, SKIP_FLAG);
+        s->cu.pred_mode = s->cu.skip_flag ? MODE_SKIP : MODE_INTER;
+    }
+
+    if (SAMPLE(s->cu.skip_flag, x0, y0)) {
+        prediction_unit(s, x0, y0, log2_cb_size);
+    } else {
+        if (s->sh.slice_type != I_SLICE || s->cu.pred_mode != MODE_INTRA) {
+            av_log(s->avctx, AV_LOG_ERROR, "TODO: slice_type != I_SLICE\n");
+            return;
+        }
+        x1 = x0 + (cb_size >> 1);
+        y1 = y0 + (cb_size >> 1);
+        x2 = x1 - (cb_size >> 2);
+        y2 = y1 - (cb_size >> 2);
+        x3 = x1 + (cb_size >> 2);
+        y3 = y1 + (cb_size >> 2);
+
+        switch (s->cu.part_mode) {
+        case PART_2Nx2N:
+            prediction_unit(s, x0, y0, log2_cb_size);
+            break;
+        case PART_2NxN:
+            prediction_unit(s, x0, y0, log2_cb_size);
+            prediction_unit(s, x0, y1, log2_cb_size);
+            break;
+        case PART_Nx2N:
+            prediction_unit(s, x0, y0, log2_cb_size);
+            prediction_unit(s, x1, y0, log2_cb_size);
+            break;
+        case PART_2NxnU:
+            prediction_unit(s, x0, y0, log2_cb_size);
+            prediction_unit(s, x0, y2, log2_cb_size);
+            break;
+        case PART_2NxnD:
+            prediction_unit(s, x0, y0, log2_cb_size);
+            prediction_unit(s, x0, y3, log2_cb_size);
+            break;
+        case PART_nLx2N:
+            prediction_unit(s, x0, y0, log2_cb_size);
+            prediction_unit(s, x2, y0, log2_cb_size);
+            break;
+        case PART_nRx2N:
+            prediction_unit(s, x0, y0, log2_cb_size);
+            prediction_unit(s, x3, y0, log2_cb_size);
+            break;
+        case PART_NxN:
+            prediction_unit(s, x0, y0, log2_cb_size);
+            prediction_unit(s, x1, y0, log2_cb_size);
+            prediction_unit(s, x0, y1, log2_cb_size);
+            prediction_unit(s, x1, y1, log2_cb_size);
+            break;
+        }
+
+        if (!s->pu.pcm_flag) {
+            if (s->cu.pred_mode != MODE_INTRA &&
+                !(s->cu.part_mode == PART_2Nx2N && s->pu.merge_flag)) {
+                av_log(s->avctx, AV_LOG_ERROR, "TODO: pred_mode != MODE_INTRA\n");
+                return;
+            }
+            if (!s->cu.no_residual_data_flag) {
+                s->cu.max_trafo_depth = s->cu.pred_mode == MODE_INTRA ?
+                                        s->sps->max_transform_hierarchy_depth_intra + s->cu.intra_split_flag :
+                                        s->sps->max_transform_hierarchy_depth_inter;
+                transform_tree(s, x0, y0, log2_cb_size, log2_cb_size, log2_cb_size, 0, 0);
+            }
+        }
+    }
 }
 
 /**
@@ -232,14 +420,14 @@ static int coding_tree(HEVCContext *s, int x0, int y0, int log2_cb_size, int cb_
         min_cb_addr_zs(s, x0 >> s->sps->log2_min_coding_block_size,
                        y0 >> s->sps->log2_min_coding_block_size) >= s->sh.slice_cb_addr_zs &&
         log2_cb_size > s->sps->log2_min_coding_block_size && s->num_pcm_block == 0) {
-        s->split_coding_unit_flag = ff_hevc_cabac_decode(s, SPLIT_CODING_UNIT_FLAG);
+        SAMPLE(s->split_coding_unit_flag, x0, y0) = ff_hevc_cabac_decode(s, SPLIT_CODING_UNIT_FLAG);
         av_log(s->avctx, AV_LOG_DEBUG, "split_coding_unit_flag: %d\n",
-               s->split_coding_unit_flag);
+               SAMPLE(s->split_coding_unit_flag, x0, y0));
     }
 
     //TODO
 
-    if (s->split_coding_unit_flag) {
+    if (SAMPLE(s->split_coding_unit_flag, x0, y0)) {
         av_log(s->avctx, AV_LOG_ERROR, "TODO: split_coding_unit_flag\n");
     } else {
         //TODO
@@ -403,6 +591,8 @@ static av_cold int hevc_decode_free(AVCodecContext *avctx)
 
     for (int i = 0; i < MAX_APS_COUNT; i++)
         av_freep(&s->aps_list[i]);
+
+    pic_arrays_free(s);
     return 0;
 }
 

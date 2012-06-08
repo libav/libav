@@ -277,10 +277,21 @@ enum SyntaxElement {
     SAO_MERGE_UP_FLAG,
     SAO_TYPE_IDX,
     SAO_BAND_POSITION,
+    SAO_OFFSET_SIGN,
     SAO_OFFSET,
     ALF_CU_FLAG,
     END_OF_SLICE_FLAG,
-    SPLIT_CODING_UNIT_FLAG
+    SPLIT_CODING_UNIT_FLAG,
+    CU_TRANSQUANT_BYPASS_FLAG,
+    SKIP_FLAG,
+    CU_QP_DELTA,
+    PRED_MODE_FLAG,
+    PART_MODE,
+    PCM_FLAG,
+    PREV_INTRA_LUMA_PRED_FLAG,
+    MPM_IDX,
+    REM_INTRA_LUMA_PRED_MODE,
+    INTRA_CHROMA_PRED_MODE
 };
 
 typedef struct HEVCCabacContext {
@@ -294,6 +305,8 @@ typedef struct HEVCCabacContext {
     int max_bin_idx_ctx; ///< maxBinIdxCtx
     const int8_t *ctx_idx_inc; ///< ctxIdxInc
     int ctx_idx_offset; ///< ctxIdxOffset
+
+    uint8_t bypass_flag; ///< bypassFlag
 } HEVCCabacContext;
 
 enum SAOType {
@@ -304,6 +317,44 @@ enum SAOType {
     SAO_45_EDGE = 4,
     SAO_BAND = 5
 };
+
+enum PartMode {
+    PART_2Nx2N = 0,
+    PART_2NxN = 1,
+    PART_Nx2N = 2,
+    PART_NxN = 3,
+    PART_2NxnU = 4,
+    PART_2NxnD = 5,
+    PART_nLx2N = 6,
+    PART_nRx2N = 7
+};
+
+enum PredMode {
+    MODE_INTER = 0,
+    MODE_INTRA,
+    MODE_SKIP
+};
+
+typedef struct CodingUnit {
+    uint8_t *skip_flag;
+    enum PredMode pred_mode; ///< PredMode
+    enum PartMode part_mode; ///< PartMode
+    uint8_t no_residual_data_flag;
+
+    // Inferred parameters
+    uint8_t intra_split_flag; ///< IntraSplitFlag
+    uint8_t max_trafo_depth; ///< MaxTrafoDepth
+} CodingUnit;
+
+typedef struct PredictionUnit {
+    uint8_t pcm_flag;
+    uint8_t merge_flag;
+
+    uint8_t *prev_intra_luma_pred_flag;
+    int *mpm_idx;
+    uint8_t *rem_intra_luma_pred_mode;
+    int *intra_chroma_pred_mode;
+} PredictionUnit;
 
 typedef struct {
     AVCodecContext *avctx;
@@ -333,10 +384,13 @@ typedef struct {
     uint8_t sao_merge_left_flag;
     uint8_t sao_merge_up_flag;
 
-    uint8_t split_coding_unit_flag;
+    uint8_t *split_coding_unit_flag;
 
-    enum SAOType sao_type_idx[3];
-    int sao_band_position[3];
+    enum SAOType *(sao_type_idx[3]);
+    int *(sao_band_position[3]);
+
+    CodingUnit cu;
+    PredictionUnit pu;
 } HEVCContext;
 
 int ff_hevc_decode_short_term_rps(HEVCContext *s, int idx,
