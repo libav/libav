@@ -421,6 +421,9 @@ static int intra_chroma_pred_mode_binarization(HEVCContext *s, int unused)
     if (cond && decode_bin(s, i++) == 0) // value 10
         return 4;
     // values 11XX if cond and 1XX otherwise
+#ifdef REFERENCE_ENCODER_QUIRKS
+    s->cc.bypass_flag = 1;
+#endif
     ret = decode_bin(s, i++) << 1;
     ret |= decode_bin(s, i++);
     return ret;
