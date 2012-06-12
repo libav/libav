@@ -115,6 +115,23 @@ static int decode_nal_slice_header(HEVCContext *s)
                 pic_arrays_free(s);
                 return -1;
             }
+
+            s->avctx->width = s->sps->pic_width_in_luma_samples;
+            s->avctx->height = s->sps->pic_height_in_luma_samples;
+            if (s->sps->chroma_format_idc == 0 || s->sps->separate_colour_plane_flag) {
+                av_log(s->avctx, AV_LOG_ERROR,
+                       "TODO: s->sps->chroma_format_idc == 0 || "
+                       "s->sps->separate_colour_plane_flag\n");
+                return -1;
+            }
+            //TODO: take into account the luma and chroma bit depths
+            if (s->sps->chroma_format_idc == 1) {
+                s->avctx->pix_fmt = PIX_FMT_YUV420P;
+            } else if (s->sps->chroma_format_idc == 2) {
+                s->avctx->pix_fmt = PIX_FMT_YUV422P;
+            } else {
+                s->avctx->pix_fmt = PIX_FMT_YUV444P;
+            }
         }
 
         if (s->pps->output_flag_present_flag)
@@ -277,6 +294,28 @@ static void transform_tree(HEVCContext *s, int x0, int y0, int log2_cb_size,
 }
 
 /**
+ * 7.3.7.2
+ */
+static void pcm_sample(HEVCContext *s, int x0, int y0, int log2_cb_size)
+{
+    GetBitContext *gb = &s->gb;
+    int cb_size = 1 << log2_cb_size;
+
+    // Directly fill the current frame (section 8.4)
+    for (int j = 0; j < cb_size; j++)
+        for (int i = 0; i < cb_size; i++)
+            s->frame.data[0][(x0 + i) * s->frame.linesize[0] + (y0 + j)]
+                = get_bits(gb, s->sps->pcm.bit_depth_luma) <<
+                (s->sps->bit_depth_luma - s->sps->pcm.bit_depth_luma);
+
+    //TODO: put the samples at the correct place in the frame
+    for (int i = 0; i < (1 << (log2_cb_size << 1)) >> 1; i++)
+        get_bits(gb, s->sps->pcm.bit_depth_chroma);
+
+    s->num_pcm_block--;
+}
+
+/**
  * 7.3.7
  */
 static void prediction_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
@@ -286,36 +325,52 @@ static void prediction_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
         av_log(s->avctx, AV_LOG_ERROR, "TODO: slice_type != I_SLICE\n");
         return;
     } else if (s->cu.pred_mode == MODE_INTRA) {
-        //TODO: PCM stuff
+        if (s->cu.part_mode == PART_2Nx2N && s->sps->pcm_enabled_flag &&
+            log2_cb_size >= s->sps->pcm.log2_min_pcm_coding_block_size &&
+            log2_cb_size <= (s->sps->pcm.log2_min_pcm_coding_block_size +
+                             s->sps->pcm.log2_diff_max_min_pcm_coding_block_size)) {
+            s->pu.pcm_flag = ff_hevc_cabac_decode(s, PCM_FLAG);
+            av_log(s->avctx, AV_LOG_ERROR, "pcm_flag: %d\n", s->pu.pcm_flag);
+        }
+        if (s->pu.pcm_flag) {
+            s->num_pcm_block = 1;
+            while (s->num_pcm_block < 4 && get_bits1(&s->gb))
+                s->num_pcm_block++;
 
-        //TODO: based on JCTVC-I0302 which doesn't seem to handle all cases
-        //to be checked again once it's part of the spec
-        int d0 = 1 << log2_cb_size;
-        if (!(x0 % d0) && !(y0 % d0)) {
-            int d1 = s->cu.part_mode == PART_2Nx2N ? d0 : (d0 >> 1);
-            for (int i = 0; i < d0; i += d1)
-                for (int j = 0; j < d0; j += d1)
-                    SAMPLE(s->pu.prev_intra_luma_pred_flag, x0 + j, y0 + i) =
-                        ff_hevc_cabac_decode(s, PREV_INTRA_LUMA_PRED_FLAG);
+            align_get_bits(&s->gb);
+            pcm_sample(s, x0, y0, log2_cb_size);
+        } else {
+            //TODO: based on JCTVC-I0302 which doesn't seem to handle all cases
+            //to be checked again once it's part of the spec
+            int d0 = 1 << log2_cb_size;
+            if (!(x0 % d0) && !(y0 % d0)) {
+                int d1 = s->cu.part_mode == PART_2Nx2N ? d0 : (d0 >> 1);
+                for (int i = 0; i < d0; i += d1)
+                    for (int j = 0; j < d0; j += d1)
+                        SAMPLE(s->pu.prev_intra_luma_pred_flag, x0 + j, y0 + i) =
+                            ff_hevc_cabac_decode(s, PREV_INTRA_LUMA_PRED_FLAG);
 
-            for (int i = 0; i < d0; i += d1) {
-                for (int j = 0; j < d0; j += d1) {
-                    if (SAMPLE(s->pu.prev_intra_luma_pred_flag, x0 + j, y0 + i)) {
-                        SAMPLE(s->pu.mpm_idx, x0 + j, y0 + i) =
-                            ff_hevc_cabac_decode(s, MPM_IDX);
-                    } else {
-                        SAMPLE(s->pu.rem_intra_luma_pred_mode, x0 + j, y0 + i) =
-                            ff_hevc_cabac_decode(s, REM_INTRA_LUMA_PRED_MODE);
+                for (int i = 0; i < d0; i += d1) {
+                    for (int j = 0; j < d0; j += d1) {
+                        if (SAMPLE(s->pu.prev_intra_luma_pred_flag, x0 + j, y0 + i)) {
+                            SAMPLE(s->pu.mpm_idx, x0 + j, y0 + i) =
+                                ff_hevc_cabac_decode(s, MPM_IDX);
+                        } else {
+                            SAMPLE(s->pu.rem_intra_luma_pred_mode, x0 + j, y0 + i) =
+                                ff_hevc_cabac_decode(s, REM_INTRA_LUMA_PRED_MODE);
+                        }
                     }
                 }
             }
-        }
-        if (s->cu.part_mode == PART_2Nx2N) {
-            SAMPLE(s->pu.intra_chroma_pred_mode, x0, y0) =
-                ff_hevc_cabac_decode(s, INTRA_CHROMA_PRED_MODE);
-        } else if ((x0 % d0) && (y0 % d0)) {
-            SAMPLE(s->pu.intra_chroma_pred_mode, x0 - (d0 >> 1), y0 - (d0 >> 1)) =
-                ff_hevc_cabac_decode(s, INTRA_CHROMA_PRED_MODE);
+            if (s->cu.part_mode == PART_2Nx2N) {
+                SAMPLE(s->pu.intra_chroma_pred_mode, x0, y0) =
+                    ff_hevc_cabac_decode(s, INTRA_CHROMA_PRED_MODE);
+                av_log(s->avctx, AV_LOG_ERROR, "intra_chroma: %d\n",
+                       SAMPLE(s->pu.intra_chroma_pred_mode, x0, y0));
+            } else if ((x0 % d0) && (y0 % d0)) {
+                SAMPLE(s->pu.intra_chroma_pred_mode, x0 - (d0 >> 1), y0 - (d0 >> 1)) =
+                    ff_hevc_cabac_decode(s, INTRA_CHROMA_PRED_MODE);
+            }
         }
     } else {
         av_log(s->avctx, AV_LOG_ERROR, "TODO: pred_mode != MODE_INTRA\n");
@@ -432,10 +487,10 @@ static int coding_tree(HEVCContext *s, int x0, int y0, int log2_cb_size, int cb_
     } else {
         //TODO
 
-        if (!s->num_pcm_block) {
+        if (s->num_pcm_block == 0) {
             coding_unit(s, x0, y0, log2_cb_size);
         } else {
-            av_log(s->avctx, AV_LOG_ERROR, "TODO: num_pcm_block\n");
+            pcm_sample(s, x0, y0, log2_cb_size);
         }
     }
 
@@ -472,17 +527,6 @@ static int decode_nal_slice_data(HEVCContext *s)
     }
 
     return 0;
-}
-
-static int decode_nal_slice(HEVCContext *s)
-{
-    int ret = 0;
-    if ((ret = decode_nal_slice_header(s)) < 0)
-        return ret;
-
-    ff_hevc_cabac_init(s);
-
-    return decode_nal_slice_data(s);
 }
 
 /**
@@ -543,9 +587,29 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         ff_hevc_decode_nal_sei(s);
         break;
     case NAL_IDR_SLICE:
-    case NAL_SLICE:
-        decode_nal_slice(s);
+    case NAL_SLICE: {
+        if (decode_nal_slice_header(s) < 0) {
+            return -1;
+        }
+
+        if (s->frame.data[0] != NULL)
+            s->avctx->release_buffer(s->avctx, &s->frame);
+        if (s->avctx->get_buffer(s->avctx, &s->frame) < 0) {
+            av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
+            return -1;
+        }
+
+        ff_hevc_cabac_init(s);
+        if (decode_nal_slice_data(s) < 0) {
+            return -1;
+        }
+
+        s->frame.pict_type = AV_PICTURE_TYPE_I;
+        s->frame.key_frame = 1;
+        *(AVFrame*)data = s->frame;
+        *data_size = sizeof(AVFrame);
         break;
+    }
     default:
         av_log(s->avctx, AV_LOG_INFO, "Skipping NAL unit\n");
         return avpkt->size;
@@ -569,6 +633,9 @@ static av_cold int hevc_decode_init(AVCodecContext *avctx)
 static av_cold int hevc_decode_free(AVCodecContext *avctx)
 {
     HEVCContext *s = avctx->priv_data;
+
+    if (s->frame.data[0] != NULL)
+        s->avctx->release_buffer(s->avctx, &s->frame);
 
     for (int i = 0; i < MAX_SPS_COUNT; i++) {
         if (s->sps_list[i]) {

@@ -358,6 +358,8 @@ typedef struct PredictionUnit {
 
 typedef struct {
     AVCodecContext *avctx;
+    AVFrame frame;
+
     GetBitContext gb;
     HEVCCabacContext cc;
 

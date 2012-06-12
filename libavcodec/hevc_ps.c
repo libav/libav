@@ -234,8 +234,8 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
 
         for (int i = 0; i < sps->num_tile_rows; i++) {
             sps->row_height[i] =
-                ((i + 1) * sps->PicWidthInCtbs) / (sps->num_tile_rows) -
-                (i * sps->PicWidthInCtbs) / (sps->num_tile_rows);
+                ((i + 1) * sps->PicHeightInCtbs) / (sps->num_tile_rows) -
+                (i * sps->PicHeightInCtbs) / (sps->num_tile_rows);
         }
     }
 

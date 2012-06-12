@@ -137,7 +137,7 @@ static const int8_t ctx_idx_offsets[][3] =
     { 0, 1, 2 }, //prev_intra_luma_pred_flag
     { -1, -1, -1 }, //mpm_idx
     { -1, -1, -1 }, //rem_intra_luma_pred_mode
-    { 0, 2, 4 } //intra_chrima_pred_mode
+    { 0, 2, 4 } //intra_chroma_pred_mode
 };
 
 /**
@@ -248,6 +248,18 @@ static int derive_ctx_idx(HEVCContext *s, int bin_idx)
     return cc->ctx_idx_offset + ctx_idx_inc;
 }
 
+static void renormalization(HEVCContext *s)
+{
+    HEVCCabacContext *cc = &s->cc;
+    GetBitContext *gb = &s->gb;
+
+    while (cc->range < 256) {
+        cc->range <<= 1;
+        cc->offset <<= 1;
+        cc->offset |= get_bits1(gb);
+    }
+}
+
 /**
  * 9.2.3.2
  */
@@ -265,9 +277,23 @@ static int decode_bin(HEVCContext *s, int bin_idx)
         if (cc->offset >= cc->range) {
             cc->offset -= cc->range;
             bin_val = 1;
+        } else {
+            bin_val = 0;
         }
-        bin_val = 0;
         av_log(s->avctx, AV_LOG_DEBUG, "bypass bin_val: %d\n", bin_val);
+        return bin_val;
+    }
+
+    if (cc->elem == END_OF_SLICE_FLAG || cc->elem == PCM_FLAG) {
+        cc->range -= 2;
+        if (cc->offset >= cc->range) {
+            bin_val = 1;
+        } else {
+            bin_val = 0;
+            renormalization(s);
+        }
+        av_log(s->avctx, AV_LOG_DEBUG, "cc->range: %d, cc->offset: %d, bin_val: %d\n",
+           cc->range, cc->offset, bin_val);
         return bin_val;
     }
 
@@ -300,11 +326,7 @@ static int decode_bin(HEVCContext *s, int bin_idx)
         state[1] = lps_state[pstate];
     }
 
-    while (cc->range < 256) {
-        cc->range <<= 1;
-        cc->offset <<= 1;
-        cc->offset |= get_bits1(gb);
-    }
+    renormalization(s);
 
     av_log(s->avctx, AV_LOG_DEBUG, "cc->range: %d, cc->offset: %d, bin_val: %d\n",
            cc->range, cc->offset, bin_val);
