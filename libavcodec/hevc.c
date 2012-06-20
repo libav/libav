@@ -51,10 +51,20 @@ static int pic_arrays_init(HEVCContext *s)
     s->pu.mpm_idx = av_mallocz(pic_size * sizeof(int));
     s->pu.rem_intra_luma_pred_mode = av_mallocz(pic_size * sizeof(uint8_t));
     s->pu.intra_chroma_pred_mode = av_mallocz(pic_size * sizeof(int));
+
     if (s->split_coding_unit_flag == NULL || s->cu.skip_flag == NULL ||
         s->pu.prev_intra_luma_pred_flag == NULL || s->pu.mpm_idx == NULL ||
         s->pu.rem_intra_luma_pred_mode == NULL || s->pu.intra_chroma_pred_mode == NULL)
         return -1;
+
+    for (int i = 0; i < MAX_TRANSFORM_DEPTH; i++) {
+        s->tt.split_transform_flag[i] = av_mallocz(pic_size * sizeof(uint8_t));
+        s->tt.cbf_cb[i] = av_mallocz(pic_size * sizeof(uint8_t));
+        s->tt.cbf_cr[i] = av_mallocz(pic_size * sizeof(uint8_t));
+        if (s->tt.split_transform_flag[i] == NULL || s->tt.cbf_cb[i] == NULL ||
+            s->tt.cbf_cr[i] == NULL)
+            return -1;
+    }
 
     return 0;
 }
@@ -72,6 +82,12 @@ static void pic_arrays_free(HEVCContext *s)
     av_freep(&s->pu.mpm_idx);
     av_freep(&s->pu.rem_intra_luma_pred_mode);
     av_freep(&s->pu.intra_chroma_pred_mode);
+
+    for (int i = 0; i < MAX_TRANSFORM_DEPTH; i++) {
+        av_freep(&s->tt.split_transform_flag[i]);
+        av_freep(&s->tt.cbf_cb[i]);
+        av_freep(&s->tt.cbf_cr[i]);
+    }
 }
 
 /**
@@ -285,12 +301,210 @@ static av_always_inline int min_cb_addr_zs(HEVCContext *s, int x, int y)
 }
 
 /**
+ * 7.3.10
+ */
+static void residual_coding(int x0, int y0, int log2TrafoWidth, int log2TrafoHeight,
+                            int scanIdx, int cIdx)
+{
+}
+
+/**
+ * 7.3.9
+ */
+static void transform_unit(HEVCContext *s, int x0L, int  y0L, int x0C, int y0C,
+                           int log2_trafo_width, int log2_trafo_height,
+                           int trafo_depth, int blk_idx) {
+    int log2_trafo_size = (log2_trafo_width + log2_trafo_height) >> 1;
+    int scan_idx = 0;
+    int scan_idx_c = 0;
+
+    if (s->tt.cbf_luma ||
+        SAMPLE(s->tt.cbf_cb[trafo_depth], x0L, y0L) ||
+        SAMPLE(s->tt.cbf_cr[trafo_depth], x0L, y0L)) {
+        if ((s->pps->diff_cu_qp_delta_depth > 0) && !s->tu.is_cu_qp_delta_coded) {
+            s->tu.cu_qp_delta = ff_hevc_cabac_decode(s, CU_QP_DELTA);
+            s->tu.is_cu_qp_delta_coded = 1;
+        }
+
+        if (s->cu.pred_mode == MODE_INTRA) {
+            //TODO
+            //if (s->tu.intra_pred_mode != 0) {
+                //scan_idx = ScanType[log2_trafo_size - 2][IntraPredMode];
+                //scan_idx_c = ScanType[log2_trafo_size - 2][IntraPredModeC];
+            //}
+        }
+
+        if (s->tt.cbf_luma)
+            residual_coding(x0L, y0L, log2_trafo_width, log2_trafo_height,
+                             scan_idx, 0);
+        if (log2_trafo_size > 2) {
+            if (SAMPLE(s->tt.cbf_cb[trafo_depth], x0C, y0C))
+                residual_coding(x0C, y0C, log2_trafo_width - 1, log2_trafo_height - 1,
+                                scan_idx_c, 1);
+            if (SAMPLE(s->tt.cbf_cr[trafo_depth], x0C, y0C))
+                residual_coding( x0C, y0C, log2_trafo_width - 1, log2_trafo_height - 1,
+                                 scan_idx_c, 2);
+        } else if (blk_idx == 3) {
+            if (SAMPLE(s->tt.cbf_cb[trafo_depth], x0C, y0C))
+                residual_coding( x0C, y0C, log2_trafo_width, log2_trafo_height,
+                                 scan_idx_c, 1);
+            if (SAMPLE(s->tt.cbf_cr[trafo_depth], x0C, y0C))
+                residual_coding( x0C, y0C, log2_trafo_width, log2_trafo_height,
+                                 scan_idx_c, 2);
+        }
+    }
+}
+
+/**
  * 7.3.8
  */
-static void transform_tree(HEVCContext *s, int x0, int y0, int log2_cb_size,
-                           int log2_trafo_width, int log2_trafo_height,
-                           int trafo_depth, int blk_idx)
+static void transform_tree(HEVCContext *s, int x0L, int y0L, int x0C, int y0C,
+                           int xBase, int yBase, int log2_cb_size, int log2_trafo_width,
+                           int log2_trafo_height, int trafo_depth, int blk_idx)
 {
+    int log2_trafo_size = (log2_trafo_width + log2_trafo_height) >> 1;
+    int log2_max_trafo_size = s->sps->log2_min_transform_block_size +
+                              s->sps->log2_diff_max_min_transform_block_size;
+    int trafo_height = 1 << log2_trafo_height;
+    int trafo_width = 1 << log2_trafo_width;
+    int x1L, y1L, x2L, y2L, x3L, y3L;
+    int x1C, y1C, x2C, y2C, x3C, y3C;
+
+    //6.6
+    if (s->sps->nsrqt_enabled_flag &&
+        ((log2_trafo_size == log2_max_trafo_size
+          || (log2_trafo_size < log2_max_trafo_size &&
+              trafo_depth == 0))
+         && log2_trafo_size > (s->sps->log2_min_transform_block_size + 1)
+         && (s->cu.part_mode == PART_2NxN
+             || s->cu.part_mode == PART_2NxnU
+             || s->cu.part_mode == PART_2NxnD))
+        || (log2_trafo_size == (s->sps->log2_min_transform_block_size + 1)
+            && log2_trafo_width < log2_trafo_height)) {
+        s->tt.inter_tb_split_direction_l = 0;
+    } else if (s->sps->nsrqt_enabled_flag
+               && ((log2_trafo_size == log2_max_trafo_size
+                    || (log2_trafo_size < log2_max_trafo_size && trafo_depth == 0))
+                   && log2_trafo_size > (s->sps->log2_min_transform_block_size + 1)
+                   && (s->cu.part_mode == PART_Nx2N || s->cu.part_mode == PART_nLx2N
+                       || s->cu.part_mode == PART_nRx2N))
+               || (log2_trafo_size == (s->sps->log2_min_transform_block_size + 1)
+                   && log2_trafo_width > log2_trafo_height)) {
+        s->tt.inter_tb_split_direction_l = 1;
+    } else {
+        s->tt.inter_tb_split_direction_l = 2;
+    }
+
+    if (trafo_depth > 0 && log2_trafo_size == 2) {
+        SAMPLE(s->tt.cbf_cb[trafo_depth], x0C, y0C) =
+            SAMPLE(s->tt.cbf_cb[trafo_depth - 1], xBase, yBase);
+        SAMPLE(s->tt.cbf_cr[trafo_depth], x0C, y0C) =
+            SAMPLE(s->tt.cbf_cb[trafo_depth - 1], xBase, yBase);
+    }
+
+    s->tt.cbf_luma = 1;
+
+    s->tt.inter_split_flag = (s->sps->max_transform_hierarchy_depth_inter == 0 &&
+                              s->cu.pred_mode == MODE_INTER &&
+                              s->cu.part_mode != PART_2Nx2N && trafo_depth == 0);
+
+    if (log2_trafo_size <= s->sps->log2_min_transform_block_size +
+        s->sps->log2_diff_max_min_coding_block_size &&
+        log2_trafo_size > s->sps->log2_min_transform_block_size &&
+        trafo_depth < s->cu.max_trafo_depth &&
+        !(s->cu.intra_split_flag && trafo_depth == 0)) {
+        SAMPLE(s->tt.split_transform_flag[trafo_depth], x0L, y0L) =
+            ff_hevc_cabac_decode(s, SPLIT_TRANSFORM_FLAG);
+    } else {
+        SAMPLE(s->tt.split_transform_flag[trafo_depth], x0L, y0L) =
+            (log2_trafo_size >
+             s->sps->log2_min_transform_block_size +
+             s->sps->log2_diff_max_min_coding_block_size ||
+             (s->cu.intra_split_flag && trafo_depth == 0) ||
+             s->tt.inter_split_flag);
+    }
+
+    if (trafo_depth == 0 || log2_trafo_size > 2) {
+        if (trafo_depth == 0 || SAMPLE(s->tt.cbf_cb[trafo_depth - 1], xBase, yBase))
+            SAMPLE(s->tt.cbf_cb[trafo_depth], x0C, y0C) =
+                ff_hevc_cabac_decode(s, CBF_CB_CR);
+        if (trafo_depth == 0 || SAMPLE(s->tt.cbf_cr[trafo_depth - 1], xBase, yBase))
+            SAMPLE(s->tt.cbf_cr[trafo_depth], x0C, y0C) =
+                ff_hevc_cabac_decode(s, CBF_CB_CR);
+    }
+
+    if (SAMPLE(s->tt.split_transform_flag[trafo_depth], x0L, y0L)) {
+        if (s->tt.inter_tb_split_direction_l == 2) {
+            x1L = x0L + (trafo_width >> 1);
+            y1L = y0L;
+            x2L = x0L;
+            y2L = y0L + (trafo_height >> 1);
+            x3L = x1L;
+            y3L = y2L;
+        } else {
+            x1L = x0L + (trafo_width >> 2) *
+                  s->tt.inter_tb_split_direction_l;
+            y1L = y0L + (trafo_height >> 2) *
+                  (1 - s->tt.inter_tb_split_direction_l);
+            x2L = x1L + (trafo_width >> 2) *
+                  s->tt.inter_tb_split_direction_l;
+            y2L = y1L + (trafo_height >> 2)
+                          * (1 - s->tt.inter_tb_split_direction_l);
+            x3L = x2L + (trafo_width >> 2) *
+                  s->tt.inter_tb_split_direction_l;
+            y3L = y2L + (trafo_height >> 2) *
+                  (1 - s->tt.inter_tb_split_direction_l);
+        }
+        if (s->tt.inter_tb_split_direction_c == 2 && log2_trafo_size > 3) {
+            x1C = x0C + (trafo_width >> 1);
+            y1C = y0C;
+            x2C = x0C;
+            y2C = y0C + (trafo_height >> 1);
+            x3C = x1C;
+            y3C = y2C;
+        } else if (log2_trafo_size > 3) {
+            x1C = x0C + (trafo_width >> 2) *
+                  s->tt.inter_tb_split_direction_c;
+            y1C = y0C + (trafo_height >> 2) *
+                  (1 - s->tt.inter_tb_split_direction_c);
+            x2C = x1C + (trafo_width >> 2) *
+                  s->tt.inter_tb_split_direction_c;
+            y2C = y1C + (trafo_height >> 2) *
+                  (1 - s->tt.inter_tb_split_direction_c);
+            x3C = x2C + (trafo_width >> 2) *
+                  s->tt.inter_tb_split_direction_c;
+            y3C = y2C + (trafo_height >> 2) *
+                  (1 - s->tt.inter_tb_split_direction_c);
+        } else {
+            x1C = x0C;
+            y1C = y0C;
+            x2C = x0C;
+            y2C = y0C;
+            x3C = x0C;
+            y3C = y0C;
+        }
+        if (s->tt.inter_tb_split_direction_l != 2) {
+            log2_trafo_width = log2_trafo_width - 2 * s->tt.inter_tb_split_direction_l + 1;
+            log2_trafo_height = log2_trafo_height + 2 * s->tt.inter_tb_split_direction_l - 1;
+        }
+        transform_tree(s, x0L, y0L, x0C, y0C, x0L, y0L, log2_cb_size,
+                       log2_trafo_width - 1, log2_trafo_height - 1, trafo_depth + 1, 0);
+        transform_tree(s, x1L, y1L, x1C, y1C, x0L, y0L, log2_cb_size,
+                       log2_trafo_width - 1, log2_trafo_height - 1, trafo_depth + 1, 1);
+        transform_tree(s, x2L, y2L, x2C, y2C, x0L, y0L, log2_cb_size,
+                       log2_trafo_width - 1, log2_trafo_height - 1, trafo_depth + 1, 2);
+        transform_tree(s, x3L, y3L, x3C, y3C, x0L, y0L, log2_cb_size,
+                       log2_trafo_width - 1, log2_trafo_height - 1, trafo_depth + 1, 3);
+    } else {
+        if (s->cu.pred_mode == MODE_INTRA || trafo_depth != 0 ||
+            SAMPLE(s->tt.cbf_cb[trafo_depth], x0C, y0C) ||
+            SAMPLE(s->tt.cbf_cr[trafo_depth], x0C, y0C))
+            s->tt.cbf_luma = ff_hevc_cabac_decode(s, CBF_LUMA);
+
+        transform_unit(s, x0L, y0L, x0C,
+                       y0C, log2_trafo_width, log2_trafo_height, trafo_depth, blk_idx);
+    }
+
 }
 
 /**
@@ -459,7 +673,8 @@ static void coding_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
                 s->cu.max_trafo_depth = s->cu.pred_mode == MODE_INTRA ?
                                         s->sps->max_transform_hierarchy_depth_intra + s->cu.intra_split_flag :
                                         s->sps->max_transform_hierarchy_depth_inter;
-                transform_tree(s, x0, y0, log2_cb_size, log2_cb_size, log2_cb_size, 0, 0);
+                transform_tree(s, x0, y0, x0, y0, x0, y0, log2_cb_size,
+                               log2_cb_size, log2_cb_size, 0, 0);
             }
         }
     }

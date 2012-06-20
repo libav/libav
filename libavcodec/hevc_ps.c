@@ -152,7 +152,7 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
     sps->deblocking_filter_in_aps_enabled_flag      = get_bits1(gb);
     sps->seq_loop_filter_across_slices_enabled_flag = get_bits1(gb);
     sps->asymmetric_motion_partitions_enabled_flag  = get_bits1(gb);
-    sps->non_square_quadtree_enabled_flag           = get_bits1(gb);
+    sps->nsrqt_enabled_flag                         = get_bits1(gb);
     sps->sample_adaptive_offset_enabled_flag        = get_bits1(gb);
 
     sps->adaptive_loop_filter_enabled_flag = get_bits1(gb);

@@ -63,6 +63,9 @@ typedef struct {
 #define MAX_PPS_COUNT 256
 #define MAX_SHORT_TERM_RPS_COUNT 64
 
+//TODO: check if this is really the maximum
+#define MAX_TRANSFORM_DEPTH 3
+
 /**
  * Not yet specified!
  */
@@ -131,7 +134,7 @@ typedef struct {
 
     uint8_t seq_loop_filter_across_slices_enabled_flag;
     uint8_t asymmetric_motion_partitions_enabled_flag;
-    uint8_t non_square_quadtree_enabled_flag;
+    uint8_t nsrqt_enabled_flag;
     uint8_t sample_adaptive_offset_enabled_flag;
 
     uint8_t adaptive_loop_filter_enabled_flag;
@@ -291,7 +294,34 @@ enum SyntaxElement {
     PREV_INTRA_LUMA_PRED_FLAG,
     MPM_IDX,
     REM_INTRA_LUMA_PRED_MODE,
-    INTRA_CHROMA_PRED_MODE
+    INTRA_CHROMA_PRED_MODE,
+    MERGE_FLAG,
+    MERGE_IDX,
+    INTER_PRED_IDC,
+    REF_IDX_L0,
+    REF_IDX_L1,
+    ABS_MVD_GREATER0_FLAG,
+    ABS_MVD_GREATER1_FLAG,
+    ABS_MVD_MINUS2,
+    MVD_SIGN_FLAG,
+    MVP_L0_FLAG,
+    MVP_L1_FLAG,
+    NO_RESIDUAL_DATA_FLAG,
+    SPLIT_TRANSFORM_FLAG,
+    CBF_LUMA,
+    CBF_CB_CR,
+    TRANSFORM_SKIP_FLAG_0,
+    TRANSFORM_SKIP_FLAG_1_2,
+    LAST_SIGNIFICANT_COEFF_X_PREFIX,
+    LAST_SIGNIFICANT_COEFF_Y_PREFIX,
+    LAST_SIGNIFICANT_COEFF_X_SUFFIX,
+    LAST_SIGNIFICANT_COEFF_Y_SUFFIX,
+    SIGNIFICANT_COEFF_GROUP_FLAG,
+    SIGNIFICANT_COEFF_FLAG,
+    COEFF_ABS_LEVEL_GREATER1_FLAG,
+    COEFF_ABS_LEVEL_GREATER2_FLAG,
+    COEFF_ABS_LEVEL_REMAINING,
+    COEFF_SIGN_FLAG
 };
 
 typedef struct HEVCCabacContext {
@@ -356,6 +386,27 @@ typedef struct PredictionUnit {
     int *intra_chroma_pred_mode;
 } PredictionUnit;
 
+typedef struct TransformTree {
+    uint8_t *(split_transform_flag[MAX_TRANSFORM_DEPTH]);
+    uint8_t *(cbf_cb[MAX_TRANSFORM_DEPTH]);
+    uint8_t *(cbf_cr[MAX_TRANSFORM_DEPTH]);
+    uint8_t cbf_luma;
+
+    // Inferred parameters
+    uint8_t inter_split_flag;
+    uint8_t inter_tb_split_direction_l;
+    uint8_t inter_tb_split_direction_c;
+} TransformTree;
+
+typedef struct TransformUnit {
+    int cu_qp_delta;
+
+    // Inferred parameters;
+    uint8_t is_cu_qp_delta_coded;
+    int intra_pred_mode;
+    int intra_pred_mode_c;
+} TransformUnit;
+
 typedef struct {
     AVCodecContext *avctx;
     AVFrame frame;
@@ -393,6 +444,8 @@ typedef struct {
 
     CodingUnit cu;
     PredictionUnit pu;
+    TransformTree tt;
+    TransformUnit tu;
 } HEVCContext;
 
 int ff_hevc_decode_short_term_rps(HEVCContext *s, int idx,

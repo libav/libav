@@ -47,6 +47,7 @@ static int tu_binarization(HEVCContext *s, int cMax);
 static int cu_qp_delta_binarization(HEVCContext *s, int unused);
 static int part_mode_binarization(HEVCContext *s, int unused);
 static int intra_chroma_pred_mode_binarization(HEVCContext *s, int unused);
+static int coeff_abs_level_remaining_binarization(HEVCContext *s, int unused);
 
 typedef int (*binarization_func)(HEVCContext *s, int arg);
 
@@ -59,13 +60,13 @@ static const binarization_func binarization_funcs[BINARIZATION_COUNT] =
     &cu_qp_delta_binarization,
     &part_mode_binarization,
     &intra_chroma_pred_mode_binarization,
-    0
+    &coeff_abs_level_remaining_binarization
 };
 
 /**
  * Binarization type from Table 9-63, indexed by SyntaxElement.
  */
-static const uint8_t binarization[][2] =
+static const int8_t binarization[][2] =
 {
     { FL_BIN, 1 }, //sao_merge_left_flag
     { FL_BIN, 1 }, //sao_merge_up_flag
@@ -85,7 +86,35 @@ static const uint8_t binarization[][2] =
     { FL_BIN, 1 }, //prev_intra_luma_pred_flag
     { TU_BIN, 1 }, //mpm_idx
     { FL_BIN, 31 }, //rem_intra_luma_pred_mode
-    { INTRA_CHROMA_PRED_MODE_BIN } //intra_chroma_pred_mode
+    { INTRA_CHROMA_PRED_MODE_BIN }, //intra_chroma_pred_mode
+    { FL_BIN, 1 }, //merge_flag
+    { TU_BIN, -1 }, //merge_idx
+    { FL_BIN, -1 }, //inter_pred_idc
+    { TU_BIN, -1 }, //ref_idx_l0
+    { TU_BIN, -1 }, //ref_idx_l1
+    { FL_BIN, 1 }, //abs_mvd_greater0_flag
+    { FL_BIN, 1 }, //abs_mvd_greater1_flag]
+    { EG_BIN, 1 }, //abs_mvd_minus2
+    { FL_BIN, 1 }, //mvd_sign_flag
+    { FL_BIN, 1 }, //mvp_l0_flag
+    { FL_BIN, 1 }, //mvp_l1_flag
+    { FL_BIN, 1 }, //no_residual_data_flag
+    { FL_BIN, 1 }, //split_transform_flag
+    { FL_BIN, 1 }, //cbf_luma
+    { FL_BIN, 1 }, //cbf_cb, cbf_cr
+    { FL_BIN, 1 }, //transform_skip_flag[][][0]
+    { FL_BIN, 1 }, //transform_skip_flag[][][1|2]
+    { TU_BIN, -1 }, //last_significant_coeff_x_prefix
+    { TU_BIN, -1 }, //last_significant_coeff_y_prefix
+    { FL_BIN, -1 }, //last_significant_coeff_x_suffix
+    { FL_BIN, -1 }, //last_significant_coeff_y_suffix
+    { FL_BIN, 1 }, //significant_coeff_group_flag
+    { FL_BIN, 1 }, //significant_coeff_flag
+    { FL_BIN, 1 }, //coeff_abs_level_greater1_flag
+    { FL_BIN, 1 }, //coeff_abs_level_greater2_flag
+    { COEFF_ABS_LEVEL_REMAINING_BIN }, //coeff_abs_level_remaining
+    { FL_BIN, 1 } //coeff_sign_flag
+
 };
 
 /**
@@ -111,7 +140,34 @@ static const uint8_t max_bin_idx_ctxs[][3] =
     { 0, 0, 0 }, //prev_intra_luma_pred_flag
     { -1, -1, -1 }, // mpm_idx
     { -1, -1, -1 }, //rem_intra_luma_pred_mode
-    { 1, 1, 1 }//intra_chroma_pred_mode
+    { 1, 1, 1 }, //intra_chroma_pred_mode
+    { -1, 0, 0 }, //merge_flag
+    { -1, 0, 0 }, //merge_idx
+    { -1, 0, 0 }, //inter_pred_idc
+    { -1, 2, 2 }, //ref_idx_l0
+    { -1, 2, 2 }, //ref_idx_l1
+    { -1, 0, 0 }, //abs_mvd_greater0_flag
+    { -1, 0, 0 }, //abs_mvd_greater1_flag
+    { -1, -1, -1 }, //abs_mvd_minus2
+    { -1, -1, -1 }, //mvd_sign_flag
+    { -1, 0, 0 }, //mvp_l0_flag
+    { -1, 0, 0 }, //mvp_l1_flag
+    { -1, 0, 0 }, //no_residual_data_flag
+    { 0, 0, 0 }, //split_transform_flag
+    { 0, 0, 0 }, //cbf_luma
+    { 0, 0, 0 }, //cbf_cb, cbf_cr
+    { 0, 0, 0 }, //transform_skip_flag[][][0]
+    { 0, 0, 0 }, //transform_skip_flag[][][1|2]
+    { 8, 8, 8 }, //last_significant_coeff_x_prefix
+    { 8, 8, 8 }, //last_significant_coeff_y_prefix
+    { -1, -1, -1 }, //last_significant_coeff_x_suffix
+    { -1, -1, -1 }, //last_significant_coeff_y_suffix
+    { 0, 0, 0 }, //significant_coeff_group_flag
+    { 0, 0, 0 }, //significant_coeff_flag
+    { 0, 0, 0 }, //coeff_abs_level_greater1_flag
+    { 0, 0, 0 }, //coeff_abs_level_greater2_flag
+    { -1, -1, -1 }, //coeff_abs_level_remaining
+    { -1, -1, -1 } //coeff_sign_flag
 };
 
 /**
@@ -137,7 +193,34 @@ static const int8_t ctx_idx_offsets[][3] =
     { 0, 1, 2 }, //prev_intra_luma_pred_flag
     { -1, -1, -1 }, //mpm_idx
     { -1, -1, -1 }, //rem_intra_luma_pred_mode
-    { 0, 2, 4 } //intra_chroma_pred_mode
+    { 0, 2, 4 }, //intra_chroma_pred_mode
+    { -1, 0, 1 }, //merge_flag
+    { -1, 0, 1 }, //merge_idx
+    { -1, 0, 0 }, //inter_pred_idc
+    { -1, 0, 3 }, //ref_idx_l0
+    { -1, 0, 3 }, //ref_idx_l1
+    { -1, 0, 1 }, //abs_mvd_greater0_flag
+    { -1, 2, 3 }, //abs_mvd_greater1_flag
+    { -1, -1, -1 }, //abs_mvd_minus2
+    { -1, -1, -1 }, //mvd_sign_flag
+    { -1, 0, 1 }, //mvp_l0_flag
+    { -1, 0, 1 }, //mvp_l1_flag
+    { -1, 0, 1 }, //no_residual_data_flag
+    { 0, 4, 8 }, //split_transform_flag
+    { 0, 2, 4 }, //cbf_luma
+    { 0, 3, 6 }, //cbf_cb, cbf_cr
+    { 0, 1, 2 }, //transform_skip_flag[][][0]
+    { 3, 4, 5 }, //transform_skip_flag[][][1|2]
+    { 0, 18, 36 }, //last_significant_coeff_x_prefix
+    { 0, 18, 36 }, //last_significant_coeff_y_prefix
+    { -1, -1, -1 }, //last_significant_coeff_x_suffix
+    { -1, -1, -1 }, //last_significant_coeff_y_suffix
+    { 0, 4, 8 }, //significant_coeff_group_flag
+    { 0, 48, 96 }, //significant_coeff_flag
+    { 0, 24, 48 }, //coeff_abs_level_greater1_flag
+    { 0, 6, 12 }, //coeff_abs_level_greater2_flag
+    { -1, -1, -1 }, //coeff_abs_level_remaining
+    { -1, -1, -1 } //coeff_sign_flag
 };
 
 /**
@@ -163,13 +246,40 @@ static const int8_t ctx_idx_incs[][5] =
     { 0 }, //prev_intra_luma_pred_flag
     { }, //mpm_idx
     { }, //rem_intra_luma_pred_mode
-    { 0, 1 } //intra_chroma_pred_mode
+    { 0, 1 }, //intra_chroma_pred_mode
+    { 0 }, //merge_flag
+    { 0 }, //merge_idx
+    { }, //inter_pred_idc
+    { 0, 1, 2, 2, 2 }, //ref_idx_l0
+    { 0, 1, 2, 2, 2 }, //ref_idx_l1
+    { 0 }, //abs_mvd_greater0_flag
+    { 0 }, //abs_mvd_greater1_flag
+    { }, //abs_mvd_minus2
+    { }, //mvd_sign_flag
+    { 0 }, //mvp_l0_flag
+    { 0 }, //mvp_l1_flag
+    { 0 }, //no_residual_data_flag
+    { -1 }, //split_transform_flag
+    { -1 }, //cbf_luma
+    { -1 }, //cbf_cb, cbf_cr
+    { 0 }, //transform_skip_flag[][][0]
+    { 0 }, //transform_skip_flag[][][1|2]
+    { -1, -1, -1, -1, -1 }, //last_significant_coeff_x_prefix
+    { -1, -1, -1, -1, -1 }, //last_significant_coeff_y_prefix
+    { }, //last_significant_coeff_x_suffix
+    { }, //last_significant_coeff_y_suffix
+    { -1 }, //significant_coeff_group_flag
+    { -1 }, //significant_coeff_flag
+    { -1 }, //coeff_abs_level_greater1_flag
+    { -1 }, //coeff_abs_level_greater2_flag
+    { }, //coeff_abs_level_remaining
+    { }  //coeff_sign_flag
 };
 
 /**
  * Offset to ctxIdx 0 in init_values and states, indexed by SyntaxElement.
  */
-static const uint8_t elem_offset[] =
+static const int elem_offset[] =
 {
     0, //sao_merge_left_flag
     9, //sao_merge_up_flag
@@ -189,11 +299,36 @@ static const uint8_t elem_offset[] =
     63, //prev_intra_luma_pred_mode
     -1, //mpm_idx
     -1, //rem_intra_luma_pred_mode
-    66 //intra_chroma_pred_mode
+    66, //intra_chroma_pred_mode
+    72, //merge_flag
+    74, //merge_idx
+    76, //inter_pred_idc
+    80, //ref_idx_l0
+    80, //ref_idx_l1
+    86, //abs_mvd_greater0_flag, abs_mvd_greater1_flag
+    -1, //abs_mvd_minus2
+    -1, //mvd_sign_flag
+    90, //mvp_l0_flag
+    90, //mvp_l1_flag
+    92, //no_residual_data_flag
+    94, //split_transform_flag
+    106, //cbf_luma
+    112, //cbf_cb, cbf_cr
+    121, //transform_skip_flag[][][0]
+    121, //transform_skip_flag[][][1|2]
+    127, //last_significant_coeff_x_prefix
+    127, //last_significant_coeff_y_prefix
+    -1, //last_significant_coeff_x_suffix
+    -1, //last_significant_coeff_y_suffix
+    181, //significant_coeff_group_flag
+    193, //significant_coeff_flag
+    337, //coeff_abs_level_greater1_flag
+    409, //coeff_abs_level_greater2_flag
+    -1, //coeff_abs_level_remaining
+    -1, //coeff_sign_flag
 };
 
-//FIXME: calculate the real value
-#define CTX_IDX_COUNT 256
+#define CTX_IDX_COUNT 432
 
 /**
  * initValue from Tables 9-38 to 9-65, indexed by ctx_idx for each SyntaxElement
@@ -213,13 +348,51 @@ static const uint8_t init_values[CTX_IDX_COUNT] =
     109, 102, 102, //cu_transquant_bypass_flag
     197, 185, 201, 197, 185, 201, //skip_flag
     154, 154, 154, 154, 154, 154, 154, 154, 154, //cu_qp_delta
+    149, 134, 184, 154, 139, 154, 154, 139, 154, //pred_mode, part_mode
+    184, 154, 183, //prev_intra_luma_pred_mode
+    63, 139, 152, 139, 152, 139, //intra_chroma_pred_mode
+    110, 154, //merge_flag
+    122, 137, //merge_idx
+    95, 79, 63, 31, //inter_pred_idc
+    153, 153, 139, 153, 153, 168, //ref_idx_l0, ref_idx_l1
+    140, 198, 169, 198, //abs_mvd_greater0_flag, abs_mvd_greater1_flag
+    168, 168, //mvp_l0_flag, mvp_l1_flag
+    79, 79, //no_residual_data_flag
+    154, 224, 167, 122, 154, 124, 138, 94, 154, 153, 138, 138, //split_transform_flag
+    111, 141, 153, 111, 153, 111, //cbf_luma
+    94, 138, 182, 149, 107, 167, 149, 92, 167, //cbf_cb, cbf_cr
+    139, 139, 139, 139, 139, 139, //transform_skip_flag
 
-    //FIXME: copied from the spec because the reference encoder does not
-    //seem to use the same number of init values, to be investigated.
-    114, 98, 167, 119, 87, 119, 119, 87, 119, //pred_mode and part_mode
+    //last_significant_coeff_x_prefix, last_significant_coeff_y_prefix
+    110, 110, 124, 110, 140, 111, 125, 111, 127, 111, 111, 156, 127, 127,
+    111, 108, 123,  63, 125, 110,  94, 110, 125, 110, 125, 111, 111, 110,
+    139, 111, 111, 111, 125, 108, 123, 108, 125, 110, 124, 110, 125, 110,
+    125, 111, 111, 110, 139, 111, 111, 111, 125, 108, 123, 93,
 
-    184, 153, 183, //prev_intra_luma_pred_mode
-    63, 139, 152, 139, 152, 139 //intra_chroma_pred_mode
+    91, 171, 134, 141, 121, 140, 61, 154, 121, 140, 61, 154, //significant_coeff_group_flag
+
+    //significant_coeff_flag
+    141, 111, 125, 110, 110, 94, 124, 108, 124, 125, 139, 124, 63, 139, 168,
+    138, 107, 123, 92, 111, 141, 107, 125, 141, 179, 153, 125, 140, 139, 182,
+    123, 47, 153, 182, 137, 149, 192, 152, 224, 136, 31, 136, 74, 140, 141, 136,
+    139, 111, 170, 154, 139, 153, 139, 123, 123, 63, 153, 168, 153, 152, 92,
+    152, 152, 137, 122, 92, 61, 155, 185, 166, 183, 140, 136, 153, 154, 155,
+    153, 123, 63, 61, 167, 153, 167, 136, 149, 107, 136, 121, 122, 91, 149, 170,
+    185, 151, 183, 140, 170, 154, 139, 153, 139, 123, 123, 63, 124, 139, 153,
+    152, 92, 152, 152, 137, 137, 92, 61, 170, 185, 166, 183, 140, 136, 153, 154,
+    155, 153, 138, 107, 61, 167, 153, 167, 136, 121, 122, 136, 121, 122, 91,
+    149, 170, 170, 151, 183, 140,
+
+    //coeff_abs_level_greater1_flag
+    140, 92, 137, 138, 140, 152, 138, 139, 153, 74, 149, 92, 139, 107, 122, 152,
+    140, 179, 166, 182, 140, 227, 122, 197, 154, 196, 196, 167, 154, 152, 167,
+    182, 182, 134, 149, 136, 153, 121, 136, 137, 169, 194, 166, 167, 154, 167,
+    137, 182, 154, 196, 167, 167, 154, 152, 167, 182, 182, 134, 149, 136, 153,
+    121, 136, 122, 169, 208, 166, 167, 154, 152, 167, 182,
+
+    //coeff_abs_level_greater2_flag
+    138, 153, 136, 167, 152, 152, 107, 167, 91, 122, 107, 167, 107, 167, 91,
+    107, 107, 167
 };
 
 /**
@@ -430,6 +603,16 @@ static int intra_chroma_pred_mode_binarization(HEVCContext *s, int unused)
 }
 
 /**
+ * 9.2.2.8
+ */
+static int coeff_abs_level_remaining_binarization(HEVCContext *s, int unused)
+{
+    av_log(s->avctx, AV_LOG_ERROR,
+           "TODO: coeff_abs_level_remaining_binarization\n");
+    return 0;
+}
+
+/**
  * 9.2.1
  */
 void ff_hevc_cabac_init(HEVCContext *s)
@@ -452,6 +635,7 @@ void ff_hevc_cabac_init(HEVCContext *s)
     }
 }
 
+//TODO: replace this function by one function for each syntax element
 int ff_hevc_cabac_decode(HEVCContext *s, enum SyntaxElement elem)
 {
     HEVCCabacContext *cc = &s->cc;
@@ -468,6 +652,11 @@ int ff_hevc_cabac_decode(HEVCContext *s, enum SyntaxElement elem)
     cc->ctx_idx_offset = ctx_idx_offsets[elem][initialisation_type];
     cc->ctx_idx_inc = ctx_idx_incs[elem];
     cc->bypass_flag = (cc->ctx_idx_offset == -1);
+
+    if (binarization[elem][1] == -1) {
+        av_log(s->avctx, AV_LOG_ERROR, "TODO: binarization argument for elem %d\n",
+               cc->elem);
+    }
 
     return binarization_funcs[binarization[elem][0]](s, binarization[elem][1]);
 }
