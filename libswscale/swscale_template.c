@@ -2252,7 +2252,7 @@ static void RENAME(lumRangeFromJpeg)(uint16_t *dst, int width)
     "shrl       $9, %%esi    \n\t"                                              \
 
 static inline void RENAME(hyscale_fast)(SwsContext *c, int16_t *dst,
-                                        long dstWidth, const uint8_t *src, int srcW,
+                                        x86_reg dstWidth, const uint8_t *src, int srcW,
                                         int xInc)
 {
 #if ARCH_X86
@@ -2401,7 +2401,7 @@ static inline void RENAME(hyscale)(SwsContext *c, uint16_t *dst, long dstWidth, 
 }
 
 static inline void RENAME(hcscale_fast)(SwsContext *c, int16_t *dst,
-                                        long dstWidth, const uint8_t *src1,
+                                        x86_reg dstWidth, const uint8_t *src1,
                                         const uint8_t *src2, int srcW, int xInc)
 {
 #if ARCH_X86
