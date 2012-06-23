@@ -305,7 +305,8 @@ static const int elem_offset[] =
     76, //inter_pred_idc
     80, //ref_idx_l0
     80, //ref_idx_l1
-    86, //abs_mvd_greater0_flag, abs_mvd_greater1_flag
+    86, //abs_mvd_greater0_flag
+    86, //abs_mvd_greater1_flag
     -1, //abs_mvd_minus2
     -1, //mvd_sign_flag
     90, //mvp_l0_flag
@@ -443,6 +444,8 @@ static int decode_bin(HEVCContext *s, int bin_idx)
 
     int ctx_idx, mps, pstate, lpsrange, bin_val;
     uint8_t *state;
+
+    av_log(s->avctx, AV_LOG_DEBUG, "cc->elem: %d, ", cc->elem);
 
     if (cc->bypass_flag) {
         cc->offset <<= 1;
@@ -661,3 +664,60 @@ int ff_hevc_cabac_decode(HEVCContext *s, enum SyntaxElement elem)
     return binarization_funcs[binarization[elem][0]](s, binarization[elem][1]);
 }
 
+int ff_hevc_split_transform_flag_decode(HEVCContext *s, int trafo_depth)
+{
+    HEVCCabacContext *cc = &s->cc;
+    int initialisation_type = 2 - s->sh.slice_type;
+    const int8_t ctx_idx_inc[5] = { s->ct.depth + trafo_depth };
+
+    if (s->sh.cabac_init_flag && s->sh.slice_type != I_SLICE)
+        initialisation_type = 2;
+    cc->elem = SPLIT_TRANSFORM_FLAG;
+    cc->state = states + elem_offset[cc->elem];
+
+    cc->max_bin_idx_ctx = 0;
+    cc->ctx_idx_offset = 4 * initialisation_type;
+    cc->ctx_idx_inc = ctx_idx_inc;
+
+    return fl_binarization(s, 1);
+}
+
+int ff_hevc_cbf_cb_cr_decode(HEVCContext *s, int trafo_depth)
+{
+    HEVCCabacContext *cc = &s->cc;
+    int initialisation_type = 2 - s->sh.slice_type;
+    const int8_t ctx_idx_inc[5] = { trafo_depth };
+
+    if (s->sh.cabac_init_flag && s->sh.slice_type != I_SLICE)
+        initialisation_type = 2;
+    cc->elem = CBF_CB_CR;
+    cc->state = states + elem_offset[cc->elem];
+
+    cc->max_bin_idx_ctx = 0;
+    cc->ctx_idx_offset = 3 * initialisation_type;
+    cc->ctx_idx_inc = ctx_idx_inc;
+
+    return fl_binarization(s, 1);
+}
+
+int ff_hevc_cbf_luma_decode(HEVCContext *s, int trafo_depth, int log2_trafo_size,
+                            int log2_max_trafo_size)
+{
+    HEVCCabacContext *cc = &s->cc;
+    int initialisation_type = 2 - s->sh.slice_type;
+    const int8_t ctx_idx_inc[5] = {
+        (trafo_depth == 0) || (log2_trafo_size == log2_max_trafo_size)
+    };
+
+    if (s->sh.cabac_init_flag && s->sh.slice_type != I_SLICE)
+        initialisation_type = 2;
+    cc->elem = CBF_LUMA;
+    cc->state = states + elem_offset[cc->elem];
+
+    // 9.2.2
+    cc->max_bin_idx_ctx = 0;
+    cc->ctx_idx_offset = 2 * initialisation_type;
+    cc->ctx_idx_inc = ctx_idx_inc;
+
+    return fl_binarization(s, 1);
+}

@@ -365,6 +365,10 @@ enum PredMode {
     MODE_SKIP
 };
 
+typedef struct CodingTree {
+    int depth; ///< ctDepth
+} CodingTree;
+
 typedef struct CodingUnit {
     uint8_t *skip_flag;
     enum PredMode pred_mode; ///< PredMode
@@ -442,6 +446,7 @@ typedef struct {
     enum SAOType *(sao_type_idx[3]);
     int *(sao_band_position[3]);
 
+    CodingTree ct;
     CodingUnit cu;
     PredictionUnit pu;
     TransformTree tt;
@@ -457,5 +462,9 @@ int ff_hevc_decode_nal_sei(HEVCContext *s);
 
 void ff_hevc_cabac_init(HEVCContext *s);
 int ff_hevc_cabac_decode(HEVCContext *s, enum SyntaxElement elem);
+int ff_hevc_split_transform_flag_decode(HEVCContext *s, int trafo_depth);
+int ff_hevc_cbf_cb_cr_decode(HEVCContext *s, int trafo_depth);
+int ff_hevc_cbf_luma_decode(HEVCContext *s, int trafo_depth, int log2_trafo_size,
+                            int log2_max_trafo_size);
 
 #endif // AVCODEC_HEVC_H
