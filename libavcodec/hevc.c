@@ -27,7 +27,7 @@
 /**
  * Section 5.7
  */
-#define INVERSE_RASTER_SCAN(a,b,c,d,e) ((e) ? ((a)%((d)/(b)))*(b) : ((a)/((d)/(b)))*(c))
+#define INVERSE_RASTER_SCAN(a,b,c,d,e) ((e) ? ((a)/(ROUNDED_DIV(d, b)))*(c) : ((a)%(ROUNDED_DIV(d, b)))*(b))
 
 /**
  * Value of the luma sample at position (x,y) in the 2D array tab.
