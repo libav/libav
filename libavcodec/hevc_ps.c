@@ -285,10 +285,12 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
             }
         }
 
-        val = ctb_addr_rs - tb_x - (tb_y - sps->row_bd[tile_y])*sps->PicWidthInCtbs;
         for (int i = 0; i < tile_x; i++ )
             val += sps->row_height[tile_y] * sps->column_width[i];
-        val += (tb_y - sps->row_bd[tile_y]) * sps->column_width[tile_y] +
+        for (int i = 0; i < tile_y; i++ )
+            val += sps->PicWidthInCtbs * sps->row_height[i];
+
+        val += (tb_y - sps->row_bd[tile_y]) * sps->column_width[tile_x] +
                tb_x - sps->col_bd[tile_x];
 
         sps->ctb_addr_rs_to_ts[ctb_addr_rs] = val;
@@ -302,7 +304,6 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
                     sps->tile_id[sps->ctb_addr_rs_to_ts[y*sps->PicWidthInCtbs + x]] =
                         tile_id;
 
-    // Different from the spec, see http://hevc.kw.bbc.co.uk/trac/ticket/527
     for (int y = 0; y < sps->pic_height_in_min_cbs; y++) {
         for (int x = 0; x < sps->pic_width_in_min_cbs; x++) {
             int tb_x = x >> sps->log2_diff_max_min_coding_block_size;
