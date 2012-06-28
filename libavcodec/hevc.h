@@ -425,7 +425,6 @@ typedef struct PredictionUnit {
 
     int mpm_idx;
     int rem_intra_luma_pred_mode;
-    int *intra_chroma_pred_mode;
 
     enum IntraPredMode intra_pred_mode[4];
     int current_pu_vert;

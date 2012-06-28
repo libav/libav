@@ -50,7 +50,6 @@ static int pic_arrays_init(HEVCContext *s)
 
     s->split_coding_unit_flag = av_mallocz(pic_size * sizeof(uint8_t));
     s->cu.skip_flag = av_mallocz(pic_size * sizeof(uint8_t));
-    s->pu.intra_chroma_pred_mode = av_mallocz(pic_size * sizeof(int));
 
     s->pu.pu_vert = av_mallocz(pic_height_in_min_pu * sizeof(int));
     s->pu.ipm_vert = av_malloc(pic_height_in_min_pu * sizeof(enum IntraPredMode));
@@ -58,8 +57,8 @@ static int pic_arrays_init(HEVCContext *s)
     s->pu.ipm_horiz = av_malloc(pic_width_in_min_pu * sizeof(enum IntraPredMode));
 
     if (s->split_coding_unit_flag == NULL || s->cu.skip_flag == NULL ||
-        s->pu.intra_chroma_pred_mode == NULL || s->pu.pu_vert == NULL ||
-        s->pu.ipm_vert == NULL || s->pu.pu_horiz == NULL || s->pu.ipm_horiz == NULL)
+        s->pu.pu_vert == NULL || s->pu.ipm_vert == NULL ||
+        s->pu.pu_horiz == NULL || s->pu.ipm_horiz == NULL)
         return -1;
 
     for (int i = 0; i < MAX_TRANSFORM_DEPTH; i++) {
@@ -83,7 +82,6 @@ static void pic_arrays_free(HEVCContext *s)
 
     av_freep(&s->split_coding_unit_flag);
     av_freep(&s->cu.skip_flag);
-    av_freep(&s->pu.intra_chroma_pred_mode);
 
     av_freep(&s->pu.pu_vert);
     av_freep(&s->pu.ipm_vert);
