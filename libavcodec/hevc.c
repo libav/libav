@@ -21,6 +21,7 @@
  */
 
 #include "libavutil/attributes.h"
+#include "libavutil/common.h"
 #include "golomb.h"
 #include "hevc.h"
 
@@ -37,6 +38,8 @@
 static int pic_arrays_init(HEVCContext *s)
 {
     int pic_size = s->sps->pic_width_in_luma_samples * s->sps->pic_height_in_luma_samples;
+    int pic_width_in_min_pu = s->sps->pic_width_in_min_cbs * 4;
+    int pic_height_in_min_pu = s->sps->pic_height_in_min_cbs * 4;
 
     for (int i = 0; i < 3; i++) {
         s->sao_type_idx[i] = av_mallocz(pic_size * sizeof(enum SAOType));
@@ -47,14 +50,16 @@ static int pic_arrays_init(HEVCContext *s)
 
     s->split_coding_unit_flag = av_mallocz(pic_size * sizeof(uint8_t));
     s->cu.skip_flag = av_mallocz(pic_size * sizeof(uint8_t));
-    s->pu.prev_intra_luma_pred_flag = av_mallocz(pic_size * sizeof(uint8_t));
-    s->pu.mpm_idx = av_mallocz(pic_size * sizeof(int));
-    s->pu.rem_intra_luma_pred_mode = av_mallocz(pic_size * sizeof(uint8_t));
     s->pu.intra_chroma_pred_mode = av_mallocz(pic_size * sizeof(int));
 
+    s->pu.pu_vert = av_mallocz(pic_height_in_min_pu * sizeof(int));
+    s->pu.ipm_vert = av_malloc(pic_height_in_min_pu * sizeof(enum IntraPredMode));
+    s->pu.pu_horiz = av_mallocz(pic_width_in_min_pu * sizeof(int));
+    s->pu.ipm_horiz = av_malloc(pic_width_in_min_pu * sizeof(enum IntraPredMode));
+
     if (s->split_coding_unit_flag == NULL || s->cu.skip_flag == NULL ||
-        s->pu.prev_intra_luma_pred_flag == NULL || s->pu.mpm_idx == NULL ||
-        s->pu.rem_intra_luma_pred_mode == NULL || s->pu.intra_chroma_pred_mode == NULL)
+        s->pu.intra_chroma_pred_mode == NULL || s->pu.pu_vert == NULL ||
+        s->pu.ipm_vert == NULL || s->pu.pu_horiz == NULL || s->pu.ipm_horiz == NULL)
         return -1;
 
     for (int i = 0; i < MAX_TRANSFORM_DEPTH; i++) {
@@ -78,10 +83,12 @@ static void pic_arrays_free(HEVCContext *s)
 
     av_freep(&s->split_coding_unit_flag);
     av_freep(&s->cu.skip_flag);
-    av_freep(&s->pu.prev_intra_luma_pred_flag);
-    av_freep(&s->pu.mpm_idx);
-    av_freep(&s->pu.rem_intra_luma_pred_mode);
     av_freep(&s->pu.intra_chroma_pred_mode);
+
+    av_freep(&s->pu.pu_vert);
+    av_freep(&s->pu.ipm_vert);
+    av_freep(&s->pu.pu_horiz);
+    av_freep(&s->pu.ipm_horiz);
 
     for (int i = 0; i < MAX_TRANSFORM_DEPTH; i++) {
         av_freep(&s->tt.split_transform_flag[i]);
@@ -537,6 +544,96 @@ static void pcm_sample(HEVCContext *s, int x0, int y0, int log2_cb_size)
     s->num_pcm_block--;
 }
 
+static int find_pu(int *pu_band, int current_pu, int position)
+{
+    while (pu_band[current_pu] < position) {
+        if (pu_band[current_pu] == 0) {
+            pu_band[current_pu] = position;
+            break;
+        }
+        current_pu++;
+    }
+
+    while (current_pu != 0 && pu_band[current_pu - 1] >= position)
+        current_pu--;
+    return current_pu;
+}
+
+/**
+ * 8.4.1
+ */
+static int luma_intra_pred_mode(HEVCContext *s, int x0, int y0,
+                                uint8_t prev_intra_luma_pred_flag)
+{
+    //TODO: check if we are at a slice/tile boundary, etc.
+    int available_left = (x0 != 0);
+    int available_up = (y0 != 0);
+    int cand_left;
+    int cand_up;
+    int candidate[3];
+    enum IntraPredMode intra_pred_mode;
+
+    s->pu.current_pu_vert = find_pu(s->pu.pu_vert, s->pu.current_pu_vert, y0);
+    s->pu.current_pu_horiz = find_pu(s->pu.pu_horiz, s->pu.current_pu_horiz, x0);
+
+    if (available_left) {
+        cand_left = s->pu.ipm_vert[s->pu.current_pu_vert];
+    } else {
+        cand_left = INTRA_DC;
+    }
+    if (available_up) {
+        cand_up = s->pu.ipm_horiz[s->pu.current_pu_horiz];
+    } else {
+        cand_up = INTRA_DC;
+    }
+
+    if (cand_left == cand_up) {
+        if (cand_left < 2) {
+            candidate[0] = INTRA_PLANAR;
+            candidate[1] = INTRA_DC;
+            candidate[2] = INTRA_ANGULAR_26;
+        } else {
+            candidate[0] = cand_left;
+            candidate[1] = 2 + ((cand_left - 2 - 1 + 32) % 32);
+            candidate[1] = 2 + ((cand_left - 2 + 1 + 32) % 32);
+        }
+    } else {
+        candidate[0] = cand_left;
+        candidate[1] = cand_up;
+        if (candidate[0] != INTRA_PLANAR && candidate[1] != INTRA_PLANAR) {
+            candidate[2] = INTRA_PLANAR;
+        } else if (candidate[0] != INTRA_DC && candidate[1] != INTRA_DC) {
+            candidate[2] = INTRA_DC;
+        } else {
+            candidate[2] = INTRA_ANGULAR_26;
+        }
+    }
+
+    if (prev_intra_luma_pred_flag) {
+        intra_pred_mode = candidate[s->pu.mpm_idx];
+    } else {
+        if (candidate[0] > candidate[1])
+            FFSWAP(enum IntraPredMode, candidate[0], candidate[1]);
+        if (candidate[0] > candidate[2])
+            FFSWAP(enum IntraPredMode, candidate[0], candidate[2]);
+        if (candidate[1] > candidate[2])
+            FFSWAP(enum IntraPredMode, candidate[1], candidate[2]);
+
+        intra_pred_mode = s->pu.rem_intra_luma_pred_mode;
+        for (int i = 0; i < 3; i++) {
+            if (candidate[i] > intra_pred_mode)
+                intra_pred_mode++;
+        }
+    }
+
+    s->pu.ipm_horiz[s->pu.current_pu_horiz] =
+        s->pu.ipm_vert[s->pu.current_pu_vert] = intra_pred_mode;
+
+    av_log(s->avctx, AV_LOG_DEBUG, "intra_pred_mode: %d\n",
+           intra_pred_mode);
+    return intra_pred_mode;
+}
+
 /**
  * 7.3.7
  */
@@ -562,36 +659,58 @@ static void prediction_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
             align_get_bits(&s->gb);
             pcm_sample(s, x0, y0, log2_cb_size);
         } else {
-            //TODO: based on JCTVC-I0302 which doesn't seem to handle all cases
-            //to be checked again once it's part of the spec
+            uint8_t prev_intra_luma_pred_flag[4];
             int d0 = 1 << log2_cb_size;
+            int d1 = d0 >> 1;
             if (!(x0 % d0) && !(y0 % d0)) {
-                int d1 = s->cu.part_mode == PART_2Nx2N ? d0 : (d0 >> 1);
-                for (int i = 0; i < d0; i += d1)
-                    for (int j = 0; j < d0; j += d1)
-                        SAMPLE(s->pu.prev_intra_luma_pred_flag, x0 + j, y0 + i) =
+                int part = s->cu.part_mode == PART_2Nx2N ? 1 : 2;
+                for (int i = 0; i < part; i++)
+                    for (int j = 0; j < part; j++)
+                        prev_intra_luma_pred_flag[2*i+j] =
                             ff_hevc_cabac_decode(s, PREV_INTRA_LUMA_PRED_FLAG);
 
-                for (int i = 0; i < d0; i += d1) {
-                    for (int j = 0; j < d0; j += d1) {
-                        if (SAMPLE(s->pu.prev_intra_luma_pred_flag, x0 + j, y0 + i)) {
-                            SAMPLE(s->pu.mpm_idx, x0 + j, y0 + i) =
+                for (int i = 0; i < part; i++) {
+                    for (int j = 0; j < part; j++) {
+                        if (prev_intra_luma_pred_flag[2*i+j]) {
+                            s->pu.mpm_idx =
                                 ff_hevc_cabac_decode(s, MPM_IDX);
                         } else {
-                            SAMPLE(s->pu.rem_intra_luma_pred_mode, x0 + j, y0 + i) =
+                            s->pu.rem_intra_luma_pred_mode =
                                 ff_hevc_cabac_decode(s, REM_INTRA_LUMA_PRED_MODE);
                         }
+                        s->pu.intra_pred_mode[2*i+j] =
+                            luma_intra_pred_mode(s, x0 + d1*j, y0 + d1*i,
+                                                 prev_intra_luma_pred_flag[2*i+j]);
                     }
                 }
             }
-            if (s->cu.part_mode == PART_2Nx2N) {
-                SAMPLE(s->pu.intra_chroma_pred_mode, x0, y0) =
+            if (s->cu.part_mode == PART_2Nx2N || ((x0 % d0) && (y0 % d0))) {
+                int intra_chroma_pred_mode =
                     ff_hevc_cabac_decode(s, INTRA_CHROMA_PRED_MODE);
-                av_log(s->avctx, AV_LOG_ERROR, "intra_chroma: %d\n",
-                       SAMPLE(s->pu.intra_chroma_pred_mode, x0, y0));
-            } else if ((x0 % d0) && (y0 % d0)) {
-                SAMPLE(s->pu.intra_chroma_pred_mode, x0 - (d0 >> 1), y0 - (d0 >> 1)) =
-                    ff_hevc_cabac_decode(s, INTRA_CHROMA_PRED_MODE);
+                switch (intra_chroma_pred_mode) {
+                case 0:
+                    s->pu.intra_pred_mode_c = (s->pu.intra_pred_mode[0] == 0) ? 34 : 0;
+                    break;
+                case 1:
+                    s->pu.intra_pred_mode_c = (s->pu.intra_pred_mode[0] == 26) ? 34 : 26;
+                    break;
+                case 2:
+                    s->pu.intra_pred_mode_c = (s->pu.intra_pred_mode[0] == 10) ? 34 : 10;
+                    break;
+                case 3:
+                    s->pu.intra_pred_mode_c = (s->pu.intra_pred_mode[0] == 1) ? 34 : 1;
+                    break;
+                case 4:
+                    if (s->sps->chroma_pred_from_luma_enabled_flag == 1) {
+                        s->pu.intra_pred_mode_c = INTRA_FROM_LUMA;
+                        break;
+                    }
+                case 5:
+                    s->pu.intra_pred_mode_c = s->pu.intra_pred_mode[0];
+                    break;
+                }
+                av_log(s->avctx, AV_LOG_DEBUG, "intra_pred_mode_c: %d\n",
+                       s->pu.intra_pred_mode_c);
             }
         }
     } else {

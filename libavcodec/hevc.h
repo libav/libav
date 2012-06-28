@@ -380,14 +380,62 @@ typedef struct CodingUnit {
     uint8_t max_trafo_depth; ///< MaxTrafoDepth
 } CodingUnit;
 
+enum IntraPredMode {
+    INTRA_PLANAR = 0,
+    INTRA_DC,
+    INTRA_ANGULAR_2,
+    INTRA_ANGULAR_3,
+    INTRA_ANGULAR_4,
+    INTRA_ANGULAR_5,
+    INTRA_ANGULAR_6,
+    INTRA_ANGULAR_7,
+    INTRA_ANGULAR_8,
+    INTRA_ANGULAR_9,
+    INTRA_ANGULAR_10,
+    INTRA_ANGULAR_11,
+    INTRA_ANGULAR_12,
+    INTRA_ANGULAR_13,
+    INTRA_ANGULAR_14,
+    INTRA_ANGULAR_15,
+    INTRA_ANGULAR_16,
+    INTRA_ANGULAR_17,
+    INTRA_ANGULAR_18,
+    INTRA_ANGULAR_19,
+    INTRA_ANGULAR_20,
+    INTRA_ANGULAR_21,
+    INTRA_ANGULAR_22,
+    INTRA_ANGULAR_23,
+    INTRA_ANGULAR_24,
+    INTRA_ANGULAR_25,
+    INTRA_ANGULAR_26,
+    INTRA_ANGULAR_27,
+    INTRA_ANGULAR_28,
+    INTRA_ANGULAR_29,
+    INTRA_ANGULAR_30,
+    INTRA_ANGULAR_31,
+    INTRA_ANGULAR_32,
+    INTRA_ANGULAR_33,
+    INTRA_ANGULAR_34,
+    INTRA_FROM_LUMA
+};
+
 typedef struct PredictionUnit {
     uint8_t pcm_flag;
     uint8_t merge_flag;
 
-    uint8_t *prev_intra_luma_pred_flag;
-    int *mpm_idx;
-    uint8_t *rem_intra_luma_pred_mode;
+    int mpm_idx;
+    int rem_intra_luma_pred_mode;
     int *intra_chroma_pred_mode;
+
+    enum IntraPredMode intra_pred_mode[4];
+    int current_pu_vert;
+    int *pu_vert;
+    enum IntraPredMode *ipm_vert;
+    int current_pu_horiz;
+    int *pu_horiz;
+    enum IntraPredMode *ipm_horiz;
+
+    enum IntraPredMode intra_pred_mode_c;
 } PredictionUnit;
 
 typedef struct TransformTree {
