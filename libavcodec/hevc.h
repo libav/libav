@@ -176,6 +176,8 @@ typedef struct {
     int *ctb_addr_ts_to_rs; ///< CtbAddrTSToRS
     int *tile_id; ///< TileId
     int *min_cb_addr_zs; ///< MinCbAddrZS
+
+    int log2_min_pu_size;
 } SPS;
 
 typedef struct {
@@ -325,6 +327,8 @@ enum SyntaxElement {
 };
 
 typedef struct HEVCCabacContext {
+    int init_type; ///< initType
+
     uint16_t range; ///< codIRange
     uint16_t offset; ///< codIOffset
 
@@ -370,6 +374,7 @@ typedef struct CodingTree {
 } CodingTree;
 
 typedef struct CodingUnit {
+    uint8_t cu_transquant_bypass_flag;
     uint8_t *skip_flag;
     enum PredMode pred_mode; ///< PredMode
     enum PartMode part_mode; ///< PartMode
@@ -419,6 +424,11 @@ enum IntraPredMode {
     INTRA_FROM_LUMA
 };
 
+struct PUContent {
+    enum IntraPredMode intra_pred_mode;
+    int ct_depth;
+};
+
 typedef struct PredictionUnit {
     uint8_t pcm_flag;
     uint8_t merge_flag;
@@ -427,14 +437,10 @@ typedef struct PredictionUnit {
     int rem_intra_luma_pred_mode;
 
     enum IntraPredMode intra_pred_mode[4];
-    int current_pu_vert;
-    int *pu_vert;
-    enum IntraPredMode *ipm_vert;
-    int current_pu_horiz;
-    int *pu_horiz;
-    enum IntraPredMode *ipm_horiz;
-
     enum IntraPredMode intra_pred_mode_c;
+
+    struct PUContent *pu_vert;
+    struct PUContent *pu_horiz;
 } PredictionUnit;
 
 typedef struct TransformTree {
@@ -454,9 +460,12 @@ typedef struct TransformUnit {
 
     // Inferred parameters;
     uint8_t is_cu_qp_delta_coded;
-    int intra_pred_mode;
-    int intra_pred_mode_c;
 } TransformUnit;
+
+typedef struct ResidualCoding {
+    //FIXME: check size
+    uint8_t significant_coeff_group_flag[64][64];
+} ResidualCoding;
 
 typedef struct {
     AVCodecContext *avctx;
@@ -498,7 +507,14 @@ typedef struct {
     PredictionUnit pu;
     TransformTree tt;
     TransformUnit tu;
+    ResidualCoding rc;
 } HEVCContext;
+
+enum ScanType {
+    SCAN_DIAG = 0,
+    SCAN_HORIZ,
+    SCAN_VERT
+};
 
 int ff_hevc_decode_short_term_rps(HEVCContext *s, int idx,
                                   ShortTermRPS **prps);
@@ -509,9 +525,32 @@ int ff_hevc_decode_nal_sei(HEVCContext *s);
 
 void ff_hevc_cabac_init(HEVCContext *s);
 int ff_hevc_cabac_decode(HEVCContext *s, enum SyntaxElement elem);
+int ff_hevc_sao_merge_left_flag_decode(HEVCContext *s, int c_idx);
+int ff_hevc_split_coding_unit_flag_decode(HEVCContext *s, int ct_depth, int x0, int y0);
+int ff_hevc_part_mode_decode(HEVCContext *s, int log2_cb_size);
 int ff_hevc_split_transform_flag_decode(HEVCContext *s, int trafo_depth);
 int ff_hevc_cbf_cb_cr_decode(HEVCContext *s, int trafo_depth);
 int ff_hevc_cbf_luma_decode(HEVCContext *s, int trafo_depth, int log2_trafo_size,
                             int log2_max_trafo_size);
+int ff_hevc_transform_skip_flag_decode(HEVCContext *s, int c_idx);
+int ff_hevc_last_significant_coeff_prefix_decode(HEVCContext *s, int c_idx,
+                                                 int log2_size, int is_x);
+int ff_hevc_last_significant_coeff_suffix_decode(HEVCContext *s,
+                                                 int last_significant_coeff_prefix,
+                                                 int is_x);
+int ff_hevc_significant_coeff_group_flag_decode(HEVCContext *s, int c_idx, int x_cg,
+                                                int y_cg, int log2_trafo_width,
+                                                int log2_trafo_height);
+int ff_hevc_significant_coeff_flag_decode(HEVCContext *s, int c_idx, int x_c, int y_c,
+                                          int log2_trafo_width, int log2_trafo_height);
+int ff_hevc_coeff_abs_level_greater1_flag_decode(HEVCContext *s, int c_idx,
+                                                 int i, int n,
+                                                 int first_greater1_coeff_idx,
+                                                 int first_subset,
+                                                 int greater1_flag);
+int ff_hevc_coeff_abs_level_greater2_flag_decode(HEVCContext *s, int c_idx,
+                                                 int i, int n);
+int ff_hevc_coeff_abs_level_remaining(HEVCContext *s, int n, int base_level);
+int ff_hevc_coeff_sign_flag(HEVCContext *s);
 
 #endif // AVCODEC_HEVC_H

@@ -215,6 +215,7 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
                                   (1 << sps->Log2CtbSize));
     sps->pic_width_in_min_cbs = sps->pic_width_in_luma_samples / (1 << sps->log2_min_coding_block_size);
     sps->pic_height_in_min_cbs = sps->pic_height_in_luma_samples / (1 << sps->log2_min_coding_block_size);
+    sps->log2_min_pu_size = sps->log2_min_coding_block_size - 1;
 
 
     sps->column_width = av_malloc(sps->num_tile_columns * sizeof(int));
