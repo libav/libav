@@ -72,8 +72,8 @@ static const int8_t binarization[][2] =
     { FL_BIN, 1 }, //sao_merge_up_flag
     { U_BIN }, //sao_type_idx
     { FL_BIN, 5 }, //sao_band_position
+    { TU_BIN, -1 }, //sao_offset_abs
     { FL_BIN, 1 }, //sao_offset_sign
-    { TU_BIN, -1 }, //sao_offset
     { FL_BIN, 1 }, //alf_cu_flag
     { FL_BIN, 1 }, //end_of_slice_flag
     { FL_BIN, 1 }, //split_coding_unit_flag
@@ -126,8 +126,8 @@ static const uint8_t max_bin_idx_ctxs[][3] =
     { 0, 0, 0 }, //sao_merge_up_flag
     { 1, 1, 1 }, //sao_type_idx
     { -1, -1, -1 }, //sao_band_position
+    { 1, 1, 1 }, //sao_offset_abs
     { -1, -1, -1 }, //sao_offset_sign
-    { 1, 1, 1 }, //sao_offset
     { 0, 0, 0 }, //alf_cu_flag
     { 0, 0, 0 }, //end_of_slice_flag
     { 0, 0, 0 }, //split_coding_unit_flag
@@ -179,8 +179,8 @@ static const int8_t ctx_idx_offsets[][3] =
     { 0, 1, 2 }, //sao_merge_up_flag
     { 0, 2, 4 }, //sao_type_idx
     { -1, -1, -1 }, //sao_band_position
+    { 0, 2, 4 }, //sao_offset_abs
     { -1, -1, -1 }, //sao_offset_sign
-    { 0, 2, 4 }, //sao_offset
     { 0, 1, 2 }, //alf_cu_flag
     { 0, 0, 0 }, //end_of_slice_flag
     { 0, 3, 6 }, //split_coding_unit_flag
@@ -232,8 +232,8 @@ static const int8_t ctx_idx_incs[][5] =
     { 0 }, //sao_merge_up_flag
     { 0, 1, 1, 1, 1 }, //sao_type_idx
     { }, //sao_band_position
+    { 0, 1, 1, 1, 1 }, //sao_offset_abs
     { }, //sao_offset_sign
-    { 0, 1, 1, 1, 1 }, //sao_offset
     { 0 }, //alf_cu_flag
     { }, //end_of_slice_flag
     { -1 }, //split_coding_unit_flag
@@ -285,8 +285,8 @@ static const int elem_offset[] =
     9, //sao_merge_up_flag
     12, //sao_type_idx
     -1, //sao_band_position
+    18, //sao_offset_abs
     -1, //sao_offset_sign
-    18, //sao_offset
     24, //alf_cu_flag
     -1, //end_of_slice_flag
     27, //split_coding_unit_flag
@@ -343,7 +343,7 @@ static const uint8_t init_values[CTX_IDX_COUNT] =
     153, 153, 153, 153, 153, 153, 153, 153, 153, //sao_merge_left_flag
     175, 153, 153, //sao_merge_up_flag
     160, 140, 185, 140, 200, 140, //sao_type_idx
-    143, 140, 185, 140, 200, 140, //sao_offset
+    143, 140, 185, 140, 200, 140, //sao_offset_abs
     153, 153, 153, //alf_cu_flag
     139, 141, 157, 107, 139, 126, 107, 139, 126, //split_coding_unit_flag
     109, 102, 102, //cu_transquant_bypass_flag
@@ -688,6 +688,33 @@ int ff_hevc_sao_merge_left_flag_decode(HEVCContext *s, int c_idx)
     return fl_binarization(s, 1);
 }
 
+int ff_hevc_sao_offset_abs_decode(HEVCContext *s, int bit_depth)
+{
+    HEVCCabacContext *cc = &s->cc;
+    const int8_t ctx_idx_inc[5] = { 0, 1, 1, 1, 1 };
+
+    cc->elem = SAO_OFFSET_ABS;
+    cc->state = states + elem_offset[cc->elem];
+
+    cc->max_bin_idx_ctx = 1;
+    cc->ctx_idx_offset = 2 * cc->init_type;
+    cc->ctx_idx_inc = ctx_idx_inc;
+
+    return tu_binarization(s, (1 << (FFMIN(bit_depth, 10) - 5)) - 1);
+}
+
+int ff_hevc_sao_offset_sign_decode(HEVCContext *s)
+{
+    HEVCCabacContext *cc = &s->cc;
+
+    cc->elem = SAO_OFFSET_SIGN;
+    cc->state = states + elem_offset[cc->elem];
+
+    cc->ctx_idx_offset = -1;
+
+    return fl_binarization(s, 1);
+}
+
 int ff_hevc_split_coding_unit_flag_decode(HEVCContext *s, int ct_depth, int x0, int y0)
 {
     HEVCCabacContext *cc = &s->cc;
@@ -729,7 +756,7 @@ int ff_hevc_part_mode_decode(HEVCContext *s, int log2_cb_size)
     if (decode_bin(s, i++) == 1) // 1
         return PART_2Nx2N;
     if (log2_cb_size == s->sps->log2_min_coding_block_size) {
-        if (s->cu.part_mode == MODE_INTRA) // 0
+        if (s->cu.pred_mode == MODE_INTRA) // 0
             return PART_NxN;
         if (decode_bin(s, i++) == 1) // 01
             return PART_2NxN;

@@ -37,16 +37,20 @@
  */
 typedef enum {
     NAL_SLICE = 1,
+    NAL_TFD_SLICE = 2,
     NAL_TLA_SLICE = 3,
     NAL_CRA_SLICE = 4,
-    NAL_IDR_SLICE = 5,
-    NAL_SEI = 6,
-    NAL_SPS = 7,
-    NAL_PPS = 8,
-    NAL_AUD = 9,
-    NAL_FILLER_DATA = 12,
-    NAL_APS = 14,
-    NAL_UNSPECIFIED = 24
+    NAL_CRA_SLICE_NO_TFD = 5,
+    NAL_BLA_SLICE = 6,
+    NAL_BLA_SLICE_NO_TFD = 7,
+    NAL_IDR_SLICE = 8,
+    NAL_VPS = 25,
+    NAL_SPS = 26,
+    NAL_PPS = 27,
+    NAL_APS = 28,
+    NAL_AUD = 29,
+    NAL_FILLER_DATA = 30,
+    NAL_SEI = 31,
 } NALUnitType;
 
 typedef struct {
@@ -59,6 +63,7 @@ typedef struct {
  * 7.4.2.1
  */
 #define MAX_TEMPORAL_LAYERS 8
+#define MAX_VPS_COUNT 16
 #define MAX_SPS_COUNT 32
 #define MAX_PPS_COUNT 256
 #define MAX_SHORT_TERM_RPS_COUNT 64
@@ -71,10 +76,22 @@ typedef struct {
  */
 #define MAX_APS_COUNT 256
 
+struct VPS {
+    int vps_max_temporal_layers; ///< vps_max_temporal_layers_minus1 + 1
+    int vps_max_layers; ///< vps_max_layers_minus1 + 1
+
+    uint8_t vps_temporal_id_nesting_flag;
+    int vps_max_dec_pic_buffering[MAX_TEMPORAL_LAYERS];
+    int vps_num_reorder_pics[MAX_TEMPORAL_LAYERS];
+    int vps_max_latency_increase[MAX_TEMPORAL_LAYERS];
+};
+
 typedef struct {
+    uint8_t profile_space;
     uint8_t profile_idc;
     uint8_t level_idc;
 
+    int vps_id;
     int chroma_format_idc;
     uint8_t separate_colour_plane_flag;
 
@@ -105,7 +122,6 @@ typedef struct {
         uint8_t loop_filter_disable_flag;
     } pcm;
 
-    uint8_t qpprime_y_zero_transquant_bypass_flag;
     int log2_max_poc_lsb; ///< log2_max_pic_order_cnt_lsb_minus4 + 4
 
     struct {
@@ -136,29 +152,19 @@ typedef struct {
     uint8_t asymmetric_motion_partitions_enabled_flag;
     uint8_t nsrqt_enabled_flag;
     uint8_t sample_adaptive_offset_enabled_flag;
-
     uint8_t adaptive_loop_filter_enabled_flag;
-    uint8_t alf_coef_in_slice_flag;
 
     uint8_t temporal_id_nesting_flag;
-
-    uint8_t inter_4x4_enabled_flag;
 
     int num_short_term_ref_pic_sets;
     ShortTermRPS *short_term_rps_list[MAX_SHORT_TERM_RPS_COUNT];
 
     uint8_t long_term_ref_pics_present_flag;
+    uint8_t sps_temporal_mvp_enabled_flag;
 
 #if REFERENCE_ENCODER_QUIRKS
     uint8_t amvp_mode_flag[4];
 #endif
-
-    uint8_t tiles_or_entropy_coding_sync_idc;
-    int num_tile_columns;
-    int num_tile_rows;
-    uint8_t uniform_spacing_flag;
-    uint8_t loop_filter_across_tiles_enabled_flag;
-
 
     // Inferred parameters
     int Log2CtbSize;
@@ -166,16 +172,6 @@ typedef struct {
     int PicHeightInCtbs;
     int pic_width_in_min_cbs;
     int pic_height_in_min_cbs;
-
-    int *column_width; ///< ColumnWidth
-    int *row_height; ///< RowHeight
-    int *col_bd; ///< ColBd
-    int *row_bd; ///< RowBd
-
-    int *ctb_addr_rs_to_ts; ///< CtbAddrRSToTS
-    int *ctb_addr_ts_to_rs; ///< CtbAddrTSToRS
-    int *tile_id; ///< TileId
-    int *min_cb_addr_zs; ///< MinCbAddrZS
 
     int log2_min_pu_size;
 } SPS;
@@ -192,32 +188,27 @@ typedef struct {
     int pic_init_qp_minus26;
 
     uint8_t constrained_intra_pred_flag;
-    uint8_t enable_temporal_mvp_flag;
     uint8_t slice_granularity;
     int diff_cu_qp_delta_depth;
     int cb_qp_offset;
     int cr_qp_offset;
     uint8_t weighted_pred_flag;
-    uint8_t weighted_bipred_idc;
+    uint8_t weighted_bipred_flag;
     uint8_t output_flag_present_flag;
+    uint8_t dependant_slices_enabled_flag;
+    uint8_t transquant_bypass_enable_flag;
 
-    struct {
-        uint8_t tile_info_present_flag;
+    uint8_t tiles_or_entropy_coding_sync_idc;
+    int num_tile_columns; ///< num_tile_columns_minus1 + 1
+    int num_tile_rows; ///< num_tile_rows_minus1 + 1
+    uint8_t uniform_spacing_flag;
+    uint8_t loop_filter_across_tiles_enabled_flag;
 
-        uint8_t tile_control_present_flag;
-        int num_tile_columns; ///< num_tile_columns_minus1 + 1
-        int num_tile_rows; ///< num_tile_rows_minus1 + 1
-        uint8_t uniform_spacing_flag;
-
-        int column_width[42];
-        int row_height[42];
-
-        uint8_t loop_filter_across_tiles_enabled_flag;
-    } tiles;
-
-    int num_substreams;
+    uint8_t cabac_independant_flag;
 
     uint8_t deblocking_filter_control_present_flag;
+
+    int pps_scaling_list_data_present_flag;
 
     int log2_parallel_merge_level; ///< log2_parallel_merge_level_minus2 + 2
 
@@ -226,12 +217,20 @@ typedef struct {
 
     // Inferred parameters
     int SliceGranularity;
+
+    int *column_width; ///< ColumnWidth
+    int *row_height; ///< RowHeight
+    int *col_bd; ///< ColBd
+    int *row_bd; ///< RowBd
+
+    int *ctb_addr_rs_to_ts; ///< CtbAddrRSToTS
+    int *ctb_addr_ts_to_rs; ///< CtbAddrTSToRS
+    int *tile_id; ///< TileId
+    int *min_cb_addr_zs; ///< MinCbAddrZS
 } PPS;
 
 typedef struct {
-    uint8_t aps_scaling_list_data_present_flag;
-    uint8_t aps_deblocking_filter_flag;
-    uint8_t alf_aps_filter_flag[3];
+    uint8_t aps_alf_flag[3];
 } APS;
 
 typedef enum {
@@ -246,16 +245,14 @@ typedef struct {
 
     SliceType slice_type;
 
-    uint8_t entropy_slice_flag;
+    uint8_t dependent_slice_flag;
     int pps_id; ///< pic_parameter_set_id
     uint8_t pic_output_flag;
     uint8_t colour_plane_id;
-    int idr_pic_id;
+    int rap_pic_id;
     uint8_t no_output_of_prior_pics_flag;
 
-    uint8_t slice_sample_adaptive_offset_flag;
-    uint8_t sao_cb_enable_flag;
-    uint8_t sao_cr_enable_flag;
+    uint8_t slice_sample_adaptive_offset_flag[3];
 
     int aps_id;
 
@@ -263,7 +260,7 @@ typedef struct {
     int slice_qp_delta;
     uint8_t disable_deblocking_filter_flag;
     int max_num_merge_cand; ///< 5 - 5_minus_max_num_merge_cand
-    uint8_t slice_adaptive_loop_filter_flag;
+    uint8_t slice_alf_flag[3];
 
     uint8_t slice_loop_filter_across_slices_enabled_flag;
 
@@ -282,8 +279,8 @@ enum SyntaxElement {
     SAO_MERGE_UP_FLAG,
     SAO_TYPE_IDX,
     SAO_BAND_POSITION,
+    SAO_OFFSET_ABS,
     SAO_OFFSET_SIGN,
-    SAO_OFFSET,
     ALF_CU_FLAG,
     END_OF_SLICE_FLAG,
     SPLIT_CODING_UNIT_FLAG,
@@ -478,10 +475,12 @@ typedef struct {
     NALUnitType nal_unit_type;
     int temporal_id;
 
+    struct VPS *vps_list[MAX_VPS_COUNT];
     SPS *sps_list[MAX_SPS_COUNT];
     PPS *pps_list[MAX_PPS_COUNT];
     APS *aps_list[MAX_APS_COUNT];
 
+    struct VPS *vps;
     SPS *sps;
     PPS *pps;
     APS *aps;
@@ -518,6 +517,7 @@ enum ScanType {
 
 int ff_hevc_decode_short_term_rps(HEVCContext *s, int idx,
                                   ShortTermRPS **prps);
+int ff_hevc_decode_nal_vps(HEVCContext *s);
 int ff_hevc_decode_nal_sps(HEVCContext *s);
 int ff_hevc_decode_nal_pps(HEVCContext *s);
 int ff_hevc_decode_nal_aps(HEVCContext *s);
@@ -526,6 +526,8 @@ int ff_hevc_decode_nal_sei(HEVCContext *s);
 void ff_hevc_cabac_init(HEVCContext *s);
 int ff_hevc_cabac_decode(HEVCContext *s, enum SyntaxElement elem);
 int ff_hevc_sao_merge_left_flag_decode(HEVCContext *s, int c_idx);
+int ff_hevc_sao_offset_abs_decode(HEVCContext *s, int bit_depth);
+int ff_hevc_sao_offset_sign_decode(HEVCContext *s);
 int ff_hevc_split_coding_unit_flag_decode(HEVCContext *s, int ct_depth, int x0, int y0);
 int ff_hevc_part_mode_decode(HEVCContext *s, int log2_cb_size);
 int ff_hevc_split_transform_flag_decode(HEVCContext *s, int trafo_depth);
