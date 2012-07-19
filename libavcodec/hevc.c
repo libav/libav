@@ -359,9 +359,10 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
     int trafo_height, trafo_width;
     int x_cg_last_sig, y_cg_last_sig;
 
-    int first_elem = 1;
-
     const uint8_t *scan_x, *scan_y;
+
+    av_log(s->avctx, AV_LOG_DEBUG, "scan_idx: %d, c_idx: %d\n",
+           scan_idx, c_idx);
 
     //TODO
     memset(s->rc.significant_coeff_group_flag, 0, 64*64);
@@ -384,6 +385,7 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
         ff_hevc_last_significant_coeff_prefix_decode(s, c_idx, log2_trafo_width, 1);
     last_significant_coeff_y =
         ff_hevc_last_significant_coeff_prefix_decode(s, c_idx, log2_trafo_height, 0);
+
 
     if (last_significant_coeff_x > 3) {
         int suffix =
@@ -421,8 +423,6 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
         y_cg_last_sig = last_significant_coeff_y >> 2;
     }
 
-    av_log(s->avctx, AV_LOG_DEBUG, "scan_idx: %d\n",
-           scan_idx);
     switch (scan_idx) {
     case SCAN_DIAG: {
         int last_x_c = last_significant_coeff_x % 4;
@@ -492,6 +492,8 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
         uint8_t coeff_abs_level_greater1_flag[16] = {0};
         uint8_t coeff_abs_level_greater2_flag[16] = {0};
         uint8_t coeff_sign_flag[16] = {0};
+
+        int first_elem;
 
         get_coord(scan_idx, scan_x, scan_y, trafo_width, trafo_height,
                   i << 4, 0, &x_cg, &y_cg);
@@ -584,6 +586,7 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
         num_sig_coeff = 0;
         sum_abs = 0;
         num_greater1 >>= 1;
+        first_elem = 1;
         for(int n = 15; n >= 0; n--) {
             int trans_coeff_level = 0;
             get_coord(scan_idx, scan_x, scan_y, trafo_width, trafo_height,
@@ -637,11 +640,11 @@ static void transform_unit(HEVCContext *s, int x0L, int  y0L, int x0C, int y0C,
         }
 
         if (s->cu.pred_mode == MODE_INTRA && log2_trafo_size < 4) {
-            if (s->pu.intra_pred_mode[0] >= 6 &&
-                s->pu.intra_pred_mode[0] <= 14) {
+            if (s->tu.cur_intra_pred_mode >= 6 &&
+                s->tu.cur_intra_pred_mode <= 14) {
                 scan_idx = SCAN_VERT;
-            } else if (s->pu.intra_pred_mode[0] >= 22 &&
-                       s->pu.intra_pred_mode[0] <= 30) {
+            } else if (s->tu.cur_intra_pred_mode >= 22 &&
+                       s->tu.cur_intra_pred_mode <= 30) {
                 scan_idx = SCAN_HORIZ;
             }
 
@@ -719,7 +722,14 @@ static void transform_tree(HEVCContext *s, int x0L, int y0L, int x0C, int y0C,
         SAMPLE(s->tt.cbf_cb[trafo_depth], x0C, y0C) =
             SAMPLE(s->tt.cbf_cb[trafo_depth - 1], xBase, yBase);
         SAMPLE(s->tt.cbf_cr[trafo_depth], x0C, y0C) =
-            SAMPLE(s->tt.cbf_cb[trafo_depth - 1], xBase, yBase);
+            SAMPLE(s->tt.cbf_cr[trafo_depth - 1], xBase, yBase);
+    }
+
+    if (s->cu.intra_split_flag) {
+        if (trafo_depth == 1)
+            s->tu.cur_intra_pred_mode = s->pu.intra_pred_mode[blk_idx];
+    } else {
+        s->tu.cur_intra_pred_mode = s->pu.intra_pred_mode[0];
     }
 
     s->tt.cbf_luma = 1;
@@ -746,16 +756,16 @@ static void transform_tree(HEVCContext *s, int x0L, int y0L, int x0C, int y0C,
 
     if (trafo_depth == 0 || log2_trafo_size > 2) {
         if (trafo_depth == 0 || SAMPLE(s->tt.cbf_cb[trafo_depth - 1], xBase, yBase)) {
-            av_log(s->avctx, AV_LOG_DEBUG,
-                   "cbf_cb\n");
             SAMPLE(s->tt.cbf_cb[trafo_depth], x0C, y0C) =
                 ff_hevc_cbf_cb_cr_decode(s, trafo_depth);
+            av_log(s->avctx, AV_LOG_DEBUG,
+                   "cbf_cb: %d\n", SAMPLE(s->tt.cbf_cb[trafo_depth], x0C, y0C));
         }
         if (trafo_depth == 0 || SAMPLE(s->tt.cbf_cr[trafo_depth - 1], xBase, yBase)) {
-            av_log(s->avctx, AV_LOG_DEBUG,
-                   "cbf_cr\n");
             SAMPLE(s->tt.cbf_cr[trafo_depth], x0C, y0C) =
                 ff_hevc_cbf_cb_cr_decode(s, trafo_depth);
+            av_log(s->avctx, AV_LOG_DEBUG,
+                   "cbf_cr: %d\n", SAMPLE(s->tt.cbf_cr[trafo_depth], x0C, y0C));
         }
     }
 
@@ -1149,34 +1159,21 @@ static int coding_tree(HEVCContext *s, int x0, int y0, int log2_cb_size, int cb_
         int y1_pu = y1 >> s->sps->log2_min_pu_size;
         int y2_pu = (y1 + cb_size) >> s->sps->log2_min_pu_size;
 
-        if (min_cb_addr_zs(s, x1 >> s->sps->log2_min_coding_block_size,
-                           y0 >> s->sps->log2_min_coding_block_size) >
-            s->sh.slice_cb_addr_zs) {
-            more_data = coding_tree(s, x0, y0, log2_cb_size - 1, cb_depth + 1);
-        } else {
-            clear_pu(s->pu.pu_vert, y0_pu, y1_pu);
-            clear_pu(s->pu.pu_horiz, x0_pu, x1_pu);
-        }
-        if(more_data && min_cb_addr_zs(s, x0 >> s->sps->log2_min_coding_block_size,
-                                       y1 >> s->sps->log2_min_coding_block_size) >
-            s->sh.slice_cb_addr_zs &&
-           x1 < s->sps->pic_width_in_luma_samples) {
+        more_data = coding_tree(s, x0, y0, log2_cb_size - 1, cb_depth + 1);
+
+        if(more_data && x1 < s->sps->pic_width_in_luma_samples) {
             more_data = coding_tree(s, x1, y0, log2_cb_size - 1, cb_depth + 1);
         } else {
             clear_pu(s->pu.pu_vert, y0_pu, y1_pu);
             clear_pu(s->pu.pu_horiz, x1_pu, x2_pu);
         }
-        if (more_data && min_cb_addr_zs(s, x1 >> s->sps->log2_min_coding_block_size,
-                                        y1 >> s->sps->log2_min_coding_block_size) >
-            s->sh.slice_cb_addr_zs &&
-            y1 < s->sps->pic_height_in_luma_samples) {
+        if (more_data && y1 < s->sps->pic_height_in_luma_samples) {
             more_data = coding_tree(s, x0, y1, log2_cb_size - 1, cb_depth + 1);
         } else {
             clear_pu(s->pu.pu_vert, y1_pu, y2_pu);
             clear_pu(s->pu.pu_horiz, x0_pu, x1_pu);
         }
-        if(more_data &&
-           x1 < s->sps->pic_width_in_luma_samples &&
+        if(more_data && x1 < s->sps->pic_width_in_luma_samples &&
            y1 < s->sps->pic_height_in_luma_samples) {
             return coding_tree(s, x1, y1, log2_cb_size - 1, cb_depth + 1);
         } else {
@@ -1241,7 +1238,8 @@ static int decode_nal_slice_data(HEVCContext *s)
         }
         for (int i = 0; i < 3; i++) {
             if (s->sh.slice_alf_flag[i]) {
-                //s->ctb_alf_flag = ...;
+                av_log(s->avctx, AV_LOG_ERROR, "TODO: slice_alf_flag\n");
+                return -1;
             }
         }
 

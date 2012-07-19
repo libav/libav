@@ -457,6 +457,7 @@ typedef struct TransformUnit {
 
     // Inferred parameters;
     uint8_t is_cu_qp_delta_coded;
+    int cur_intra_pred_mode;
 } TransformUnit;
 
 typedef struct ResidualCoding {

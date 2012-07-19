@@ -442,7 +442,8 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
             int tb_x = x >> sps->log2_diff_max_min_coding_block_size;
             int tb_y = y >> sps->log2_diff_max_min_coding_block_size;
             int ctb_addr_rs = sps->PicWidthInCtbs * tb_y + tb_x;
-            int val = pps->ctb_addr_rs_to_ts[ctb_addr_rs] << sps->log2_diff_max_min_coding_block_size;
+            int val = pps->ctb_addr_rs_to_ts[ctb_addr_rs] <<
+                      (sps->log2_diff_max_min_coding_block_size * 2);
             for (int i = 0; i < sps->log2_diff_max_min_coding_block_size; i++) {
                 int m = 1 << i;
                 val += (m & x ? m*m : 0) + (m & y ? 2*m*m : 0);

@@ -808,7 +808,7 @@ int ff_hevc_cbf_cb_cr_decode(HEVCContext *s, int trafo_depth)
     cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 0;
-    cc->ctx_idx_offset = 3 * cc->init_type;
+    cc->ctx_idx_offset = 4 * cc->init_type;
     cc->ctx_idx_inc = ctx_idx_inc;
 
     return fl_binarization(s, 1);
@@ -851,7 +851,7 @@ int ff_hevc_last_significant_coeff_prefix_decode(HEVCContext *s, int c_idx,
                                                  int log2_size, int is_x)
 {
     HEVCCabacContext *cc = &s->cc;
-    int8_t ctx_idx_inc[8];
+    int8_t ctx_idx_inc[9];
     int ctx_offset, ctx_shift;
 
     cc->elem = is_x ? LAST_SIGNIFICANT_COEFF_X_PREFIX
@@ -865,7 +865,7 @@ int ff_hevc_last_significant_coeff_prefix_decode(HEVCContext *s, int c_idx,
         ctx_offset = 15;
         ctx_shift = log2_size - 2;
     }
-    for (int i = 0; i < 8; i++)
+    for (int i = 0; i < 9; i++)
         ctx_idx_inc[i] = (i >> ctx_shift) + ctx_offset;
 
     cc->max_bin_idx_ctx = 8;
@@ -880,6 +880,10 @@ int ff_hevc_last_significant_coeff_suffix_decode(HEVCContext *s,
                                                  int is_x)
 {
     HEVCCabacContext *cc = &s->cc;
+    int length = (last_significant_coeff_prefix >> 1) - 1;
+#ifdef REFERENCE_ENCODER_QUIRKS
+    int value = 0;
+#endif
 
     cc->elem = is_x ? LAST_SIGNIFICANT_COEFF_X_SUFFIX
                : LAST_SIGNIFICANT_COEFF_Y_SUFFIX;
@@ -887,7 +891,13 @@ int ff_hevc_last_significant_coeff_suffix_decode(HEVCContext *s,
 
     cc->ctx_idx_offset = -1;
 
-    return fl_binarization(s, (last_significant_coeff_prefix >> 1) - 1);
+#ifdef REFERENCE_ENCODER_QUIRKS
+    for (int i = 0; i < length; i++)
+        value = (value << 1) | decode_bin(s, i);
+    return value;
+#else
+    return fl_binarization(s, length);
+#endif
 }
 
 int ff_hevc_significant_coeff_group_flag_decode(HEVCContext *s, int c_idx, int x_cg,
@@ -956,7 +966,7 @@ int ff_hevc_significant_coeff_flag_decode(HEVCContext *s, int c_idx, int x_c, in
             sig_ctx = (x_c - (x_cg << 2)) <= 1 ? 1 : 0;
             break;
         default:
-            sig_ctx = (x_c - (x_cg << 2)) + (y_c - (y_cg << 2)) <= 2 ? 2 : 1;
+            sig_ctx = (x_c - (x_cg << 2)) + (y_c - (y_cg << 2)) <= 4 ? 2 : 1;
         }
 
         if (c_idx == 0 && (x_cg > 0 || y_cg > 0)) {
