@@ -917,7 +917,7 @@ int ff_hevc_last_significant_coeff_suffix_decode(HEVCContext *s,
 
 int ff_hevc_significant_coeff_group_flag_decode(HEVCContext *s, int c_idx, int x_cg,
                                                 int y_cg, int log2_trafo_width,
-                                                int log2_trafo_height)
+                                                int log2_trafo_height, int scan_idx)
 {
     HEVCCabacContext *cc = &s->cc;
     int8_t ctx_idx_inc[1];
@@ -926,10 +926,20 @@ int ff_hevc_significant_coeff_group_flag_decode(HEVCContext *s, int c_idx, int x
     cc->elem = SIGNIFICANT_COEFF_GROUP_FLAG;
     cc->state = states + elem_offset[cc->elem];
 
-    if (x_cg < (1 << (log2_trafo_width - 2)) - 1)
-        ctx_cg += s->rc.significant_coeff_group_flag[x_cg + 1][y_cg];
-    if (y_cg < (1 << (log2_trafo_height - 2)) - 1)
-        ctx_cg += s->rc.significant_coeff_group_flag[x_cg][y_cg + 1];
+    if (log2_trafo_width == 3 && log2_trafo_height == 3 && scan_idx != SCAN_DIAG) {
+        if (scan_idx == SCAN_HORIZ) {
+            if (y_cg < 3)
+                ctx_cg = s->rc.significant_coeff_group_flag[x_cg][y_cg + 1];
+        } else { //SCAN_VERT
+            if (x_cg < 3)
+                ctx_cg = s->rc.significant_coeff_group_flag[x_cg + 1][y_cg];
+        }
+    } else {
+        if (x_cg < (1 << (log2_trafo_width - 2)) - 1)
+            ctx_cg += s->rc.significant_coeff_group_flag[x_cg + 1][y_cg];
+        if (y_cg < (1 << (log2_trafo_height - 2)) - 1)
+            ctx_cg += s->rc.significant_coeff_group_flag[x_cg][y_cg + 1];
+    }
 
     ctx_idx_inc[0] = FFMIN(ctx_cg, 1) + (c_idx ? 2 : 0);
 

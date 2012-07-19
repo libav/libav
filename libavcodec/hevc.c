@@ -412,11 +412,11 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
 
     if (log2_trafo_width == 3 && log2_trafo_height == 3 && scan_idx != SCAN_DIAG) {
         if (scan_idx == SCAN_HORIZ) {
-            x_cg_last_sig = last_significant_coeff_x >> 1;
-            y_cg_last_sig = 0;
-        } else { //SCAN_VERT
             x_cg_last_sig = 0;
             y_cg_last_sig = last_significant_coeff_y >> 1;
+        } else { //SCAN_VERT
+            x_cg_last_sig = last_significant_coeff_x >> 1;
+            y_cg_last_sig = 0;
         }
     } else {
         x_cg_last_sig = last_significant_coeff_x >> 2;
@@ -495,16 +495,27 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
 
         int first_elem;
 
-        get_coord(scan_idx, scan_x, scan_y, trafo_width, trafo_height,
-                  i << 4, 0, &x_cg, &y_cg);
-        x_cg >>= 2;
-        y_cg >>= 2;
+        if (log2_trafo_width == 3 && log2_trafo_height == 3 && scan_idx != SCAN_DIAG) {
+            if (scan_idx == SCAN_HORIZ) {
+                x_cg = 0;
+                y_cg = i;
+            } else { //SCAN_VERT
+                x_cg = i;
+                y_cg = 0;
+            }
+        } else {
+            get_coord(scan_idx, scan_x, scan_y, trafo_width, trafo_height,
+                      i << 4, 0, &x_cg, &y_cg);
+            x_cg >>= 2;
+            y_cg >>= 2;
+        }
 
         if ((i < num_last_subset) && (i > 0)) {
             s->rc.significant_coeff_group_flag[x_cg][y_cg] =
                 ff_hevc_significant_coeff_group_flag_decode(s, c_idx, x_cg, y_cg,
                                                             log2_trafo_width,
-                                                            log2_trafo_height);
+                                                            log2_trafo_height,
+                                                            scan_idx);
             implicit_non_zero_coeff = 1;
         } else {
             s->rc.significant_coeff_group_flag[x_cg][y_cg] =
