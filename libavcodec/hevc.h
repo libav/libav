@@ -534,6 +534,7 @@ int ff_hevc_cabac_decode(HEVCContext *s, enum SyntaxElement elem);
 int ff_hevc_sao_merge_left_flag_decode(HEVCContext *s, int c_idx);
 int ff_hevc_sao_offset_abs_decode(HEVCContext *s, int bit_depth);
 int ff_hevc_sao_offset_sign_decode(HEVCContext *s);
+int ff_hevc_cu_transquant_bypass_flag_decode(HEVCContext *s);
 int ff_hevc_split_coding_unit_flag_decode(HEVCContext *s, int ct_depth, int x0, int y0);
 int ff_hevc_part_mode_decode(HEVCContext *s, int log2_cb_size);
 int ff_hevc_split_transform_flag_decode(HEVCContext *s, int trafo_depth);

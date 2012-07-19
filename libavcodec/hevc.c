@@ -1054,6 +1054,9 @@ static void coding_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
     s->cu.part_mode = PART_2Nx2N;
     s->cu.intra_split_flag = 0;
 
+    if (s->pps->transquant_bypass_enable_flag)
+        s->cu.cu_transquant_bypass_flag = ff_hevc_cu_transquant_bypass_flag_decode(s);
+
     if (s->sh.slice_type != I_SLICE) {
         av_log(s->avctx, AV_LOG_ERROR, "TODO: slice_type != I_SLICE\n");
         return;

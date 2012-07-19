@@ -346,7 +346,7 @@ static const uint8_t init_values[CTX_IDX_COUNT] =
     143, 140, 185, 140, 200, 140, //sao_offset_abs
     153, 153, 153, //alf_cu_flag
     139, 141, 157, 107, 139, 126, 107, 139, 126, //split_coding_unit_flag
-    109, 102, 102, //cu_transquant_bypass_flag
+    154, 154, 154, //cu_transquant_bypass_flag
     197, 185, 201, 197, 185, 201, //skip_flag
     154, 154, 154, 154, 154, 154, 154, 154, 154, //cu_qp_delta
     149, 134, 184, 154, 139, 154, 154, 139, 154, //pred_mode, part_mode
@@ -711,6 +711,21 @@ int ff_hevc_sao_offset_sign_decode(HEVCContext *s)
     cc->state = states + elem_offset[cc->elem];
 
     cc->ctx_idx_offset = -1;
+
+    return fl_binarization(s, 1);
+}
+
+int ff_hevc_cu_transquant_bypass_flag_decode(HEVCContext *s)
+{
+    HEVCCabacContext *cc = &s->cc;
+    const int8_t ctx_idx_inc[1] = { 0 };
+
+    cc->elem = CU_TRANSQUANT_BYPASS_FLAG;
+    cc->state = states + elem_offset[cc->elem];
+
+    cc->max_bin_idx_ctx = 0;
+    cc->ctx_idx_offset = cc->init_type;
+    cc->ctx_idx_inc = ctx_idx_inc;
 
     return fl_binarization(s, 1);
 }
