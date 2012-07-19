@@ -1179,8 +1179,8 @@ static int coding_tree(HEVCContext *s, int x0, int y0, int log2_cb_size, int cb_
         } else {
             clear_pu(s->pu.pu_vert, y1_pu, y2_pu);
             clear_pu(s->pu.pu_horiz, x1_pu, x2_pu);
-            return 0;
         }
+        return more_data;
     } else {
         //TODO
 
