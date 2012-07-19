@@ -883,6 +883,16 @@ static int luma_intra_pred_mode(HEVCContext *s, int x0, int y0, int pu_size,
     int cand_up = s->pu.pu_horiz[x_pu].intra_pred_mode;
     int cand_left = s->pu.pu_vert[y_pu].intra_pred_mode;
 
+    int y_ctb = (y0 >>
+                 (s->sps->log2_min_coding_block_size +
+                  s->sps->log2_diff_max_min_coding_block_size))
+                << (s->sps->log2_min_coding_block_size +
+                    s->sps->log2_diff_max_min_coding_block_size);
+
+    // intra_pred_mode prediction does not cross vertical CTB boundaries
+    if ((y0 - 1) < y_ctb)
+        cand_up = INTRA_DC;
+
     av_log(s->avctx, AV_LOG_DEBUG, "cand_left: %d, cand_up: %d\n",
            cand_left, cand_up);
 
