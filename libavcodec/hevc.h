@@ -464,6 +464,16 @@ typedef struct ResidualCoding {
     uint8_t significant_coeff_group_flag[64][64];
 } ResidualCoding;
 
+struct SAOParams {
+    enum SAOType type_idx[3]; ///< sao_type_idx
+    int band_position[3]; ///< sao_band_position
+    int offset_abs[3][4]; ///< sao_offset_abs
+    int offset_sign[3][4]; ///< sao_offset_sign
+
+    // Inferred parameters
+    int offset_val[3][5]; ///<SaoOffsetVal
+};
+
 typedef struct {
     AVCodecContext *avctx;
     AVFrame frame;
@@ -486,6 +496,7 @@ typedef struct {
     APS *aps;
 
     SliceHeader sh;
+    struct SAOParams *sao;
 
     int ctb_addr_in_slice; ///< CtbAddrInSlice
     int num_pcm_block; ///< NumPCMBlock
@@ -493,13 +504,7 @@ typedef struct {
     int ctb_addr_rs; ///< CtbAddrRS
     int ctb_addr_ts; ///< CtbAddrTS
 
-    uint8_t sao_merge_left_flag;
-    uint8_t sao_merge_up_flag;
-
     uint8_t *split_coding_unit_flag;
-
-    enum SAOType *(sao_type_idx[3]);
-    int *(sao_band_position[3]);
 
     CodingTree ct;
     CodingUnit cu;

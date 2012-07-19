@@ -47,15 +47,11 @@ static void clear_pu(struct PUContent *pu_band, int start, int end)
 static int pic_arrays_init(HEVCContext *s)
 {
     int pic_size = s->sps->pic_width_in_luma_samples * s->sps->pic_height_in_luma_samples;
+    int ctb_count = s->sps->PicWidthInCtbs * s->sps->PicHeightInCtbs;
     int pic_width_in_min_pu = s->sps->pic_width_in_min_cbs * 4;
     int pic_height_in_min_pu = s->sps->pic_height_in_min_cbs * 4;
 
-    for (int i = 0; i < 3; i++) {
-        s->sao_type_idx[i] = av_mallocz(pic_size * sizeof(enum SAOType));
-        s->sao_band_position[i] = av_mallocz(pic_size * sizeof(int));
-        if (s->sao_type_idx[i] == NULL || s->sao_band_position[i] == NULL)
-            return -1;
-    }
+    s->sao = av_mallocz(ctb_count * sizeof(struct SAOParams));
 
     s->split_coding_unit_flag = av_mallocz(pic_size * sizeof(uint8_t));
     s->cu.skip_flag = av_mallocz(pic_size * sizeof(uint8_t));
@@ -84,10 +80,7 @@ static int pic_arrays_init(HEVCContext *s)
 
 static void pic_arrays_free(HEVCContext *s)
 {
-    for (int i = 0; i < 3; i++) {
-        av_freep(&s->sao_type_idx[i]);
-        av_freep(&s->sao_band_position[i]);
-    }
+    av_freep(&s->sao);
 
     av_freep(&s->split_coding_unit_flag);
     av_freep(&s->cu.skip_flag);
@@ -252,46 +245,79 @@ static int decode_nal_slice_header(HEVCContext *s)
     return 0;
 }
 
+#define CTB(tab,x,y) ((tab)[(x) * s->sps->PicHeightInCtbs + (y)])
+
+#define set_sao(elem, value)\
+    if (!sao_merge_up_flag && !sao_merge_left_flag) {\
+        sao->elem = value;\
+    } else if (sao_merge_left_flag) {\
+        sao->elem = CTB(s->sao, rx-1, ry).elem;\
+    } else if (sao_merge_up_flag) {\
+        sao->elem = CTB(s->sao, rx, ry-1).elem;\
+    }
+
 /**
  * 7.3.4.1
  */
 static int sao_param(HEVCContext *s, int rx, int ry, int c_idx)
 {
     int bit_depth = c_idx ? s->sps->bit_depth_chroma: s->sps->bit_depth_luma;
+    int shift = bit_depth - FFMIN(bit_depth, 10);
 
-    s->sao_merge_left_flag = 0;
-    s->sao_merge_up_flag = 0;
+    int sao_merge_left_flag = 0;
+    int sao_merge_up_flag = 0;
+
+    struct SAOParams *sao = &CTB(s->sao, rx, ry);
+
+    sao->type_idx[c_idx] = 0;
+
     if (rx > 0) {
         int left_ctb_in_slice = (s->ctb_addr_in_slice > 0);
         int left_ctb_in_tile =
             (s->pps->tile_id[s->ctb_addr_ts] ==
              s->pps->tile_id[s->pps->ctb_addr_rs_to_ts[s->ctb_addr_rs - 1]]);
         if (left_ctb_in_slice && left_ctb_in_tile)
-            s->sao_merge_left_flag = ff_hevc_sao_merge_left_flag_decode(s, c_idx);
+            sao_merge_left_flag = ff_hevc_sao_merge_left_flag_decode(s, c_idx);
     }
-    if (ry > 0 && !s->sao_merge_left_flag) {
+    if (ry > 0 && !sao_merge_left_flag) {
         int up_ctb_in_slice =
             (s->ctb_addr_ts - s->pps->ctb_addr_rs_to_ts[s->ctb_addr_rs - s->sps->PicWidthInCtbs])
             <=  s->ctb_addr_in_slice;
         int up_ctb_in_tile = (s->pps->tile_id[s->ctb_addr_ts] ==
                               s->pps->tile_id[s->pps->ctb_addr_rs_to_ts[s->ctb_addr_rs - s->sps->PicWidthInCtbs]]);
         if (up_ctb_in_slice && up_ctb_in_tile)
-            s->sao_merge_up_flag = ff_hevc_cabac_decode(s, SAO_MERGE_UP_FLAG);
+            sao_merge_up_flag = ff_hevc_cabac_decode(s, SAO_MERGE_UP_FLAG);
     }
-    if (!s->sao_merge_up_flag && !s->sao_merge_left_flag) {
-        SAMPLE(s->sao_type_idx[c_idx], rx, ry) = ff_hevc_cabac_decode(s, SAO_TYPE_IDX);
-        av_log(s->avctx, AV_LOG_DEBUG, "sao_type_idx: %d\n",
-               SAMPLE(s->sao_type_idx[c_idx], rx, ry));
-        if (SAMPLE(s->sao_type_idx[c_idx], rx, ry) == SAO_BAND)
-            SAMPLE(s->sao_band_position[c_idx], rx, ry) =
-                ff_hevc_cabac_decode(s, SAO_BAND_POSITION);
+    set_sao(type_idx[c_idx], ff_hevc_cabac_decode(s, SAO_TYPE_IDX));
+    av_log(s->avctx, AV_LOG_DEBUG, "sao_type_idx: %d\n",
+           sao->type_idx[c_idx]);
+    if (sao->type_idx[c_idx] == SAO_BAND)
+        set_sao(band_position[c_idx], ff_hevc_cabac_decode(s, SAO_BAND_POSITION));
 
-        if (SAMPLE(s->sao_type_idx[c_idx], rx, ry) != SAO_NOT_APPLIED)
-            av_log(s->avctx, AV_LOG_ERROR, "TODO: sao_type_idx != 0\n");
+    if (sao->type_idx[c_idx] != SAO_NOT_APPLIED)
+        for (int i = 0; i < 4; i++)
+            set_sao(offset_abs[c_idx][i], ff_hevc_sao_offset_abs_decode(s, bit_depth));
+
+    if (sao->type_idx[c_idx] == SAO_BAND)
+        for (int i = 0; i < 4; i++)
+            if (sao->offset_abs[i])
+                set_sao(offset_sign[c_idx][i], ff_hevc_sao_offset_sign_decode(s));
+
+    // Inferred parameters
+    for (int i = 0; i < 4; i++) {
+        sao->offset_val[c_idx][i+1] = sao->offset_abs[c_idx][i] << shift;
+        if (sao->type_idx[c_idx] != SAO_BAND) {
+            if (i > 1)
+                sao->offset_val[c_idx][i+1] = -sao->offset_val[c_idx][i+1];
+        } else if (sao->offset_sign[c_idx][i+1]) {
+            sao->offset_val[c_idx][i+1] = -sao->offset_val[c_idx][i+1];
+        }
     }
-    //TODO: infer sao_type_idx and sao_band_position when they are not present
     return 0;
 }
+
+#undef CTB
+#undef set_sao
 
 
 static av_always_inline int min_cb_addr_zs(HEVCContext *s, int x, int y)
