@@ -946,7 +946,7 @@ int ff_hevc_significant_coeff_flag_decode(HEVCContext *s, int c_idx, int x_c, in
     HEVCCabacContext *cc = &s->cc;
     int8_t ctx_idx_inc[1];
     static const uint8_t ctx_idx_map[] = {
-        0, 1, 4, 5, 2, 3, 4, 5, 6, 6, 8, 8, 7, 7, 8
+        0, 1, 4, 5, 2, 3, 4, 5, 6, 6, 8, 8, 7, 7, 8, 8
     };
     int sig_ctx;
     int x_cg = x_c >> 2;
