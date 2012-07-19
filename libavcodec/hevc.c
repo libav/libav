@@ -39,7 +39,7 @@
 static void clear_pu(struct PUContent *pu_band, int start, int end)
 {
     for (int i = start; i < end; i++) {
-        pu_band[i].intra_pred_mode = INTRA_PLANAR;
+        pu_band[i].intra_pred_mode = INTRA_DC;
         pu_band[i].ct_depth = -1;
     }
 }
@@ -884,7 +884,7 @@ static int luma_intra_pred_mode(HEVCContext *s, int x0, int y0, int pu_size,
         } else {
             candidate[0] = cand_left;
             candidate[1] = 2 + ((cand_left - 2 - 1 + 32) % 32);
-            candidate[1] = 2 + ((cand_left - 2 + 1 + 32) % 32);
+            candidate[2] = 2 + ((cand_left - 2 + 1) % 32);
         }
     } else {
         candidate[0] = cand_left;
