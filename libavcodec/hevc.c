@@ -626,8 +626,16 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
                        trans_coeff_level);
             }
 
-            s->frame.data[0][(y0 + y_c) * s->frame.linesize[0] + (x0 + x_c)] =
-                trans_coeff_level;
+            if (s->cu.cu_transquant_bypass_flag) {
+                if (c_idx == 0) {
+                    s->frame.data[0][(y0 + y_c) * s->frame.linesize[0] + (x0 + x_c)] =
+                        127 + trans_coeff_level;
+                } else {
+                    s->frame.data[c_idx][((y0 >> 1) + y_c) * s->frame.linesize[c_idx] +
+                                             ((x0 >> 1) + x_c)] =
+                        127 + trans_coeff_level;
+                }
+            }
         }
     }
 }
