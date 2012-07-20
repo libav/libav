@@ -626,7 +626,7 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
                        trans_coeff_level);
             }
 
-            s->frame.data[0][(x0 + x_c) * s->frame.linesize[0] + (y0 + y_c)] =
+            s->frame.data[0][(y0 + y_c) * s->frame.linesize[0] + (x0 + x_c)] =
                 trans_coeff_level;
         }
     }
@@ -866,7 +866,7 @@ static void pcm_sample(HEVCContext *s, int x0, int y0, int log2_cb_size)
     // Directly fill the current frame (section 8.4)
     for (int j = 0; j < cb_size; j++)
         for (int i = 0; i < cb_size; i++)
-            s->frame.data[0][(x0 + i) * s->frame.linesize[0] + (y0 + j)]
+            s->frame.data[0][(y0 + j) * s->frame.linesize[0] + (x0 + i)]
                 = get_bits(gb, s->sps->pcm.bit_depth_luma) <<
                 (s->sps->bit_depth_luma - s->sps->pcm.bit_depth_luma);
 
@@ -1251,7 +1251,7 @@ static int decode_nal_slice_data(HEVCContext *s)
     s->ctb_addr_rs = s->sh.slice_ctb_addr_rs;
     s->ctb_addr_ts = s->pps->ctb_addr_rs_to_ts[s->ctb_addr_rs];
 
-    while (more_data) {
+    while (1) {
         x_ctb = INVERSE_RASTER_SCAN(s->ctb_addr_rs, ctb_size, ctb_size, s->sps->pic_width_in_luma_samples, 0);
         y_ctb = INVERSE_RASTER_SCAN(s->ctb_addr_rs, ctb_size, ctb_size, s->sps->pic_width_in_luma_samples, 1);
         s->num_pcm_block = 0;
@@ -1268,6 +1268,9 @@ static int decode_nal_slice_data(HEVCContext *s)
         }
 
         more_data = coding_tree(s, x_ctb, y_ctb, s->sps->Log2CtbSize, 0);
+        if (!more_data)
+            return 0;
+
         s->ctb_addr_ts++;
         s->ctb_addr_rs = s->pps->ctb_addr_ts_to_rs[s->ctb_addr_ts];
 
