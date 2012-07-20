@@ -1003,11 +1003,11 @@ static void prediction_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
                         if (prev_intra_luma_pred_flag[2*i+j]) {
                             s->pu.mpm_idx =
                                 ff_hevc_cabac_decode(s, MPM_IDX);
-                            av_log(s->avctx, AV_LOG_ERROR, "mpm_idx: %d\n", s->pu.mpm_idx);
+                            av_log(s->avctx, AV_LOG_DEBUG, "mpm_idx: %d\n", s->pu.mpm_idx);
                         } else {
                             s->pu.rem_intra_luma_pred_mode =
                                 ff_hevc_cabac_decode(s, REM_INTRA_LUMA_PRED_MODE);
-                            av_log(s->avctx, AV_LOG_ERROR, "rem_intra_luma_pred_mode: %d\n", s->pu.rem_intra_luma_pred_mode);
+                            av_log(s->avctx, AV_LOG_DEBUG, "rem_intra_luma_pred_mode: %d\n", s->pu.rem_intra_luma_pred_mode);
                         }
                         s->pu.intra_pred_mode[2*i+j] =
                             luma_intra_pred_mode(s, x0 + d1*j, y0 + d1*i,
@@ -1085,7 +1085,7 @@ static void coding_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
         if (s->cu.pred_mode != MODE_INTRA ||
             log2_cb_size == s->sps->log2_min_coding_block_size) {
             s->cu.part_mode = ff_hevc_part_mode_decode(s, log2_cb_size);
-            av_log(s->avctx, AV_LOG_ERROR, "part_mode: %d\n", s->cu.part_mode);
+            av_log(s->avctx, AV_LOG_DEBUG, "part_mode: %d\n", s->cu.part_mode);
             s->cu.intra_split_flag = (s->cu.part_mode == PART_NxN &&
                                       s->cu.pred_mode == MODE_INTRA);
         }
