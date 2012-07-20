@@ -538,11 +538,20 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
                 if (significant_coeff_flag[n] == 1)
                     implicit_non_zero_coeff = 0;
             } else {
+                int last_cg = 0;
+                if (log2_trafo_width == 3 && log2_trafo_height == 3 && scan_idx != SCAN_DIAG) {
+                    if (scan_idx == SCAN_HORIZ) {
+                        last_cg = (y_c == (y_cg << 1));
+                    } else { //SCAN_VERT
+                        last_cg = (x_c == (x_cg << 1));
+                    }
+                } else {
+                    last_cg = (x_c == (x_cg << 2) && y_c == (y_cg << 2));
+                }
                 significant_coeff_flag[n] =
                     ((n + offset) == (num_coeff - 1) ||
-                     (x_c == (x_cg << 2) && y_c == (y_cg << 2)
-                      && implicit_non_zero_coeff
-                      && s->rc.significant_coeff_group_flag[x_cg][y_cg])); // not in spec
+                     (last_cg && implicit_non_zero_coeff &&
+                      s->rc.significant_coeff_group_flag[x_cg][y_cg])); // not in spec
             }
             av_log(s->avctx, AV_LOG_DEBUG, "significant_coeff_flag(%d,%d): %d\n",
                    x_c, y_c, significant_coeff_flag[n]);
