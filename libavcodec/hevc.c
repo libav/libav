@@ -22,6 +22,7 @@
 
 #include "libavutil/attributes.h"
 #include "libavutil/common.h"
+#include "libavutil/pixdesc.h"
 #include "golomb.h"
 #include "hevcdata.h"
 #include "hevc.h"
@@ -55,6 +56,9 @@ static int pic_arrays_init(HEVCContext *s)
 
     s->split_coding_unit_flag = av_mallocz(pic_size * sizeof(uint8_t));
     s->cu.skip_flag = av_mallocz(pic_size * sizeof(uint8_t));
+
+    s->cu.left_cb_available = av_mallocz(s->sps->pic_height_in_min_cbs);
+    s->cu.top_cb_available = av_mallocz(s->sps->pic_width_in_min_cbs);
 
     s->pu.pu_vert = av_malloc(pic_height_in_min_pu * sizeof(struct PUContent));
     s->pu.pu_horiz = av_malloc(pic_width_in_min_pu * sizeof(struct PUContent));
@@ -142,6 +146,7 @@ static int decode_nal_slice_header(HEVCContext *s)
         } else {
             s->avctx->pix_fmt = PIX_FMT_YUV444P;
         }
+        ff_hevc_pred_init(&s->hpc, s->sps->bit_depth_luma);
     }
 
     if (!sh->first_slice_in_pic_flag) {
@@ -636,13 +641,13 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
             }
 
             if (s->cu.cu_transquant_bypass_flag) {
-                if (c_idx == 0) {
-                    s->frame.data[0][(y0 + y_c) * s->frame.linesize[0] + (x0 + x_c)] =
-                        127 + trans_coeff_level;
+                 if (c_idx == 0) {
+                    s->frame.data[0][(y0 + y_c) * s->frame.linesize[0] + (x0 + x_c)] +=
+                        trans_coeff_level;
                 } else {
                     s->frame.data[c_idx][((y0 >> 1) + y_c) * s->frame.linesize[c_idx] +
-                                             ((x0 >> 1) + x_c)] =
-                        127 + trans_coeff_level;
+                                             ((x0 >> 1) + x_c)] +=
+                        trans_coeff_level;
                 }
             }
         }
@@ -658,6 +663,17 @@ static void transform_unit(HEVCContext *s, int x0L, int  y0L, int x0C, int y0C,
     int log2_trafo_size = (log2_trafo_width + log2_trafo_height) >> 1;
     int scan_idx = SCAN_DIAG;
     int scan_idx_c = SCAN_DIAG;
+
+    if (s->cu.pred_mode == MODE_INTRA) {
+        s->hpc.intra_pred(s, x0L, y0L, log2_trafo_width, 0);
+        if (log2_trafo_size > 2) {
+            s->hpc.intra_pred(s, x0C, y0C, log2_trafo_width - 1, 1);
+            s->hpc.intra_pred(s, x0C, y0C, log2_trafo_width - 1, 2);
+        } else if (blk_idx == 3) {
+            s->hpc.intra_pred(s, x0C, y0C, log2_trafo_width, 1);
+            s->hpc.intra_pred(s, x0C, y0C, log2_trafo_width, 2);
+        }
+    }
 
     if (s->tt.cbf_luma ||
         SAMPLE(s->tt.cbf_cb[trafo_depth], x0C, y0C) ||
@@ -765,6 +781,7 @@ static void transform_tree(HEVCContext *s, int x0L, int y0L, int x0C, int y0C,
     s->tt.inter_split_flag = (s->sps->max_transform_hierarchy_depth_inter == 0 &&
                               s->cu.pred_mode == MODE_INTER &&
                               s->cu.part_mode != PART_2Nx2N && trafo_depth == 0);
+    s->tt.inter_tb_split_direction_c = 2;
 
     if (log2_trafo_size <= s->sps->log2_min_transform_block_size +
         s->sps->log2_diff_max_min_coding_block_size &&
@@ -1068,6 +1085,17 @@ static void prediction_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
     }
 }
 
+static av_always_inline void set_cu_available(HEVCContext *s, int x0, int y0,
+                                              int log2_cb_size, int available)
+{
+    int length = (1 << log2_cb_size) >> s->sps->log2_min_coding_block_size;
+    int x_cb = x0 >> s->sps->log2_min_coding_block_size;
+    int y_cb = y0 >> s->sps->log2_min_coding_block_size;
+
+    memset(&s->cu.top_cb_available[x_cb], available, length);
+    memset(&s->cu.left_cb_available[y_cb], available, length);
+}
+
 /**
  * 7.3.6
  */
@@ -1075,7 +1103,11 @@ static void coding_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
 {
     int cb_size = 1 << log2_cb_size;
     int x1, y1, x2, y2, x3, y3;
+    int available = (s->cu.pred_mode == MODE_INTRA ||
+                     !s->pps->constrained_intra_pred_flag);
 
+    s->cu.x = x0;
+    s->cu.y = y0;
     s->cu.no_residual_data_flag = 0;
 
     s->cu.pred_mode = MODE_INTRA;
@@ -1164,6 +1196,8 @@ static void coding_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
             }
         }
     }
+
+    set_cu_available(s, x0, y0, log2_cb_size, available);
 }
 
 /**
@@ -1204,20 +1238,24 @@ static int coding_tree(HEVCContext *s, int x0, int y0, int log2_cb_size, int cb_
 
         if(more_data && x1 < s->sps->pic_width_in_luma_samples) {
             more_data = coding_tree(s, x1, y0, log2_cb_size - 1, cb_depth + 1);
-        } else {
+        } else if (x1 < s->sps->pic_width_in_luma_samples) {
+            set_cu_available(s, x1, y0, log2_cb_size - 1, 0);
             clear_pu(s->pu.pu_vert, y0_pu, y1_pu);
             clear_pu(s->pu.pu_horiz, x1_pu, x2_pu);
         }
         if (more_data && y1 < s->sps->pic_height_in_luma_samples) {
             more_data = coding_tree(s, x0, y1, log2_cb_size - 1, cb_depth + 1);
-        } else {
+        } else if (y1 < s->sps->pic_height_in_luma_samples) {
+            set_cu_available(s, x0, y1, log2_cb_size - 1, 0);
             clear_pu(s->pu.pu_vert, y1_pu, y2_pu);
             clear_pu(s->pu.pu_horiz, x0_pu, x1_pu);
         }
         if(more_data && x1 < s->sps->pic_width_in_luma_samples &&
            y1 < s->sps->pic_height_in_luma_samples) {
             return coding_tree(s, x1, y1, log2_cb_size - 1, cb_depth + 1);
-        } else {
+        } else if (x1 < s->sps->pic_width_in_luma_samples &&
+                   y1 < s->sps->pic_height_in_luma_samples) {
+            set_cu_available(s, x1, y1, log2_cb_size - 1, 0);
             clear_pu(s->pu.pu_vert, y1_pu, y2_pu);
             clear_pu(s->pu.pu_horiz, x1_pu, x2_pu);
         }

@@ -25,6 +25,7 @@
 
 #include "avcodec.h"
 #include "get_bits.h"
+#include "hevcpred.h"
 
 /**
  * Enable to diverge from the spec when the reference encoder
@@ -380,6 +381,11 @@ typedef struct CodingUnit {
     // Inferred parameters
     uint8_t intra_split_flag; ///< IntraSplitFlag
     uint8_t max_trafo_depth; ///< MaxTrafoDepth
+
+    int x;
+    int y;
+    uint8_t *top_cb_available;
+    uint8_t *left_cb_available;
 } CodingUnit;
 
 enum IntraPredMode {
@@ -475,9 +481,11 @@ struct SAOParams {
     int offset_val[3][5]; ///<SaoOffsetVal
 };
 
-typedef struct {
+typedef struct HEVCContext {
     AVCodecContext *avctx;
     AVFrame frame;
+
+    struct HEVCPredContext hpc;
 
     GetBitContext gb;
     HEVCCabacContext cc;
