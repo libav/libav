@@ -72,6 +72,8 @@ typedef struct {
 //TODO: check if this is really the maximum
 #define MAX_TRANSFORM_DEPTH 3
 
+#define MAX_TB_SIZE 32
+
 /**
  * Not yet specified!
  */

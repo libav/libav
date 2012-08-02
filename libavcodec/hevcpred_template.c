@@ -57,8 +57,8 @@ static void FUNCC(intra_pred)(struct HEVCContext *s, int x0, int y0, int log2_si
     enum IntraPredMode mode = c_idx ? s->pu.intra_pred_mode_c :
                               s->tu.cur_intra_pred_mode;
 
-    pixel left_array[65], filtered_left_array[65];
-    pixel top_array[65], filtered_top_array[65];
+    pixel left_array[2*MAX_TB_SIZE+1], filtered_left_array[2*MAX_TB_SIZE+1];
+    pixel top_array[2*MAX_TB_SIZE+1], filtered_top_array[2*MAX_TB_SIZE+1];
     pixel *left = left_array + 1;
     pixel *top = top_array + 1;
     pixel *filtered_left = filtered_left_array + 1;
@@ -272,7 +272,7 @@ static void FUNCC(pred_angular)(uint8_t *_src, const uint8_t *_top, const uint8_
     };
 
     int angle = intra_pred_angle[mode-2];
-    pixel ref_array[3*32+1];
+    pixel ref_array[3*MAX_TB_SIZE+1];
     const pixel *ref;
     int last = (size * angle) >> 5;
 
