@@ -20,6 +20,9 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#ifndef AVCODEC_HEVCDATA_H
+#define AVCODEC_HEVCDATA_H
+
 static const uint8_t scan_1x1[1] = {
     0,
 };
@@ -163,3 +166,5 @@ static const uint8_t diag_scan8x8_inv[8][8] = {
     { 21, 29, 37, 44, 50, 55, 59, 62, },
     { 28, 36, 43, 49, 54, 58, 61, 63, },
 };
+
+#endif /* AVCODEC_HEVCDATA_H */
