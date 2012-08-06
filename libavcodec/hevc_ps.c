@@ -323,8 +323,12 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
 
     pps->deblocking_filter_control_present_flag = get_bits1(gb);
     if (pps->deblocking_filter_control_present_flag) {
-        av_log(s->avctx, AV_LOG_ERROR, "TODO: deblocking_filter_control_present_flag\n");
-        goto err;
+        pps->deblocking_filter_override_enabled_flag = get_bits1(gb);
+        pps->pps_disable_deblocking_filter_flag = get_bits1(gb);
+        if (!pps->pps_disable_deblocking_filter_flag) {
+            pps->beta_offset = get_se_golomb(gb) * 2;
+            pps->tc_offset = get_se_golomb(gb) * 2;
+        }
     }
 
     pps->pps_scaling_list_data_present_flag = get_bits1(gb);

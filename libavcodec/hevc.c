@@ -214,9 +214,16 @@ static int decode_nal_slice_header(HEVCContext *s)
 
         sh->slice_qp_delta = get_se_golomb(gb);
         if (s->pps->deblocking_filter_control_present_flag) {
-            av_log(s->avctx, AV_LOG_ERROR,
-                   "TODO: deblocking_filter_control_present_flag\n");
-            return -1;
+            int deblocking_filter_override_flag = 1;
+            if (s->pps->deblocking_filter_override_enabled_flag)
+                deblocking_filter_override_flag = get_bits1(gb);
+            if (deblocking_filter_override_flag) {
+                sh->disable_deblocking_filter_flag = get_bits1(gb);
+                if (!sh->disable_deblocking_filter_flag) {
+                    sh->beta_offset = get_se_golomb(gb) * 2;
+                    sh->tc_offset = get_se_golomb(gb) * 2;
+                }
+            }
         }
 #if !REFERENCE_ENCODER_QUIRKS
         if (sh->slice_type != I_SLICE)

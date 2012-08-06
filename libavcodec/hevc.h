@@ -211,6 +211,10 @@ typedef struct {
     uint8_t cabac_independant_flag;
 
     uint8_t deblocking_filter_control_present_flag;
+    uint8_t deblocking_filter_override_enabled_flag;
+    uint8_t pps_disable_deblocking_filter_flag;
+    int beta_offset; ///< beta_offset_div2 * 2
+    int tc_offset; ///< tc_offset_div2 * 2
 
     int pps_scaling_list_data_present_flag;
 
@@ -263,7 +267,11 @@ typedef struct {
 
     uint8_t cabac_init_flag;
     int slice_qp_delta;
-    uint8_t disable_deblocking_filter_flag;
+
+    uint8_t disable_deblocking_filter_flag; ///< slice_header_disable_deblocking_filter_flag
+    int beta_offset; ///< beta_offset_div2 * 2
+    int tc_offset; ///< tc_offset_div2 * 2
+
     int max_num_merge_cand; ///< 5 - 5_minus_max_num_merge_cand
     uint8_t slice_alf_flag[3];
 
