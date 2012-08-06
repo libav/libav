@@ -312,7 +312,7 @@ static int sao_param(HEVCContext *s, int rx, int ry, int c_idx)
 
     if (sao->type_idx[c_idx] == SAO_BAND)
         for (int i = 0; i < 4; i++)
-            if (sao->offset_abs[i])
+            if (sao->offset_abs[c_idx][i])
                 set_sao(offset_sign[c_idx][i], ff_hevc_sao_offset_sign_decode(s));
 
     // Inferred parameters

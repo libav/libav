@@ -71,7 +71,7 @@ static const int8_t binarization[][2] =
     { FL_BIN, 1 }, //sao_merge_left_flag
     { FL_BIN, 1 }, //sao_merge_up_flag
     { U_BIN }, //sao_type_idx
-    { FL_BIN, 5 }, //sao_band_position
+    { FL_BIN, 31 }, //sao_band_position
     { TU_BIN, -1 }, //sao_offset_abs
     { FL_BIN, 1 }, //sao_offset_sign
     { FL_BIN, 1 }, //alf_cu_flag
