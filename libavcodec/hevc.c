@@ -239,6 +239,12 @@ static int decode_nal_slice_header(HEVCContext *s)
         }
     }
 
+    if (s->pps->slice_header_extension_present_flag) {
+        int length = get_ue_golomb(gb);
+        for (int i = 0; i < length; i++)
+            skip_bits(gb, 8); // slice_header_extension_data_byte
+    }
+
     align_get_bits(gb);
 
     // Inferred parameters

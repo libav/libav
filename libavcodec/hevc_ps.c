@@ -103,15 +103,10 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
 
     sps->profile_space = get_bits(gb, 3);
     sps->profile_idc = get_bits(gb, 5);
-#if !REFERENCE_ENCODER_QUIRKS
     skip_bits(gb, 16); // constraint_flags
-#else
-    skip_bits(gb, 8); // reserved_zero_8bits
-#endif
     sps->level_idc = get_bits(gb, 8);
-#if !REFERENCE_ENCODER_QUIRKS
     skip_bits(gb, 32); // profile_compability_flag[i]
-#endif
+
     sps_id         = get_ue_golomb(gb);
     if (sps_id >= MAX_SPS_COUNT) {
         av_log(s->avctx, AV_LOG_ERROR, "SPS id out of range: %d\n", sps_id);
@@ -277,13 +272,8 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
 
     pps->cabac_init_present_flag = get_bits1(gb);
 
-#if REFERENCE_ENCODER_QUIRKS
-    pps->num_ref_idx_l0_default_active = get_bits(gb, 3) + 1;
-    pps->num_ref_idx_l1_default_active = get_bits(gb, 3) + 1;
-#else
     pps->num_ref_idx_l0_default_active = get_ue_golomb(gb) + 1;
     pps->num_ref_idx_l1_default_active = get_ue_golomb(gb) + 1;
-#endif
 
     pps->pic_init_qp_minus26 = get_se_golomb(gb);
 
@@ -344,6 +334,7 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
     }
 
     pps->log2_parallel_merge_level = get_ue_golomb(gb) + 2;
+    pps->slice_header_extension_present_flag = get_bits1(gb);
 
     // Inferred parameters
     pps->SliceGranularity = pps->slice_granularity << 1;

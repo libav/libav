@@ -215,6 +215,7 @@ typedef struct {
     int pps_scaling_list_data_present_flag;
 
     int log2_parallel_merge_level; ///< log2_parallel_merge_level_minus2 + 2
+    uint8_t slice_header_extension_present_flag;
 
     uint8_t pps_extension_flag;
     uint8_t pps_extension_data_flag;
