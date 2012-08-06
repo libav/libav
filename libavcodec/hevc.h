@@ -26,6 +26,7 @@
 #include "avcodec.h"
 #include "get_bits.h"
 #include "hevcpred.h"
+#include "hevcdsp.h"
 
 /**
  * Enable to diverge from the spec when the reference encoder
@@ -488,6 +489,7 @@ typedef struct HEVCContext {
     AVFrame frame;
 
     struct HEVCPredContext hpc;
+    struct HEVCDSPContext hevcdsp;
 
     GetBitContext gb;
     HEVCCabacContext cc;

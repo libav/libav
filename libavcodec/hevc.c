@@ -147,6 +147,7 @@ static int decode_nal_slice_header(HEVCContext *s)
             s->avctx->pix_fmt = PIX_FMT_YUV444P;
         }
         ff_hevc_pred_init(&s->hpc, s->sps->bit_depth_luma);
+        ff_hevc_dsp_init(&s->hevcdsp, s->sps->bit_depth_luma);
     }
 
     if (!sh->first_slice_in_pic_flag) {
@@ -365,6 +366,14 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
     int x_cg_last_sig, y_cg_last_sig;
 
     const uint8_t *scan_x, *scan_y;
+
+    int stride = s->frame.linesize[c_idx];
+    int hshift = c_idx ? av_pix_fmt_descriptors[s->avctx->pix_fmt].log2_chroma_w : 0;
+    int vshift = c_idx ? av_pix_fmt_descriptors[s->avctx->pix_fmt].log2_chroma_h : 0;
+    uint8_t *dst = &s->frame.data[c_idx][(y0 >> vshift) * stride + (x0 >> hshift)];
+
+    int16_t coeffs[MAX_TB_SIZE * MAX_TB_SIZE] = { 0 };
+    int size = 1 << log2_trafo_width;
 
     av_log(s->avctx, AV_LOG_DEBUG, "scan_idx: %d, c_idx: %d\n",
            scan_idx, c_idx);
@@ -641,15 +650,22 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
             }
 
             if (s->cu.cu_transquant_bypass_flag) {
-                 if (c_idx == 0) {
-                    s->frame.data[0][(y0 + y_c) * s->frame.linesize[0] + (x0 + x_c)] +=
-                        trans_coeff_level;
-                } else {
-                    s->frame.data[c_idx][((y0 >> 1) + y_c) * s->frame.linesize[c_idx] +
-                                             ((x0 >> 1) + x_c)] +=
-                        trans_coeff_level;
-                }
+                dst[y_c * stride + x_c] += trans_coeff_level;
+            } else {
+                coeffs[y_c * size + x_c] = trans_coeff_level;
             }
+        }
+    }
+
+    if (!s->cu.cu_transquant_bypass_flag) {
+        int bit_depth = c_idx ? s->sps->bit_depth_chroma : s->sps->bit_depth_luma;
+        //TODO: don't hardcode QP
+        int qp = c_idx ? 31 : 32;
+        s->hevcdsp.dequant(coeffs, log2_trafo_width, qp, bit_depth);
+        if (c_idx == 0 && log2_trafo_width == 2) {
+            s->hevcdsp.transform_4x4_luma_add(dst, coeffs, stride, s->sps->bit_depth_luma);
+        } else {
+            s->hevcdsp.transform_add[log2_trafo_width-2](dst, coeffs, stride, bit_depth);
         }
     }
 }
@@ -1259,7 +1275,8 @@ static int coding_tree(HEVCContext *s, int x0, int y0, int log2_cb_size, int cb_
             clear_pu(s->pu.pu_vert, y1_pu, y2_pu);
             clear_pu(s->pu.pu_horiz, x1_pu, x2_pu);
         }
-        return more_data;
+        return ((x1 + cb_size) < s->sps->pic_width_in_luma_samples ||
+                (y1 + cb_size) < s->sps->pic_height_in_luma_samples);
     } else {
         //TODO
 
