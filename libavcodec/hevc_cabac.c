@@ -175,7 +175,7 @@ static const uint8_t max_bin_idx_ctxs[][3] =
  */
 static const int8_t ctx_idx_offsets[][3] =
 {
-    { 0, 3, 6 }, //sao_merge_left_flag
+    { 0, 1, 2 }, //sao_merge_left_flag
     { 0, 1, 2 }, //sao_merge_up_flag
     { 0, 2, 4 }, //sao_type_idx
     { -1, -1, -1 }, //sao_band_position
@@ -228,7 +228,7 @@ static const int8_t ctx_idx_offsets[][3] =
  */
 static const int8_t ctx_idx_incs[][5] =
 {
-    { -1 }, //sao_merge_left_flag
+    { 0 }, //sao_merge_left_flag
     { 0 }, //sao_merge_up_flag
     { 0, 1, 1, 1, 1 }, //sao_type_idx
     { }, //sao_band_position
@@ -282,49 +282,49 @@ static const int8_t ctx_idx_incs[][5] =
 static const int elem_offset[] =
 {
     0, //sao_merge_left_flag
-    9, //sao_merge_up_flag
-    12, //sao_type_idx
+    3, //sao_merge_up_flag
+    6, //sao_type_idx
     -1, //sao_band_position
-    18, //sao_offset_abs
+    12, //sao_offset_abs
     -1, //sao_offset_sign
-    24, //alf_cu_flag
+    18, //alf_cu_flag
     -1, //end_of_slice_flag
-    27, //split_coding_unit_flag
-    36, //cu_transquant_bypass_flag
-    39, //skip_flag
-    45, //cu_qp_delta
-    54, //pred_mode
-    54, //part_mode
+    21, //split_coding_unit_flag
+    30, //cu_transquant_bypass_flag
+    33, //skip_flag
+    39, //cu_qp_delta
+    48, //pred_mode
+    48, //part_mode
     -1, //pcm_flag
-    63, //prev_intra_luma_pred_mode
+    57, //prev_intra_luma_pred_mode
     -1, //mpm_idx
     -1, //rem_intra_luma_pred_mode
-    66, //intra_chroma_pred_mode
-    72, //merge_flag
-    74, //merge_idx
-    76, //inter_pred_idc
-    80, //ref_idx_l0
-    80, //ref_idx_l1
-    86, //abs_mvd_greater0_flag
-    86, //abs_mvd_greater1_flag
+    60, //intra_chroma_pred_mode
+    66, //merge_flag
+    68, //merge_idx
+    70, //inter_pred_idc
+    74, //ref_idx_l0
+    74, //ref_idx_l1
+    80, //abs_mvd_greater0_flag
+    80, //abs_mvd_greater1_flag
     -1, //abs_mvd_minus2
     -1, //mvd_sign_flag
-    90, //mvp_l0_flag
-    90, //mvp_l1_flag
-    92, //no_residual_data_flag
-    94, //split_transform_flag
-    106, //cbf_luma
-    112, //cbf_cb, cbf_cr
-    121, //transform_skip_flag[][][0]
-    121, //transform_skip_flag[][][1|2]
-    127, //last_significant_coeff_x_prefix
-    181, //last_significant_coeff_y_prefix
+    84, //mvp_l0_flag
+    84, //mvp_l1_flag
+    86, //no_residual_data_flag
+    88, //split_transform_flag
+    100, //cbf_luma
+    106, //cbf_cb, cbf_cr
+    115, //transform_skip_flag[][][0]
+    115, //transform_skip_flag[][][1|2]
+    121, //last_significant_coeff_x_prefix
+    175, //last_significant_coeff_y_prefix
     -1, //last_significant_coeff_x_suffix
     -1, //last_significant_coeff_y_suffix
-    235, //significant_coeff_group_flag
-    247, //significant_coeff_flag
-    382, //coeff_abs_level_greater1_flag
-    454, //coeff_abs_level_greater2_flag
+    229, //significant_coeff_group_flag
+    241, //significant_coeff_flag
+    376, //coeff_abs_level_greater1_flag
+    448, //coeff_abs_level_greater2_flag
     -1, //coeff_abs_level_remaining
     -1, //coeff_sign_flag
 };
@@ -340,7 +340,7 @@ static const int elem_offset[] =
  */
 static const uint8_t init_values[CTX_IDX_COUNT] =
 {
-    153, 153, 153, 153, 153, 153, 153, 153, 153, //sao_merge_left_flag
+    153, 153, 153, //sao_merge_left_flag
     175, 153, 153, //sao_merge_up_flag
     160, 140, 185, 140, 200, 140, //sao_type_idx
     143, 140, 185, 140, 200, 140, //sao_offset_abs
@@ -673,16 +673,16 @@ int ff_hevc_cabac_decode(HEVCContext *s, enum SyntaxElement elem)
     return binarization_funcs[binarization[elem][0]](s, binarization[elem][1]);
 }
 
-int ff_hevc_sao_merge_left_flag_decode(HEVCContext *s, int c_idx)
+int ff_hevc_sao_merge_left_flag_decode(HEVCContext *s)
 {
     HEVCCabacContext *cc = &s->cc;
-    const int8_t ctx_idx_inc[1] = { c_idx };
+    const int8_t ctx_idx_inc[1] = { 0 };
 
     cc->elem = SAO_MERGE_LEFT_FLAG;
     cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 0;
-    cc->ctx_idx_offset = 3 * cc->init_type;
+    cc->ctx_idx_offset = cc->init_type;
     cc->ctx_idx_inc = ctx_idx_inc;
 
     return fl_binarization(s, 1);

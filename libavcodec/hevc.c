@@ -278,17 +278,12 @@ static int decode_nal_slice_header(HEVCContext *s)
 /**
  * 7.3.4.1
  */
-static int sao_param(HEVCContext *s, int rx, int ry, int c_idx)
+static int sao_param(HEVCContext *s, int rx, int ry)
 {
-    int bit_depth = c_idx ? s->sps->bit_depth_chroma: s->sps->bit_depth_luma;
-    int shift = bit_depth - FFMIN(bit_depth, 10);
-
     int sao_merge_left_flag = 0;
     int sao_merge_up_flag = 0;
 
     struct SAOParams *sao = &CTB(s->sao, rx, ry);
-
-    sao->type_idx[c_idx] = 0;
 
     if (rx > 0) {
         int left_ctb_in_slice = (s->ctb_addr_in_slice > 0);
@@ -296,7 +291,7 @@ static int sao_param(HEVCContext *s, int rx, int ry, int c_idx)
             (s->pps->tile_id[s->ctb_addr_ts] ==
              s->pps->tile_id[s->pps->ctb_addr_rs_to_ts[s->ctb_addr_rs - 1]]);
         if (left_ctb_in_slice && left_ctb_in_tile)
-            sao_merge_left_flag = ff_hevc_sao_merge_left_flag_decode(s, c_idx);
+            sao_merge_left_flag = ff_hevc_sao_merge_left_flag_decode(s);
     }
     if (ry > 0 && !sao_merge_left_flag) {
         int up_ctb_in_slice =
@@ -307,29 +302,38 @@ static int sao_param(HEVCContext *s, int rx, int ry, int c_idx)
         if (up_ctb_in_slice && up_ctb_in_tile)
             sao_merge_up_flag = ff_hevc_cabac_decode(s, SAO_MERGE_UP_FLAG);
     }
-    set_sao(type_idx[c_idx], ff_hevc_cabac_decode(s, SAO_TYPE_IDX));
-    av_log(s->avctx, AV_LOG_DEBUG, "sao_type_idx: %d\n",
-           sao->type_idx[c_idx]);
-    if (sao->type_idx[c_idx] == SAO_BAND)
-        set_sao(band_position[c_idx], ff_hevc_cabac_decode(s, SAO_BAND_POSITION));
+    for (int c_idx = 0; c_idx < 3; c_idx++) {
+        int bit_depth = c_idx ? s->sps->bit_depth_chroma: s->sps->bit_depth_luma;
+        int shift = bit_depth - FFMIN(bit_depth, 10);
 
-    if (sao->type_idx[c_idx] != SAO_NOT_APPLIED)
-        for (int i = 0; i < 4; i++)
-            set_sao(offset_abs[c_idx][i], ff_hevc_sao_offset_abs_decode(s, bit_depth));
+        if (!s->sh.slice_sample_adaptive_offset_flag[c_idx])
+            continue;
 
-    if (sao->type_idx[c_idx] == SAO_BAND)
-        for (int i = 0; i < 4; i++)
-            if (sao->offset_abs[c_idx][i])
-                set_sao(offset_sign[c_idx][i], ff_hevc_sao_offset_sign_decode(s));
+        sao->type_idx[c_idx] = 0;
+        set_sao(type_idx[c_idx], ff_hevc_cabac_decode(s, SAO_TYPE_IDX));
+        av_log(s->avctx, AV_LOG_DEBUG, "sao_type_idx: %d\n",
+               sao->type_idx[c_idx]);
+        if (sao->type_idx[c_idx] == SAO_BAND)
+            set_sao(band_position[c_idx], ff_hevc_cabac_decode(s, SAO_BAND_POSITION));
 
-    // Inferred parameters
-    for (int i = 0; i < 4; i++) {
-        sao->offset_val[c_idx][i+1] = sao->offset_abs[c_idx][i] << shift;
-        if (sao->type_idx[c_idx] != SAO_BAND) {
-            if (i > 1)
+        if (sao->type_idx[c_idx] != SAO_NOT_APPLIED)
+            for (int i = 0; i < 4; i++)
+                set_sao(offset_abs[c_idx][i], ff_hevc_sao_offset_abs_decode(s, bit_depth));
+
+        if (sao->type_idx[c_idx] == SAO_BAND)
+            for (int i = 0; i < 4; i++)
+                if (sao->offset_abs[c_idx][i])
+                    set_sao(offset_sign[c_idx][i], ff_hevc_sao_offset_sign_decode(s));
+
+        // Inferred parameters
+        for (int i = 0; i < 4; i++) {
+            sao->offset_val[c_idx][i+1] = sao->offset_abs[c_idx][i] << shift;
+            if (sao->type_idx[c_idx] != SAO_BAND) {
+                if (i > 1)
+                    sao->offset_val[c_idx][i+1] = -sao->offset_val[c_idx][i+1];
+            } else if (sao->offset_sign[c_idx][i+1]) {
                 sao->offset_val[c_idx][i+1] = -sao->offset_val[c_idx][i+1];
-        } else if (sao->offset_sign[c_idx][i+1]) {
-            sao->offset_val[c_idx][i+1] = -sao->offset_val[c_idx][i+1];
+            }
         }
     }
     return 0;
@@ -1341,10 +1345,10 @@ static int decode_nal_slice_data(HEVCContext *s)
         y_ctb = INVERSE_RASTER_SCAN(s->ctb_addr_rs, ctb_size, ctb_size, s->sps->pic_width_in_luma_samples, 1);
         s->num_pcm_block = 0;
         s->ctb_addr_in_slice = s->ctb_addr_rs - (s->sh.slice_address >> s->pps->SliceGranularity);
-        for (int i = 0; i < 3; i++) {
-            if (s->sh.slice_sample_adaptive_offset_flag[i])
-                sao_param(s, x_ctb >> s->sps->Log2CtbSize, y_ctb >> s->sps->Log2CtbSize, i);
-        }
+        if (s->sh.slice_sample_adaptive_offset_flag[0] ||
+            s->sh.slice_sample_adaptive_offset_flag[1] ||
+            s->sh.slice_sample_adaptive_offset_flag[2])
+                sao_param(s, x_ctb >> s->sps->Log2CtbSize, y_ctb >> s->sps->Log2CtbSize);
         for (int i = 0; i < 3; i++) {
             if (s->sh.slice_alf_flag[i]) {
                 av_log(s->avctx, AV_LOG_ERROR, "TODO: slice_alf_flag\n");

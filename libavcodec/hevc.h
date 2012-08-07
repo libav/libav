@@ -552,7 +552,7 @@ int ff_hevc_decode_nal_sei(HEVCContext *s);
 
 void ff_hevc_cabac_init(HEVCContext *s);
 int ff_hevc_cabac_decode(HEVCContext *s, enum SyntaxElement elem);
-int ff_hevc_sao_merge_left_flag_decode(HEVCContext *s, int c_idx);
+int ff_hevc_sao_merge_left_flag_decode(HEVCContext *s);
 int ff_hevc_sao_offset_abs_decode(HEVCContext *s, int bit_depth);
 int ff_hevc_sao_offset_sign_decode(HEVCContext *s);
 int ff_hevc_cu_transquant_bypass_flag_decode(HEVCContext *s);
