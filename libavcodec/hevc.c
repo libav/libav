@@ -1059,11 +1059,6 @@ static void prediction_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
                     s->pu.intra_pred_mode_c = (s->pu.intra_pred_mode[0] == 1) ? 34 : 1;
                     break;
                 case 4:
-                    if (s->sps->chroma_pred_from_luma_enabled_flag == 1) {
-                        s->pu.intra_pred_mode_c = INTRA_FROM_LUMA;
-                        break;
-                    }
-                case 5:
                     s->pu.intra_pred_mode_c = s->pu.intra_pred_mode[0];
                     break;
                 }

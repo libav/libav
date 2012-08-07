@@ -177,7 +177,6 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
         goto err;
     }
 
-    sps->chroma_pred_from_luma_enabled_flag         = get_bits1(gb);
     sps->transform_skip_enabled_flag                = get_bits1(gb);
     sps->seq_loop_filter_across_slices_enabled_flag = get_bits1(gb);
     sps->asymmetric_motion_partitions_enabled_flag  = get_bits1(gb);

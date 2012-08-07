@@ -599,15 +599,11 @@ static int part_mode_binarization(HEVCContext *s, int unused)
  */
 static int intra_chroma_pred_mode_binarization(HEVCContext *s, int unused)
 {
-    int cond = s->sps->chroma_pred_from_luma_enabled_flag;
     int ret = 0;
     int i = 0;
 
     if (decode_bin(s, i++) == 0) // value 0
-        return cond ? 5 : 4;
-    if (cond && decode_bin(s, i++) == 0) // value 10
         return 4;
-    // Values 11XX if cond and 1XX otherwise,
     // the last two bits are bypass-coded
     s->cc.ctx_idx_offset = -1;
     ret = decode_bin(s, i++) << 1;

@@ -148,7 +148,6 @@ typedef struct {
 
     int scaling_list_enable_flag;
 
-    uint8_t chroma_pred_from_luma_enabled_flag;
     uint8_t transform_skip_enabled_flag;
     uint8_t deblocking_filter_in_aps_enabled_flag;
 
@@ -437,8 +436,7 @@ enum IntraPredMode {
     INTRA_ANGULAR_31,
     INTRA_ANGULAR_32,
     INTRA_ANGULAR_33,
-    INTRA_ANGULAR_34,
-    INTRA_FROM_LUMA
+    INTRA_ANGULAR_34
 };
 
 struct PUContent {
