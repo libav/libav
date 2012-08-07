@@ -675,8 +675,8 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
         //TODO: don't hardcode QP
         int qp = c_idx ? 31 : 32;
         s->hevcdsp.dequant(coeffs, log2_trafo_width, qp, bit_depth);
-        if (c_idx == 0 && log2_trafo_width == 2) {
-            s->hevcdsp.transform_4x4_luma_add(dst, coeffs, stride, s->sps->bit_depth_luma);
+        if (s->cu.pred_mode == MODE_INTRA && c_idx == 0 && log2_trafo_width == 2) {
+            s->hevcdsp.transform_4x4_luma_add(dst, coeffs, stride, bit_depth);
         } else {
             s->hevcdsp.transform_add[log2_trafo_width-2](dst, coeffs, stride, bit_depth);
         }
