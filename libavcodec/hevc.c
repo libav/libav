@@ -152,8 +152,7 @@ static int decode_nal_slice_header(HEVCContext *s)
 
     if (!sh->first_slice_in_pic_flag) {
         slice_address_length = av_ceil_log2_c(s->sps->PicWidthInCtbs *
-                                              s->sps->PicHeightInCtbs) +
-                               s->pps->SliceGranularity;
+                                              s->sps->PicHeightInCtbs);
         sh->slice_address = get_bits(gb, slice_address_length);
     }
 
@@ -256,10 +255,9 @@ static int decode_nal_slice_header(HEVCContext *s)
 
     // Inferred parameters
     sh->slice_qp = 26 + s->pps->pic_init_qp_minus26 + sh->slice_qp_delta;
-    sh->slice_ctb_addr_rs = sh->slice_address >> s->pps->SliceGranularity;
+    sh->slice_ctb_addr_rs = sh->slice_address;
     sh->slice_cb_addr_zs = sh->slice_address <<
-                        ((s->sps->log2_diff_max_min_coding_block_size -
-                          s->pps->SliceGranularity) << 1);
+                        (s->sps->log2_diff_max_min_coding_block_size << 1);
 
     return 0;
 }
@@ -1265,16 +1263,14 @@ static int coding_tree(HEVCContext *s, int x0, int y0, int log2_cb_size, int cb_
                x0, y0, (1 << log2_cb_size), (1 << (s->sps->log2_min_coding_block_size
                                                + s->sps->log2_diff_max_min_coding_block_size)));
         if ((!((x0 + (1 << log2_cb_size)) %
-               ((1 << (s->sps->log2_min_coding_block_size +
-                       s->sps->log2_diff_max_min_coding_block_size)) >>
-                s->pps->slice_granularity)) ||
+               (1 << (s->sps->log2_min_coding_block_size +
+                       s->sps->log2_diff_max_min_coding_block_size))) ||
              (x0 + (1 << log2_cb_size) >= s->sps->pic_width_in_luma_samples)) &&
             (!((y0 + (1 << log2_cb_size)) %
-               ((1 << (s->sps->log2_min_coding_block_size +
-                       s->sps->log2_diff_max_min_coding_block_size)) >>
-                s->pps->slice_granularity)) ||
-             (y0 + (1 << log2_cb_size) >= s->sps->pic_height_in_luma_samples)) &&
-            s->num_pcm_block == 0) {
+               (1 << (s->sps->log2_min_coding_block_size +
+                       s->sps->log2_diff_max_min_coding_block_size))) ||
+                (y0 + (1 << log2_cb_size) >= s->sps->pic_height_in_luma_samples)) &&
+               s->num_pcm_block == 0) {
             int end_of_slice_flag = ff_hevc_cabac_decode(s, END_OF_SLICE_FLAG);
             return !end_of_slice_flag;
         } else {
@@ -1302,7 +1298,7 @@ static int decode_nal_slice_data(HEVCContext *s)
         x_ctb = INVERSE_RASTER_SCAN(s->ctb_addr_rs, ctb_size, ctb_size, s->sps->pic_width_in_luma_samples, 0);
         y_ctb = INVERSE_RASTER_SCAN(s->ctb_addr_rs, ctb_size, ctb_size, s->sps->pic_width_in_luma_samples, 1);
         s->num_pcm_block = 0;
-        s->ctb_addr_in_slice = s->ctb_addr_rs - (s->sh.slice_address >> s->pps->SliceGranularity);
+        s->ctb_addr_in_slice = s->ctb_addr_rs - s->sh.slice_address;
         if (s->sh.slice_sample_adaptive_offset_flag[0] ||
             s->sh.slice_sample_adaptive_offset_flag[1])
                 sao_param(s, x_ctb >> s->sps->Log2CtbSize, y_ctb >> s->sps->Log2CtbSize);

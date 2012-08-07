@@ -190,7 +190,6 @@ typedef struct {
     int pic_init_qp_minus26;
 
     uint8_t constrained_intra_pred_flag;
-    uint8_t slice_granularity;
 
     uint8_t cu_qp_delta_enabled_flag;
     int diff_cu_qp_delta_depth;
@@ -226,8 +225,6 @@ typedef struct {
     uint8_t pps_extension_data_flag;
 
     // Inferred parameters
-    int SliceGranularity;
-
     int *column_width; ///< ColumnWidth
     int *row_height; ///< RowHeight
     int *col_bd; ///< ColBd

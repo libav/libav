@@ -276,7 +276,6 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
     pps->pic_init_qp_minus26 = get_se_golomb(gb);
 
     pps->constrained_intra_pred_flag = get_bits1(gb);
-    pps->slice_granularity           = get_bits(gb, 2);
 
     pps->cu_qp_delta_enabled_flag = get_bits1(gb);
     if (pps->cu_qp_delta_enabled_flag)
@@ -341,8 +340,6 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
     pps->slice_header_extension_present_flag = get_bits1(gb);
 
     // Inferred parameters
-    pps->SliceGranularity = pps->slice_granularity << 1;
-
     pps->col_bd = av_malloc((pps->num_tile_columns + 1) * sizeof(int));
     pps->row_bd = av_malloc((pps->num_tile_rows + 1) * sizeof(int));
     if (pps->col_bd == NULL || pps->row_bd == NULL)
