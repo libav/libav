@@ -817,7 +817,7 @@ static void transform_tree(HEVCContext *s, int x0L, int y0L, int x0C, int y0C,
         trafo_depth < s->cu.max_trafo_depth &&
         !(s->cu.intra_split_flag && trafo_depth == 0)) {
         SAMPLE(s->tt.split_transform_flag[trafo_depth], x0L, y0L) =
-            ff_hevc_split_transform_flag_decode(s, trafo_depth);
+            ff_hevc_split_transform_flag_decode(s, log2_trafo_size);
     } else {
         SAMPLE(s->tt.split_transform_flag[trafo_depth], x0L, y0L) =
             (log2_trafo_size >

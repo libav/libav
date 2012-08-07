@@ -206,7 +206,7 @@ static const int8_t ctx_idx_offsets[][3] =
     { -1, 0, 1 }, //mvp_l0_flag
     { -1, 0, 1 }, //mvp_l1_flag
     { -1, 0, 1 }, //no_residual_data_flag
-    { 0, 4, 8 }, //split_transform_flag
+    { 0, 3, 6 }, //split_transform_flag
     { 0, 2, 4 }, //cbf_luma
     { 0, 3, 6 }, //cbf_cb, cbf_cr
     { 0, 1, 2 }, //transform_skip_flag[][][0]
@@ -313,18 +313,18 @@ static const int elem_offset[] =
     84, //mvp_l1_flag
     86, //no_residual_data_flag
     88, //split_transform_flag
-    100, //cbf_luma
-    106, //cbf_cb, cbf_cr
-    115, //transform_skip_flag[][][0]
-    115, //transform_skip_flag[][][1|2]
-    121, //last_significant_coeff_x_prefix
-    175, //last_significant_coeff_y_prefix
+    97, //cbf_luma
+    103, //cbf_cb, cbf_cr
+    112, //transform_skip_flag[][][0]
+    112, //transform_skip_flag[][][1|2]
+    118, //last_significant_coeff_x_prefix
+    172, //last_significant_coeff_y_prefix
     -1, //last_significant_coeff_x_suffix
     -1, //last_significant_coeff_y_suffix
-    229, //significant_coeff_group_flag
-    241, //significant_coeff_flag
-    376, //coeff_abs_level_greater1_flag
-    448, //coeff_abs_level_greater2_flag
+    226, //significant_coeff_group_flag
+    238, //significant_coeff_flag
+    373, //coeff_abs_level_greater1_flag
+    445, //coeff_abs_level_greater2_flag
     -1, //coeff_abs_level_remaining
     -1, //coeff_sign_flag
 };
@@ -359,7 +359,7 @@ static const uint8_t init_values[CTX_IDX_COUNT] =
     140, 198, 169, 198, //abs_mvd_greater0_flag, abs_mvd_greater1_flag
     168, 168, //mvp_l0_flag, mvp_l1_flag
     79, 79, //no_residual_data_flag
-    154, 224, 167, 122, 154, 124, 138, 94, 154, 153, 138, 138, //split_transform_flag
+    224, 167, 122, 124, 138, 94, 153, 138, 138, //split_transform_flag
     111, 141, 153, 111, 153, 111, //cbf_luma
     94, 138, 182, 149, 107, 167, 149, 92, 167, //cbf_cb, cbf_cr
     139, 139, 139, 139, 139, 139, //transform_skip_flag
@@ -799,16 +799,16 @@ int ff_hevc_part_mode_decode(HEVCContext *s, int log2_cb_size)
 }
 
 
-int ff_hevc_split_transform_flag_decode(HEVCContext *s, int trafo_depth)
+int ff_hevc_split_transform_flag_decode(HEVCContext *s, int log2_trafo_size)
 {
     HEVCCabacContext *cc = &s->cc;
-    const int8_t ctx_idx_inc[1] = { s->ct.depth + trafo_depth };
+    const int8_t ctx_idx_inc[1] = { 5 - log2_trafo_size };
 
     cc->elem = SPLIT_TRANSFORM_FLAG;
     cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 0;
-    cc->ctx_idx_offset = 4 * cc->init_type;
+    cc->ctx_idx_offset = 3 * cc->init_type;
     cc->ctx_idx_inc = ctx_idx_inc;
 
     return fl_binarization(s, 1);
