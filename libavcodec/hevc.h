@@ -193,7 +193,10 @@ typedef struct {
 
     uint8_t constrained_intra_pred_flag;
     uint8_t slice_granularity;
+
+    uint8_t cu_qp_delta_enabled_flag;
     int diff_cu_qp_delta_depth;
+
     int cb_qp_offset;
     int cr_qp_offset;
     uint8_t weighted_pred_flag;

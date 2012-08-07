@@ -706,7 +706,7 @@ static void transform_unit(HEVCContext *s, int x0L, int  y0L, int x0C, int y0C,
     if (s->tt.cbf_luma ||
         SAMPLE(s->tt.cbf_cb[trafo_depth], x0C, y0C) ||
         SAMPLE(s->tt.cbf_cr[trafo_depth], x0C, y0C)) {
-        if ((s->pps->diff_cu_qp_delta_depth > 0) && !s->tu.is_cu_qp_delta_coded) {
+        if (s->pps->cu_qp_delta_enabled_flag && !s->tu.is_cu_qp_delta_coded) {
             s->tu.cu_qp_delta = ff_hevc_cabac_decode(s, CU_QP_DELTA);
             s->tu.is_cu_qp_delta_coded = 1;
         }

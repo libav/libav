@@ -280,7 +280,9 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
     pps->constrained_intra_pred_flag = get_bits1(gb);
     pps->slice_granularity           = get_bits(gb, 2);
 
-    pps->diff_cu_qp_delta_depth = get_ue_golomb(gb);
+    pps->cu_qp_delta_enabled_flag = get_bits1(gb);
+    if (pps->cu_qp_delta_enabled_flag)
+        pps->diff_cu_qp_delta_depth = get_ue_golomb(gb);
 
     pps->cb_qp_offset = get_se_golomb(gb);
     pps->cr_qp_offset = get_se_golomb(gb);
