@@ -375,6 +375,8 @@ static av_always_inline void get_coord(enum ScanType scan_idx, const uint8_t *sc
 static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width,
                             int log2_trafo_height, enum ScanType scan_idx, int c_idx)
 {
+    int transform_skip_flag = 0;
+
     int last_significant_coeff_x, last_significant_coeff_y;
     int num_coeff = 0;
     int num_last_subset;
@@ -407,8 +409,7 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
     if (s->sps->transform_skip_enabled_flag && !s->cu.cu_transquant_bypass_flag &&
         (s->cu.pred_mode == MODE_INTRA) &&
         (log2_trafo_width == 2) && (log2_trafo_height == 2)) {
-        av_log(s->avctx, AV_LOG_ERROR, "TODO: transform_skip_flag\n");
-        return;
+        transform_skip_flag = ff_hevc_transform_skip_flag_decode(s, c_idx);
     }
 
     last_significant_coeff_x =
@@ -674,8 +675,27 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
         //TODO: don't hardcode QP
         int qp = c_idx ? 31 : 32;
         s->hevcdsp.dequant(coeffs, log2_trafo_width, qp, bit_depth);
-        if (s->cu.pred_mode == MODE_INTRA && c_idx == 0 && log2_trafo_width == 2) {
-            s->hevcdsp.transform_4x4_luma_add(dst, coeffs, stride, bit_depth);
+
+        if (transform_skip_flag) {
+#if REFERENCE_ENCODER_QUIRKS
+            int shift = 15 - bit_depth - log2_trafo_width;
+            if (shift > 0) {
+                int offset = 1 << (shift - 1);
+                for (int y = 0; y < size; y++)
+                    for (int x = 0; x < size; x++)
+                        dst[y * stride + x] += (coeffs[y * size + x] + offset) >> shift;
+            } else {
+                for (int y = 0; y < size; y++)
+                    for (int x = 0; x < size; x++)
+                        dst[y * stride + x] += coeffs[y * size + x] << (-shift);
+            }
+#else
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                    dst[y * stride + x] += coeffs[y * size + x] << 7;
+#endif
+        } else if (s->cu.pred_mode == MODE_INTRA && c_idx == 0 && log2_trafo_width == 2) {
+                s->hevcdsp.transform_4x4_luma_add(dst, coeffs, stride, bit_depth);
         } else {
             s->hevcdsp.transform_add[log2_trafo_width-2](dst, coeffs, stride, bit_depth);
         }
