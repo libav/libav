@@ -576,8 +576,7 @@ int ff_hevc_significant_coeff_flag_decode(HEVCContext *s, int c_idx, int x_c, in
 int ff_hevc_coeff_abs_level_greater1_flag_decode(HEVCContext *s, int c_idx,
                                                  int i, int n,
                                                  int first_greater1_coeff_idx,
-                                                 int first_subset,
-                                                 int greater1_flag);
+                                                 int first_subset);
 int ff_hevc_coeff_abs_level_greater2_flag_decode(HEVCContext *s, int c_idx,
                                                  int i, int n);
 int ff_hevc_coeff_abs_level_remaining(HEVCContext *s, int n, int base_level);

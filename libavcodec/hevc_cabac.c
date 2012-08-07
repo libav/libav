@@ -1019,8 +1019,7 @@ static int ctx_set = 0;
 int ff_hevc_coeff_abs_level_greater1_flag_decode(HEVCContext *s, int c_idx,
                                                  int i, int n,
                                                  int first_elem,
-                                                 int first_subset,
-                                                 int num_greater1)
+                                                 int first_subset)
 {
     HEVCCabacContext *cc = &s->cc;
     int8_t ctx_idx_inc[1];
@@ -1032,22 +1031,14 @@ int ff_hevc_coeff_abs_level_greater1_flag_decode(HEVCContext *s, int c_idx,
     cc->state = states + elem_offset[cc->elem];
 
     if (first_elem) {
-        greater1_ctx = 1;
         ctx_set = (i > 0 && c_idx == 0) ? 2 : 0;
 
-        if (!first_subset && num_greater1 > 0)
+        if (!first_subset && greater1_ctx == 0)
             ctx_set++;
-    } else {
-        if (greater1_ctx > 0) {
-            if (last_coeff_abs_level_greater1_flag) {
-                greater1_ctx = 0;
-            } else {
-                greater1_ctx++;
-            }
-        }
+        greater1_ctx = 1;
     }
 
-    ctx_idx_inc[0] = (ctx_set * 4) + FFMIN(3, greater1_ctx);
+    ctx_idx_inc[0] = (ctx_set * 4) + greater1_ctx;
     if (c_idx > 0)
         ctx_idx_inc[0] += 16;
 
@@ -1056,6 +1047,13 @@ int ff_hevc_coeff_abs_level_greater1_flag_decode(HEVCContext *s, int c_idx,
     cc->ctx_idx_inc = ctx_idx_inc;
 
     last_coeff_abs_level_greater1_flag = fl_binarization(s, 1);
+
+    if (last_coeff_abs_level_greater1_flag) {
+        greater1_ctx = 0;
+    } else if (greater1_ctx > 0 && greater1_ctx < 3) {
+        greater1_ctx++;
+    }
+
     return last_coeff_abs_level_greater1_flag;
 }
 

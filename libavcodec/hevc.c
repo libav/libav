@@ -378,7 +378,6 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
     int last_significant_coeff_x, last_significant_coeff_y;
     int num_coeff = 0;
     int num_last_subset;
-    int num_greater1 = 0;
     int trafo_height, trafo_width;
     int x_cg_last_sig, y_cg_last_sig;
 
@@ -599,8 +598,7 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
                     coeff_abs_level_greater1_flag[n] =
                         ff_hevc_coeff_abs_level_greater1_flag_decode(s, c_idx, i, n,
                                                                      (num_sig_coeff == 0),
-                                                                     (i == num_last_subset),
-                                                                     num_greater1);
+                                                                     (i == num_last_subset));
                     num_sig_coeff++;
                     if (coeff_abs_level_greater1_flag[n] &&
                         first_greater1_coeff_idx == -1)
@@ -636,7 +634,6 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
 
         num_sig_coeff = 0;
         sum_abs = 0;
-        num_greater1 >>= 1;
         first_elem = 1;
         for(int n = 15; n >= 0; n--) {
             int trans_coeff_level = 0;
@@ -652,8 +649,6 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
                         ff_hevc_coeff_abs_level_remaining(s, first_elem, trans_coeff_level);
                     first_elem = 0;
                 }
-                if (trans_coeff_level > 1)
-                    num_greater1++;
                 if (s->pps->sign_data_hiding_flag && sign_hidden) {
                     sum_abs += trans_coeff_level;
                     if (n == first_nz_pos_in_cg && (sum_abs%2 == 1))
