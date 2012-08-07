@@ -180,8 +180,8 @@ static int decode_nal_slice_header(HEVCContext *s)
         if (s->sps->sample_adaptive_offset_enabled_flag) {
             sh->slice_sample_adaptive_offset_flag[0] = get_bits1(gb);
             if (sh->slice_sample_adaptive_offset_flag[0]) {
-                sh->slice_sample_adaptive_offset_flag[1] = get_bits1(gb);
-                sh->slice_sample_adaptive_offset_flag[2] = get_bits1(gb);
+                sh->slice_sample_adaptive_offset_flag[2] =
+                    sh->slice_sample_adaptive_offset_flag[1] = get_bits1(gb);
             }
         }
 
@@ -309,8 +309,12 @@ static int sao_param(HEVCContext *s, int rx, int ry)
         if (!s->sh.slice_sample_adaptive_offset_flag[c_idx])
             continue;
 
-        sao->type_idx[c_idx] = 0;
-        set_sao(type_idx[c_idx], ff_hevc_cabac_decode(s, SAO_TYPE_IDX));
+        if (c_idx == 2) {
+            sao->type_idx[2] = sao->type_idx[1];
+        } else {
+            sao->type_idx[c_idx] = 0;
+            set_sao(type_idx[c_idx], ff_hevc_cabac_decode(s, SAO_TYPE_IDX));
+        }
         av_log(s->avctx, AV_LOG_DEBUG, "sao_type_idx: %d\n",
                sao->type_idx[c_idx]);
         if (sao->type_idx[c_idx] == SAO_BAND)
@@ -1300,8 +1304,7 @@ static int decode_nal_slice_data(HEVCContext *s)
         s->num_pcm_block = 0;
         s->ctb_addr_in_slice = s->ctb_addr_rs - (s->sh.slice_address >> s->pps->SliceGranularity);
         if (s->sh.slice_sample_adaptive_offset_flag[0] ||
-            s->sh.slice_sample_adaptive_offset_flag[1] ||
-            s->sh.slice_sample_adaptive_offset_flag[2])
+            s->sh.slice_sample_adaptive_offset_flag[1])
                 sao_param(s, x_ctb >> s->sps->Log2CtbSize, y_ctb >> s->sps->Log2CtbSize);
         for (int i = 0; i < 3; i++) {
             if (s->sh.slice_alf_flag[i]) {
