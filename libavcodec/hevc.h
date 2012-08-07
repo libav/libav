@@ -154,7 +154,6 @@ typedef struct {
 
     uint8_t seq_loop_filter_across_slices_enabled_flag;
     uint8_t asymmetric_motion_partitions_enabled_flag;
-    uint8_t nsrqt_enabled_flag;
     uint8_t sample_adaptive_offset_enabled_flag;
     uint8_t adaptive_loop_filter_enabled_flag;
 
@@ -469,8 +468,6 @@ typedef struct TransformTree {
 
     // Inferred parameters
     uint8_t inter_split_flag;
-    uint8_t inter_tb_split_direction_l;
-    uint8_t inter_tb_split_direction_c;
 } TransformTree;
 
 typedef struct TransformUnit {

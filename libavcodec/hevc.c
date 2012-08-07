@@ -785,31 +785,6 @@ static void transform_tree(HEVCContext *s, int x0L, int y0L, int x0C, int y0C,
     int x1L, y1L, x2L, y2L, x3L, y3L;
     int x1C, y1C, x2C, y2C, x3C, y3C;
 
-    //6.6
-    if (s->sps->nsrqt_enabled_flag &&
-        ((log2_trafo_size == log2_max_trafo_size
-          || (log2_trafo_size < log2_max_trafo_size &&
-              trafo_depth == 0))
-         && log2_trafo_size > (s->sps->log2_min_transform_block_size + 1)
-         && (s->cu.part_mode == PART_2NxN
-             || s->cu.part_mode == PART_2NxnU
-             || s->cu.part_mode == PART_2NxnD))
-        || (log2_trafo_size == (s->sps->log2_min_transform_block_size + 1)
-            && log2_trafo_width < log2_trafo_height)) {
-        s->tt.inter_tb_split_direction_l = 0;
-    } else if (s->sps->nsrqt_enabled_flag
-               && ((log2_trafo_size == log2_max_trafo_size
-                    || (log2_trafo_size < log2_max_trafo_size && trafo_depth == 0))
-                   && log2_trafo_size > (s->sps->log2_min_transform_block_size + 1)
-                   && (s->cu.part_mode == PART_Nx2N || s->cu.part_mode == PART_nLx2N
-                       || s->cu.part_mode == PART_nRx2N))
-               || (log2_trafo_size == (s->sps->log2_min_transform_block_size + 1)
-                   && log2_trafo_width > log2_trafo_height)) {
-        s->tt.inter_tb_split_direction_l = 1;
-    } else {
-        s->tt.inter_tb_split_direction_l = 2;
-    }
-
     if (trafo_depth > 0 && log2_trafo_size == 2) {
         SAMPLE(s->tt.cbf_cb[trafo_depth], x0C, y0C) =
             SAMPLE(s->tt.cbf_cb[trafo_depth - 1], xBase, yBase);
@@ -829,7 +804,6 @@ static void transform_tree(HEVCContext *s, int x0L, int y0L, int x0C, int y0C,
     s->tt.inter_split_flag = (s->sps->max_transform_hierarchy_depth_inter == 0 &&
                               s->cu.pred_mode == MODE_INTER &&
                               s->cu.part_mode != PART_2Nx2N && trafo_depth == 0);
-    s->tt.inter_tb_split_direction_c = 2;
 
     if (log2_trafo_size <= s->sps->log2_min_transform_block_size +
         s->sps->log2_diff_max_min_coding_block_size &&
@@ -863,47 +837,20 @@ static void transform_tree(HEVCContext *s, int x0L, int y0L, int x0C, int y0C,
     }
 
     if (SAMPLE(s->tt.split_transform_flag[trafo_depth], x0L, y0L)) {
-        if (s->tt.inter_tb_split_direction_l == 2) {
-            x1L = x0L + (trafo_width >> 1);
-            y1L = y0L;
-            x2L = x0L;
-            y2L = y0L + (trafo_height >> 1);
-            x3L = x1L;
-            y3L = y2L;
-        } else {
-            x1L = x0L + (trafo_width >> 2) *
-                  s->tt.inter_tb_split_direction_l;
-            y1L = y0L + (trafo_height >> 2) *
-                  (1 - s->tt.inter_tb_split_direction_l);
-            x2L = x1L + (trafo_width >> 2) *
-                  s->tt.inter_tb_split_direction_l;
-            y2L = y1L + (trafo_height >> 2)
-                          * (1 - s->tt.inter_tb_split_direction_l);
-            x3L = x2L + (trafo_width >> 2) *
-                  s->tt.inter_tb_split_direction_l;
-            y3L = y2L + (trafo_height >> 2) *
-                  (1 - s->tt.inter_tb_split_direction_l);
-        }
-        if (s->tt.inter_tb_split_direction_c == 2 && log2_trafo_size > 3) {
+        x1L = x0L + (trafo_width >> 1);
+        y1L = y0L;
+        x2L = x0L;
+        y2L = y0L + (trafo_height >> 1);
+        x3L = x1L;
+        y3L = y2L;
+
+        if (log2_trafo_size > 3) {
             x1C = x0C + (trafo_width >> 1);
             y1C = y0C;
             x2C = x0C;
             y2C = y0C + (trafo_height >> 1);
             x3C = x1C;
             y3C = y2C;
-        } else if (log2_trafo_size > 3) {
-            x1C = x0C + (trafo_width >> 2) *
-                  s->tt.inter_tb_split_direction_c;
-            y1C = y0C + (trafo_height >> 2) *
-                  (1 - s->tt.inter_tb_split_direction_c);
-            x2C = x1C + (trafo_width >> 2) *
-                  s->tt.inter_tb_split_direction_c;
-            y2C = y1C + (trafo_height >> 2) *
-                  (1 - s->tt.inter_tb_split_direction_c);
-            x3C = x2C + (trafo_width >> 2) *
-                  s->tt.inter_tb_split_direction_c;
-            y3C = y2C + (trafo_height >> 2) *
-                  (1 - s->tt.inter_tb_split_direction_c);
         } else {
             x1C = x0C;
             y1C = y0C;
@@ -912,10 +859,7 @@ static void transform_tree(HEVCContext *s, int x0L, int y0L, int x0C, int y0C,
             x3C = x0C;
             y3C = y0C;
         }
-        if (s->tt.inter_tb_split_direction_l != 2) {
-            log2_trafo_width = log2_trafo_width - 2 * s->tt.inter_tb_split_direction_l + 1;
-            log2_trafo_height = log2_trafo_height + 2 * s->tt.inter_tb_split_direction_l - 1;
-        }
+
         transform_tree(s, x0L, y0L, x0C, y0C, x0C, y0C, log2_cb_size,
                        log2_trafo_width - 1, log2_trafo_height - 1, trafo_depth + 1, 0);
         transform_tree(s, x1L, y1L, x1C, y1C, x0C, y0C, log2_cb_size,
