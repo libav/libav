@@ -75,11 +75,6 @@ typedef struct {
 
 #define MAX_TB_SIZE 32
 
-/**
- * Not yet specified!
- */
-#define MAX_APS_COUNT 256
-
 struct VPS {
     int vps_max_temporal_layers; ///< vps_max_temporal_layers_minus1 + 1
     int vps_max_layers; ///< vps_max_layers_minus1 + 1
@@ -154,7 +149,6 @@ typedef struct {
     uint8_t seq_loop_filter_across_slices_enabled_flag;
     uint8_t asymmetric_motion_partitions_enabled_flag;
     uint8_t sample_adaptive_offset_enabled_flag;
-    uint8_t adaptive_loop_filter_enabled_flag;
 
     uint8_t temporal_id_nesting_flag;
 
@@ -236,10 +230,6 @@ typedef struct {
     int *min_cb_addr_zs; ///< MinCbAddrZS
 } PPS;
 
-typedef struct {
-    uint8_t aps_alf_flag[3];
-} APS;
-
 typedef enum {
     B_SLICE = 0,
     P_SLICE = 1,
@@ -261,8 +251,6 @@ typedef struct {
 
     uint8_t slice_sample_adaptive_offset_flag[3];
 
-    int aps_id;
-
     uint8_t cabac_init_flag;
     int slice_qp_delta;
 
@@ -271,7 +259,6 @@ typedef struct {
     int tc_offset; ///< tc_offset_div2 * 2
 
     int max_num_merge_cand; ///< 5 - 5_minus_max_num_merge_cand
-    uint8_t slice_alf_flag[3];
 
     uint8_t slice_loop_filter_across_slices_enabled_flag;
 
@@ -505,12 +492,10 @@ typedef struct HEVCContext {
     struct VPS *vps_list[MAX_VPS_COUNT];
     SPS *sps_list[MAX_SPS_COUNT];
     PPS *pps_list[MAX_PPS_COUNT];
-    APS *aps_list[MAX_APS_COUNT];
 
     struct VPS *vps;
     SPS *sps;
     PPS *pps;
-    APS *aps;
 
     SliceHeader sh;
     struct SAOParams *sao;
@@ -542,7 +527,6 @@ int ff_hevc_decode_short_term_rps(HEVCContext *s, int idx,
 int ff_hevc_decode_nal_vps(HEVCContext *s);
 int ff_hevc_decode_nal_sps(HEVCContext *s);
 int ff_hevc_decode_nal_pps(HEVCContext *s);
-int ff_hevc_decode_nal_aps(HEVCContext *s);
 int ff_hevc_decode_nal_sei(HEVCContext *s);
 
 void ff_hevc_cabac_init(HEVCContext *s);

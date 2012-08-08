@@ -184,20 +184,6 @@ static int decode_nal_slice_header(HEVCContext *s)
             }
         }
 
-        if (s->sps->adaptive_loop_filter_enabled_flag ||
-#if REFERENCE_ENCODER_QUIRKS
-            s->sps->sample_adaptive_offset_enabled_flag) {
-#else
-            0) {
-#endif
-            sh->aps_id = get_ue_golomb(gb);
-            if (sh->aps_id >= MAX_APS_COUNT || s->aps_list[sh->aps_id] == NULL) {
-                av_log(s->avctx, AV_LOG_ERROR, "APS id out of range: %d\n", sh->aps_id);
-                return -1;
-            }
-            s->aps = s->aps_list[sh->aps_id];
-        }
-
         if (sh->slice_type != I_SLICE) {
             av_log(s->avctx, AV_LOG_ERROR, "TODO: slice_type != I_SLICE\n");
             return -1;
@@ -229,14 +215,8 @@ static int decode_nal_slice_header(HEVCContext *s)
 #endif
             sh->max_num_merge_cand = 5 - get_ue_golomb(gb);
 
-        if (s->sps->adaptive_loop_filter_enabled_flag) {
-            for (int i = 0; i < 3; i++)
-                sh->slice_alf_flag[i] = get_bits1(gb);
-        }
-
         if (s->sps->seq_loop_filter_across_slices_enabled_flag
-            && (sh->slice_alf_flag[0] || sh->slice_alf_flag[1] ||
-                sh->slice_alf_flag[2] || sh->slice_sample_adaptive_offset_flag ||
+            && (sh->slice_sample_adaptive_offset_flag ||
                 !sh->disable_deblocking_filter_flag)) {
             sh->slice_loop_filter_across_slices_enabled_flag = get_bits1(gb);
         } else {
@@ -1265,12 +1245,6 @@ static int decode_nal_slice_data(HEVCContext *s)
         if (s->sh.slice_sample_adaptive_offset_flag[0] ||
             s->sh.slice_sample_adaptive_offset_flag[1])
                 sao_param(s, x_ctb >> s->sps->Log2CtbSize, y_ctb >> s->sps->Log2CtbSize);
-        for (int i = 0; i < 3; i++) {
-            if (s->sh.slice_alf_flag[i]) {
-                av_log(s->avctx, AV_LOG_ERROR, "TODO: slice_alf_flag\n");
-                return -1;
-            }
-        }
 
         more_data = coding_tree(s, x_ctb, y_ctb, s->sps->Log2CtbSize, 0);
         if (!more_data)
@@ -1344,9 +1318,6 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     case NAL_PPS:
         ff_hevc_decode_nal_pps(s);
         break;
-    case NAL_APS:
-        ff_hevc_decode_nal_aps(s);
-        break;
     case NAL_SEI:
         ff_hevc_decode_nal_sei(s);
         break;
@@ -1390,7 +1361,6 @@ static av_cold int hevc_decode_init(AVCodecContext *avctx)
     s->avctx = avctx;
     memset(s->sps_list, 0, sizeof(s->sps_list));
     memset(s->pps_list, 0, sizeof(s->pps_list));
-    memset(s->aps_list, 0, sizeof(s->aps_list));
     return 0;
 }
 
@@ -1422,9 +1392,6 @@ static av_cold int hevc_decode_free(AVCodecContext *avctx)
         }
         av_freep(&s->pps_list[i]);
     }
-
-    for (int i = 0; i < MAX_APS_COUNT; i++)
-        av_freep(&s->aps_list[i]);
 
     pic_arrays_free(s);
     return 0;

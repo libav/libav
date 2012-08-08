@@ -181,7 +181,6 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
     sps->seq_loop_filter_across_slices_enabled_flag = get_bits1(gb);
     sps->asymmetric_motion_partitions_enabled_flag  = get_bits1(gb);
     sps->sample_adaptive_offset_enabled_flag        = get_bits1(gb);
-    sps->adaptive_loop_filter_enabled_flag          = get_bits1(gb);
 
     if (sps->pcm_enabled_flag)
         sps->pcm.loop_filter_disable_flag = get_bits1(gb);
@@ -459,41 +458,6 @@ err:
     av_free(pps->min_cb_addr_zs);
 
     av_free(pps);
-    return -1;
-}
-
-int ff_hevc_decode_nal_aps(HEVCContext *s)
-{
-    GetBitContext *gb = &s->gb;
-
-    int aps_id = 0;
-
-    APS *aps = av_mallocz(sizeof(APS));
-    if (aps == NULL)
-        goto err;
-
-    av_log(s->avctx, AV_LOG_DEBUG, "Decoding APS\n");
-
-    aps_id = get_ue_golomb(gb);
-    if (aps_id >= MAX_APS_COUNT) {
-        av_log(s->avctx, AV_LOG_ERROR, "APS id out of range: %d\n", aps_id);
-        goto err;
-    }
-
-    for (int i = 0; i < 3; i++) {
-        aps->aps_alf_flag[i] = get_bits1(gb);
-        if (aps->aps_alf_flag[i]) {
-            av_log(s->avctx, AV_LOG_ERROR, "TODO: aps_alf_flag\n");
-            goto err;
-        }
-    }
-
-    av_free(s->aps_list[aps_id]);
-    s->aps_list[aps_id] = aps;
-    return 0;
-
-err:
-    av_free(aps);
     return -1;
 }
 
