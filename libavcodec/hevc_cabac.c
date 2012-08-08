@@ -323,8 +323,8 @@ static const int elem_offset[] =
     -1, //last_significant_coeff_y_suffix
     226, //significant_coeff_group_flag
     238, //significant_coeff_flag
-    373, //coeff_abs_level_greater1_flag
-    445, //coeff_abs_level_greater2_flag
+    364, //coeff_abs_level_greater1_flag
+    436, //coeff_abs_level_greater2_flag
     -1, //coeff_abs_level_remaining
     -1, //coeff_sign_flag
 };
@@ -379,15 +379,15 @@ static const uint8_t init_values[CTX_IDX_COUNT] =
     91, 171, 134, 141, 121, 140, 61, 154, 121, 140, 61, 154, //significant_coeff_group_flag
 
     //significant_coeff_flag
-    111, 111, 125, 110, 110, 94, 124, 108, 124, 139, 139, 139, 168, 124, 138,
-    124, 138, 107, 107, 125, 141, 179, 153, 125, 140, 139, 182, 182, 152, 136,
-    152, 136, 153, 182, 137, 149, 192, 152, 224, 136, 31, 136, 136, 139, 111,
-    155, 154, 139, 153, 139, 123, 123, 63, 153, 153, 153, 152, 152, 152, 137,
-    152, 137, 122, 166, 183, 140, 136, 153, 154, 170, 153, 123, 123, 107, 121,
-    107, 121, 167, 153, 167, 136, 149, 107, 136, 121, 122, 91, 151, 183, 140,
-    170, 154, 139, 153, 139, 123, 123, 63, 124, 153, 153, 152, 152, 152, 137,
-    152, 137, 137, 166, 183, 140, 136, 153, 154, 170, 153, 138, 138, 122, 121,
-    122, 121, 167, 153, 167, 136, 121, 122, 136, 121, 122, 91, 151, 183, 140,
+    111, 111, 125, 110, 110, 94, 124, 108, 124, 107, 125, 141, 179, 153, 125,
+    107, 125, 141, 179, 153, 125, 107, 125, 141, 179, 153, 125, 140, 139, 182,
+    182, 152, 136, 152, 136, 153, 136, 139, 111, 136, 139, 111, 155, 154, 139,
+    153, 139, 123, 123, 63, 153, 166, 183, 140, 136, 153, 154, 166, 183, 140,
+    136, 153, 154, 166, 183, 140, 136, 153, 154, 170, 153, 123, 123, 107, 121,
+    107, 121, 167, 151, 183, 140, 151, 183, 140, 170, 154, 139, 153, 139, 123,
+    123, 63, 124, 166, 183, 140, 136, 153, 154, 166, 183, 140, 136, 153, 154,
+    166, 183, 140, 136, 153, 154, 170, 153, 138, 138, 122, 121, 122, 121, 167,
+    151, 183, 140, 151, 183, 140,
 
     //coeff_abs_level_greater1_flag
     140, 92, 137, 138, 140, 152, 138, 139, 153, 74, 149, 92, 139, 107, 122, 152,
@@ -922,20 +922,10 @@ int ff_hevc_significant_coeff_group_flag_decode(HEVCContext *s, int c_idx, int x
     cc->elem = SIGNIFICANT_COEFF_GROUP_FLAG;
     cc->state = states + elem_offset[cc->elem];
 
-    if (log2_trafo_width == 3 && log2_trafo_height == 3 && scan_idx != SCAN_DIAG) {
-        if (scan_idx == SCAN_HORIZ) {
-            if (y_cg < 3)
-                ctx_cg = s->rc.significant_coeff_group_flag[x_cg][y_cg + 1];
-        } else { //SCAN_VERT
-            if (x_cg < 3)
-                ctx_cg = s->rc.significant_coeff_group_flag[x_cg + 1][y_cg];
-        }
-    } else {
-        if (x_cg < (1 << (log2_trafo_width - 2)) - 1)
-            ctx_cg += s->rc.significant_coeff_group_flag[x_cg + 1][y_cg];
-        if (y_cg < (1 << (log2_trafo_height - 2)) - 1)
-            ctx_cg += s->rc.significant_coeff_group_flag[x_cg][y_cg + 1];
-    }
+    if (x_cg < (1 << (log2_trafo_width - 2)) - 1)
+        ctx_cg += s->rc.significant_coeff_group_flag[x_cg + 1][y_cg];
+    if (y_cg < (1 << (log2_trafo_height - 2)) - 1)
+        ctx_cg += s->rc.significant_coeff_group_flag[x_cg][y_cg + 1];
 
     ctx_idx_inc[0] = FFMIN(ctx_cg, 1) + (c_idx ? 2 : 0);
 
@@ -947,7 +937,8 @@ int ff_hevc_significant_coeff_group_flag_decode(HEVCContext *s, int c_idx, int x
 }
 
 int ff_hevc_significant_coeff_flag_decode(HEVCContext *s, int c_idx, int x_c, int y_c,
-                                          int log2_trafo_width, int log2_trafo_height)
+                                          int log2_trafo_width, int log2_trafo_height,
+                                          int scan_idx)
 {
     HEVCCabacContext *cc = &s->cc;
     int8_t ctx_idx_inc[1];
@@ -965,10 +956,10 @@ int ff_hevc_significant_coeff_flag_decode(HEVCContext *s, int c_idx, int x_c, in
         sig_ctx = 0;
     } else if (log2_trafo_width == 2 && log2_trafo_height == 2) {
         sig_ctx = ctx_idx_map[(y_c << 2) + x_c];
-    } else if (log2_trafo_width == 3 && log2_trafo_height == 3) {
-        sig_ctx = 9 + ctx_idx_map[((y_c >> 1) << 2) + (x_c >> 1)];
     } else {
         int prev_sig = 0;
+        int x_off = x_c - (x_cg << 2);
+        int y_off = y_c - (y_cg << 2);
 
         if (x_c < (1 << log2_trafo_width) - 1)
             prev_sig += s->rc.significant_coeff_group_flag[x_cg + 1][y_cg];
@@ -978,29 +969,32 @@ int ff_hevc_significant_coeff_flag_decode(HEVCContext *s, int c_idx, int x_c, in
 
         switch (prev_sig) {
         case 0:
-            sig_ctx = (x_c - (x_cg << 2)) + (y_c - (y_cg << 2)) <= 2 ? 1 : 0;
+            sig_ctx = ((x_off + y_off) == 0) ? 2 : ((x_off + y_off) <= 2) ? 1 : 0;
             break;
         case 1:
-            sig_ctx = (y_c - (y_cg << 2)) <= 1 ? 1 : 0;
+            sig_ctx = 2 - FFMIN(y_off, 2);
             break;
         case 2:
-            sig_ctx = (x_c - (x_cg << 2)) <= 1 ? 1 : 0;
+            sig_ctx = 2 - FFMIN(x_off, 2);
             break;
         default:
-            sig_ctx = (x_c - (x_cg << 2)) + (y_c - (y_cg << 2)) <= 4 ? 2 : 1;
+            sig_ctx = 2;
         }
 
         if (c_idx == 0 && (x_cg > 0 || y_cg > 0)) {
-            sig_ctx += 21;
+            sig_ctx += 3;
+        }
+        if (log2_trafo_width == 3 && log2_trafo_height == 3) {
+            sig_ctx += (scan_idx == SCAN_DIAG) ? 9 : 15;
         } else {
-            sig_ctx += 18;
+            sig_ctx += c_idx ? 12 : 21;
         }
     }
 
     if (c_idx == 0) {
         ctx_idx_inc[0] = sig_ctx;
     } else {
-        ctx_idx_inc[0] = sig_ctx + 24;
+        ctx_idx_inc[0] = sig_ctx + 27;
     }
 
     cc->max_bin_idx_ctx = 0;

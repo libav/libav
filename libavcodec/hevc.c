@@ -350,33 +350,18 @@ static av_always_inline int min_cb_addr_zs(HEVCContext *s, int x, int y)
     return s->pps->min_cb_addr_zs[s->sps->pic_height_in_min_cbs * x + y];
 }
 
-static av_always_inline void get_coord(enum ScanType scan_idx, const uint8_t *scan_x,
-                                       const uint8_t *scan_y, int width, int height,
-                                       int offset, int n, int *x, int *y)
-{
-    int pos = n + offset;
-    switch (scan_idx) {
-    case SCAN_DIAG:
-        *x = (scan_x[offset >> 4] << 2) + diag_scan4x4_x[n];
-        *y = (scan_y[offset >> 4] << 2) + diag_scan4x4_y[n];
-        break;
-    case SCAN_HORIZ:
-        *y = pos / width;
-        *x = pos % width;
-        break;
-    default: // SCAN_VERT
-        *x = pos / height;
-        *y = pos % height;
-        break;
-    }
-}
-
 /**
  * 7.3.10
  */
 static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width,
                             int log2_trafo_height, enum ScanType scan_idx, int c_idx)
 {
+#define GET_COORD(offset, n)\
+    do {\
+        x_c = (scan_x_cg[offset >> 4] << 2) + scan_x_off[n];\
+        y_c = (scan_y_cg[offset >> 4] << 2) + scan_y_off[n];\
+    } while (0)
+
     int transform_skip_flag = 0;
 
     int last_significant_coeff_x, last_significant_coeff_y;
@@ -385,7 +370,7 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
     int trafo_height, trafo_width;
     int x_cg_last_sig, y_cg_last_sig;
 
-    const uint8_t *scan_x, *scan_y;
+    const uint8_t *scan_x_cg, *scan_y_cg, *scan_x_off, *scan_y_off;
 
     int stride = s->frame.linesize[c_idx];
     int hshift = c_idx ? av_pix_fmt_descriptors[s->avctx->pix_fmt].log2_chroma_w : 0;
@@ -443,67 +428,68 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
     av_log(s->avctx, AV_LOG_DEBUG, "last_significant_coeff_y: %d\n",
            last_significant_coeff_y);
 
-    if (log2_trafo_width == 3 && log2_trafo_height == 3 && scan_idx != SCAN_DIAG) {
-        if (scan_idx == SCAN_HORIZ) {
-            x_cg_last_sig = 0;
-            y_cg_last_sig = last_significant_coeff_y >> 1;
-        } else { //SCAN_VERT
-            x_cg_last_sig = last_significant_coeff_x >> 1;
-            y_cg_last_sig = 0;
-        }
-    } else {
-        x_cg_last_sig = last_significant_coeff_x >> 2;
-        y_cg_last_sig = last_significant_coeff_y >> 2;
-    }
+    x_cg_last_sig = last_significant_coeff_x >> 2;
+    y_cg_last_sig = last_significant_coeff_y >> 2;
 
     switch (scan_idx) {
     case SCAN_DIAG: {
         int last_x_c = last_significant_coeff_x % 4;
         int last_y_c = last_significant_coeff_y % 4;
+
+        scan_x_off = diag_scan4x4_x;
+        scan_y_off = diag_scan4x4_y;
         num_coeff = diag_scan4x4_inv[last_y_c][last_x_c];
         if (trafo_width == trafo_height) {
             if (trafo_width == 4) {
-                scan_x = scan_1x1;
-                scan_y = scan_1x1;
+                scan_x_cg = scan_1x1;
+                scan_y_cg = scan_1x1;
             } else if (trafo_width == 8) {
                 num_coeff += diag_scan2x2_inv[y_cg_last_sig][x_cg_last_sig] << 4;
-                scan_x = diag_scan2x2_x;
-                scan_y = diag_scan2x2_y;
+                scan_x_cg = diag_scan2x2_x;
+                scan_y_cg = diag_scan2x2_y;
             } else if (trafo_width == 16) {
                 num_coeff += diag_scan4x4_inv[y_cg_last_sig][x_cg_last_sig] << 4;
-                scan_x = diag_scan4x4_x;
-                scan_y = diag_scan4x4_y;
+                scan_x_cg = diag_scan4x4_x;
+                scan_y_cg = diag_scan4x4_y;
             } else { // trafo_width == 32
                 num_coeff += diag_scan8x8_inv[y_cg_last_sig][x_cg_last_sig] << 4;
-                scan_x = diag_scan8x8_x;
-                scan_y = diag_scan8x8_y;
+                scan_x_cg = diag_scan8x8_x;
+                scan_y_cg = diag_scan8x8_y;
             }
         } else {
             if (trafo_width == 4) { // 4x16
                 num_coeff += y_cg_last_sig << 4;
-                scan_x = scan_1x1;
-                scan_y = diag_scan1x4_y;
+                scan_x_cg = scan_1x1;
+                scan_y_cg = diag_scan1x4_y;
             } else if (trafo_width == 8) { // 8x32
                 num_coeff += diag_scan2x8_inv[y_cg_last_sig][x_cg_last_sig] << 4;
-                scan_x = diag_scan2x8_x;
-                scan_y = diag_scan2x8_y;
+                scan_x_cg = diag_scan2x8_x;
+                scan_y_cg = diag_scan2x8_y;
             } else if (trafo_width == 16) { // 16x4
                 num_coeff += x_cg_last_sig << 4;
-                scan_x = diag_scan4x1_x;
-                scan_y = scan_1x1;
+                scan_x_cg = diag_scan4x1_x;
+                scan_y_cg = scan_1x1;
             } else { //32x8
                 num_coeff += diag_scan8x2_inv[y_cg_last_sig][x_cg_last_sig] << 4;
-                scan_x = diag_scan8x2_x;
-                scan_y = diag_scan8x2_y;
+                scan_x_cg = diag_scan8x2_x;
+                scan_y_cg = diag_scan8x2_y;
             }
         }
         break;
     }
     case SCAN_HORIZ:
-        num_coeff = last_significant_coeff_y * trafo_width + last_significant_coeff_x;
+        scan_x_cg = horiz_scan2x2_x;
+        scan_y_cg = horiz_scan2x2_y;
+        scan_x_off = horiz_scan4x4_x;
+        scan_y_off = horiz_scan4x4_y;
+        num_coeff = horiz_scan8x8_inv[last_significant_coeff_y][last_significant_coeff_x];
         break;
     default: //SCAN_VERT
-        num_coeff = last_significant_coeff_x * trafo_height + last_significant_coeff_y;
+        scan_x_cg = horiz_scan2x2_y;
+        scan_y_cg = horiz_scan2x2_x;
+        scan_x_off = horiz_scan4x4_y;
+        scan_y_off = horiz_scan4x4_x;
+        num_coeff = horiz_scan8x8_inv[last_significant_coeff_x][last_significant_coeff_y];
         break;
     }
     num_coeff++;
@@ -528,20 +514,8 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
 
         int first_elem;
 
-        if (log2_trafo_width == 3 && log2_trafo_height == 3 && scan_idx != SCAN_DIAG) {
-            if (scan_idx == SCAN_HORIZ) {
-                x_cg = 0;
-                y_cg = i;
-            } else { //SCAN_VERT
-                x_cg = i;
-                y_cg = 0;
-            }
-        } else {
-            get_coord(scan_idx, scan_x, scan_y, trafo_width, trafo_height,
-                      i << 4, 0, &x_cg, &y_cg);
-            x_cg >>= 2;
-            y_cg >>= 2;
-        }
+        x_cg = scan_x_cg[i];
+        y_cg = scan_y_cg[i];
 
         if ((i < num_last_subset) && (i > 0)) {
             s->rc.significant_coeff_group_flag[x_cg][y_cg] =
@@ -559,28 +533,18 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
                x_cg, y_cg, s->rc.significant_coeff_group_flag[x_cg][y_cg]);
 
         for(int n = 15; n >= 0; n--) {
-            get_coord(scan_idx, scan_x, scan_y, trafo_width, trafo_height,
-                      offset, n, &x_c, &y_c);
+            GET_COORD(offset, n);
 
             if ((n + offset) < (num_coeff - 1) &&
                 s->rc.significant_coeff_group_flag[x_cg][y_cg] &&
                 (n > 0 || implicit_non_zero_coeff == 0)) {
                 significant_coeff_flag[n] =
                     ff_hevc_significant_coeff_flag_decode(s, c_idx, x_c, y_c, log2_trafo_width,
-                                                          log2_trafo_height);
+                                                          log2_trafo_height, scan_idx);
                 if (significant_coeff_flag[n] == 1)
                     implicit_non_zero_coeff = 0;
             } else {
-                int last_cg = 0;
-                if (log2_trafo_width == 3 && log2_trafo_height == 3 && scan_idx != SCAN_DIAG) {
-                    if (scan_idx == SCAN_HORIZ) {
-                        last_cg = (y_c == (y_cg << 1));
-                    } else { //SCAN_VERT
-                        last_cg = (x_c == (x_cg << 1));
-                    }
-                } else {
-                    last_cg = (x_c == (x_cg << 2) && y_c == (y_cg << 2));
-                }
+                int last_cg = (x_c == (x_cg << 2) && y_c == (y_cg << 2));
                 significant_coeff_flag[n] =
                     ((n + offset) == (num_coeff - 1) ||
                      (last_cg && implicit_non_zero_coeff &&
@@ -640,8 +604,7 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
         first_elem = 1;
         for(int n = 15; n >= 0; n--) {
             int trans_coeff_level = 0;
-            get_coord(scan_idx, scan_x, scan_y, trafo_width, trafo_height,
-                      offset, n, &x_c, &y_c);
+            GET_COORD(offset, n);
 
             if (significant_coeff_flag[n]) {
                 trans_coeff_level = 1 + coeff_abs_level_greater1_flag[n] +

@@ -567,7 +567,8 @@ int ff_hevc_significant_coeff_group_flag_decode(HEVCContext *s, int c_idx, int x
                                                 int y_cg, int log2_trafo_width,
                                                 int log2_trafo_height, int scan_idx);
 int ff_hevc_significant_coeff_flag_decode(HEVCContext *s, int c_idx, int x_c, int y_c,
-                                          int log2_trafo_width, int log2_trafo_height);
+                                          int log2_trafo_width, int log2_trafo_height,
+                                          int scan_idx);
 int ff_hevc_coeff_abs_level_greater1_flag_decode(HEVCContext *s, int c_idx,
                                                  int i, int n,
                                                  int first_greater1_coeff_idx,
