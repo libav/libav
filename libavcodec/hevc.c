@@ -215,13 +215,13 @@ static int decode_nal_slice_header(HEVCContext *s)
 #endif
             sh->max_num_merge_cand = 5 - get_ue_golomb(gb);
 
-        if (s->sps->seq_loop_filter_across_slices_enabled_flag
+        if (s->pps->seq_loop_filter_across_slices_enabled_flag
             && (sh->slice_sample_adaptive_offset_flag ||
                 !sh->disable_deblocking_filter_flag)) {
             sh->slice_loop_filter_across_slices_enabled_flag = get_bits1(gb);
         } else {
             sh->slice_loop_filter_across_slices_enabled_flag =
-                s->sps->seq_loop_filter_across_slices_enabled_flag;
+                s->pps->seq_loop_filter_across_slices_enabled_flag;
         }
     }
 

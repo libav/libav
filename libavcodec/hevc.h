@@ -145,7 +145,6 @@ typedef struct {
 
     uint8_t deblocking_filter_in_aps_enabled_flag;
 
-    uint8_t seq_loop_filter_across_slices_enabled_flag;
     uint8_t asymmetric_motion_partitions_enabled_flag;
     uint8_t sample_adaptive_offset_enabled_flag;
 
@@ -203,6 +202,8 @@ typedef struct {
     uint8_t loop_filter_across_tiles_enabled_flag;
 
     uint8_t cabac_independant_flag;
+
+    uint8_t seq_loop_filter_across_slices_enabled_flag;
 
     uint8_t deblocking_filter_control_present_flag;
     uint8_t deblocking_filter_override_enabled_flag;

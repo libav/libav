@@ -177,7 +177,6 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
         goto err;
     }
 
-    sps->seq_loop_filter_across_slices_enabled_flag = get_bits1(gb);
     sps->asymmetric_motion_partitions_enabled_flag  = get_bits1(gb);
     sps->sample_adaptive_offset_enabled_flag        = get_bits1(gb);
 
@@ -318,6 +317,8 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
     else if (pps->tiles_or_entropy_coding_sync_idc == 2) {
         pps->cabac_independant_flag = get_bits1(gb);
     }
+
+    pps->seq_loop_filter_across_slices_enabled_flag = get_bits1(gb);
 
     pps->deblocking_filter_control_present_flag = get_bits1(gb);
     if (pps->deblocking_filter_control_present_flag) {
