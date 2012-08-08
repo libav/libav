@@ -276,6 +276,7 @@ enum SyntaxElement {
     SAO_MERGE_LEFT_FLAG = 0,
     SAO_MERGE_UP_FLAG,
     SAO_TYPE_IDX,
+    SAO_EO_CLASS,
     SAO_BAND_POSITION,
     SAO_OFFSET_ABS,
     SAO_OFFSET_SIGN,
@@ -337,15 +338,6 @@ typedef struct HEVCCabacContext {
 
     uint8_t bypass_flag; ///< bypassFlag
 } HEVCCabacContext;
-
-enum SAOType {
-    SAO_NOT_APPLIED = 0,
-    SAO_0_EDGE = 1,
-    SAO_90_EDGE = 2,
-    SAO_135_EDGE = 3,
-    SAO_45_EDGE = 4,
-    SAO_BAND = 5
-};
 
 enum PartMode {
     PART_2Nx2N = 0,
@@ -465,11 +457,21 @@ typedef struct ResidualCoding {
     uint8_t significant_coeff_group_flag[64][64];
 } ResidualCoding;
 
+enum SAOType {
+    SAO_NOT_APPLIED = 0,
+    SAO_BAND,
+    SAO_EDGE
+};
+
 struct SAOParams {
-    enum SAOType type_idx[3]; ///< sao_type_idx
-    int band_position[3]; ///< sao_band_position
+    uint8_t type_idx[3]; ///< sao_type_idx
+
     int offset_abs[3][4]; ///< sao_offset_abs
     int offset_sign[3][4]; ///< sao_offset_sign
+
+    int band_position[3]; ///< sao_band_position
+
+    int eo_class[3]; ///< sao_eo_class
 
     // Inferred parameters
     int offset_val[3][5]; ///<SaoOffsetVal
@@ -532,6 +534,7 @@ int ff_hevc_decode_nal_sei(HEVCContext *s);
 void ff_hevc_cabac_init(HEVCContext *s);
 int ff_hevc_cabac_decode(HEVCContext *s, enum SyntaxElement elem);
 int ff_hevc_sao_merge_left_flag_decode(HEVCContext *s);
+int ff_hevc_sao_type_idx_decode(HEVCContext *s);
 int ff_hevc_sao_offset_abs_decode(HEVCContext *s, int bit_depth);
 int ff_hevc_sao_offset_sign_decode(HEVCContext *s);
 int ff_hevc_cu_transquant_bypass_flag_decode(HEVCContext *s);
