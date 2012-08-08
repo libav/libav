@@ -126,7 +126,7 @@ static const uint8_t max_bin_idx_ctxs[][3] =
     { 0, 0, 0 }, //sao_type_idx
     { -1, -1, -1 }, //sao_eo_class
     { -1, -1, -1 }, //sao_band_position
-    { 1, 1, 1 }, //sao_offset_abs
+    { -1, -1, -1 }, //sao_offset_abs
     { -1, -1, -1 }, //sao_offset_sign
     { 0, 0, 0 }, //alf_cu_flag
     { 0, 0, 0 }, //end_of_slice_flag
@@ -179,7 +179,7 @@ static const int8_t ctx_idx_offsets[][3] =
     { 0, 1, 2 }, //sao_type_idx
     { -1, -1, -1 }, //sao_eo_class
     { -1, -1, -1 }, //sao_band_position
-    { 0, 2, 4 }, //sao_offset_abs
+    { -1, -1, -1 }, //sao_offset_abs
     { -1, -1, -1 }, //sao_offset_sign
     { 0, 1, 2 }, //alf_cu_flag
     { 0, 0, 0 }, //end_of_slice_flag
@@ -232,7 +232,7 @@ static const int8_t ctx_idx_incs[][5] =
     { 0 }, //sao_type_idx
     { }, //sao_eo_class
     { }, //sao_band_position
-    { 0, 1, 1, 1, 1 }, //sao_offset_abs
+    { }, //sao_offset_abs
     { }, //sao_offset_sign
     { 0 }, //alf_cu_flag
     { }, //end_of_slice_flag
@@ -285,51 +285,51 @@ static const int elem_offset[] =
     3, //sao_type_idx
     -1, //sao_eo_class
     -1, //sao_band_position
-    6, //sao_offset_abs
+    -1, //sao_offset_abs
     -1, //sao_offset_sign
-    12, //alf_cu_flag
+    6, //alf_cu_flag
     -1, //end_of_slice_flag
-    15, //split_coding_unit_flag
-    24, //cu_transquant_bypass_flag
-    27, //skip_flag
-    33, //cu_qp_delta
-    42, //pred_mode
-    42, //part_mode
+    9, //split_coding_unit_flag
+    18, //cu_transquant_bypass_flag
+    21, //skip_flag
+    27, //cu_qp_delta
+    36, //pred_mode
+    36, //part_mode
     -1, //pcm_flag
-    51, //prev_intra_luma_pred_mode
+    45, //prev_intra_luma_pred_mode
     -1, //mpm_idx
     -1, //rem_intra_luma_pred_mode
-    54, //intra_chroma_pred_mode
-    60, //merge_flag
-    62, //merge_idx
-    64, //inter_pred_idc
-    68, //ref_idx_l0
-    68, //ref_idx_l1
-    74, //abs_mvd_greater0_flag
-    74, //abs_mvd_greater1_flag
+    48, //intra_chroma_pred_mode
+    54, //merge_flag
+    56, //merge_idx
+    58, //inter_pred_idc
+    62, //ref_idx_l0
+    62, //ref_idx_l1
+    68, //abs_mvd_greater0_flag
+    68, //abs_mvd_greater1_flag
     -1, //abs_mvd_minus2
     -1, //mvd_sign_flag
-    78, //mvp_l0_flag
-    78, //mvp_l1_flag
-    80, //no_residual_data_flag
-    82, //split_transform_flag
-    91, //cbf_luma
-    97, //cbf_cb, cbf_cr
-    106, //transform_skip_flag[][][0]
-    106, //transform_skip_flag[][][1|2]
-    112, //last_significant_coeff_x_prefix
-    166, //last_significant_coeff_y_prefix
+    72, //mvp_l0_flag
+    72, //mvp_l1_flag
+    74, //no_residual_data_flag
+    76, //split_transform_flag
+    85, //cbf_luma
+    91, //cbf_cb, cbf_cr
+    100, //transform_skip_flag[][][0]
+    100, //transform_skip_flag[][][1|2]
+    106, //last_significant_coeff_x_prefix
+    160, //last_significant_coeff_y_prefix
     -1, //last_significant_coeff_x_suffix
     -1, //last_significant_coeff_y_suffix
-    220, //significant_coeff_group_flag
-    232, //significant_coeff_flag
-    358, //coeff_abs_level_greater1_flag
-    430, //coeff_abs_level_greater2_flag
+    214, //significant_coeff_group_flag
+    226, //significant_coeff_flag
+    352, //coeff_abs_level_greater1_flag
+    424, //coeff_abs_level_greater2_flag
     -1, //coeff_abs_level_remaining
     -1, //coeff_sign_flag
 };
 
-#define CTX_IDX_COUNT 451
+#define CTX_IDX_COUNT 445
 
 /**
  * initValue from Tables 9-38 to 9-65, indexed by ctx_idx for each SyntaxElement
@@ -342,7 +342,6 @@ static const uint8_t init_values[CTX_IDX_COUNT] =
 {
     153, 153, 153, //sao_merge_left_flag and sao_merge_up_flag
     160, 185, 200, //sao_type_idx
-    143, 140, 185, 140, 200, 140, //sao_offset_abs
     153, 153, 153, //alf_cu_flag
     139, 141, 157, 107, 139, 126, 107, 139, 126, //split_coding_unit_flag
     154, 154, 154, //cu_transquant_bypass_flag
@@ -708,14 +707,11 @@ int ff_hevc_sao_type_idx_decode(HEVCContext *s)
 int ff_hevc_sao_offset_abs_decode(HEVCContext *s, int bit_depth)
 {
     HEVCCabacContext *cc = &s->cc;
-    const int8_t ctx_idx_inc[5] = { 0, 1, 1, 1, 1 };
 
     cc->elem = SAO_OFFSET_ABS;
     cc->state = states + elem_offset[cc->elem];
 
-    cc->max_bin_idx_ctx = 1;
-    cc->ctx_idx_offset = 2 * cc->init_type;
-    cc->ctx_idx_inc = ctx_idx_inc;
+    cc->ctx_idx_offset = -1;
 
     return tu_binarization(s, (1 << (FFMIN(bit_depth, 10) - 5)) - 1);
 }
