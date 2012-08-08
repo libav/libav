@@ -68,8 +68,7 @@ static const binarization_func binarization_funcs[BINARIZATION_COUNT] =
  */
 static const int8_t binarization[][2] =
 {
-    { FL_BIN, 1 }, //sao_merge_left_flag
-    { FL_BIN, 1 }, //sao_merge_up_flag
+    { FL_BIN, 1 }, //sao_merge_left_flag and sao_merge_up_flag
     { TU_BIN, 2 }, //sao_type_idx
     { FL_BIN, 2 }, //sao_eo_class
     { FL_BIN, 31 }, //sao_band_position
@@ -123,8 +122,7 @@ static const int8_t binarization[][2] =
  */
 static const uint8_t max_bin_idx_ctxs[][3] =
 {
-    { 0, 0, 0 }, //sao_merge_left_flag
-    { 0, 0, 0 }, //sao_merge_up_flag
+    { 0, 0, 0 }, //sao_merge_left_flag and sao_merge_up_flag
     { 0, 0, 0 }, //sao_type_idx
     { -1, -1, -1 }, //sao_eo_class
     { -1, -1, -1 }, //sao_band_position
@@ -177,8 +175,7 @@ static const uint8_t max_bin_idx_ctxs[][3] =
  */
 static const int8_t ctx_idx_offsets[][3] =
 {
-    { 0, 1, 2 }, //sao_merge_left_flag
-    { 0, 1, 2 }, //sao_merge_up_flag
+    { 0, 1, 2 }, //sao_merge_left_flag and sao_merge_up_flag
     { 0, 1, 2 }, //sao_type_idx
     { -1, -1, -1 }, //sao_eo_class
     { -1, -1, -1 }, //sao_band_position
@@ -231,8 +228,7 @@ static const int8_t ctx_idx_offsets[][3] =
  */
 static const int8_t ctx_idx_incs[][5] =
 {
-    { 0 }, //sao_merge_left_flag
-    { 0 }, //sao_merge_up_flag
+    { 0 }, //sao_merge_left_flag and sao_merge_up_flag
     { 0 }, //sao_type_idx
     { }, //sao_eo_class
     { }, //sao_band_position
@@ -285,51 +281,50 @@ static const int8_t ctx_idx_incs[][5] =
  */
 static const int elem_offset[] =
 {
-    0, //sao_merge_left_flag
-    3, //sao_merge_up_flag
-    6, //sao_type_idx
+    0, //sao_merge_left_flag and sao_merge_up_flag
+    3, //sao_type_idx
     -1, //sao_eo_class
     -1, //sao_band_position
-    9, //sao_offset_abs
+    6, //sao_offset_abs
     -1, //sao_offset_sign
-    15, //alf_cu_flag
+    12, //alf_cu_flag
     -1, //end_of_slice_flag
-    18, //split_coding_unit_flag
-    27, //cu_transquant_bypass_flag
-    30, //skip_flag
-    36, //cu_qp_delta
-    45, //pred_mode
-    45, //part_mode
+    15, //split_coding_unit_flag
+    24, //cu_transquant_bypass_flag
+    27, //skip_flag
+    33, //cu_qp_delta
+    42, //pred_mode
+    42, //part_mode
     -1, //pcm_flag
-    54, //prev_intra_luma_pred_mode
+    51, //prev_intra_luma_pred_mode
     -1, //mpm_idx
     -1, //rem_intra_luma_pred_mode
-    57, //intra_chroma_pred_mode
-    63, //merge_flag
-    65, //merge_idx
-    67, //inter_pred_idc
-    71, //ref_idx_l0
-    71, //ref_idx_l1
-    77, //abs_mvd_greater0_flag
-    77, //abs_mvd_greater1_flag
+    54, //intra_chroma_pred_mode
+    60, //merge_flag
+    62, //merge_idx
+    64, //inter_pred_idc
+    68, //ref_idx_l0
+    68, //ref_idx_l1
+    74, //abs_mvd_greater0_flag
+    74, //abs_mvd_greater1_flag
     -1, //abs_mvd_minus2
     -1, //mvd_sign_flag
-    81, //mvp_l0_flag
-    81, //mvp_l1_flag
-    83, //no_residual_data_flag
-    85, //split_transform_flag
-    94, //cbf_luma
-    100, //cbf_cb, cbf_cr
-    109, //transform_skip_flag[][][0]
-    109, //transform_skip_flag[][][1|2]
-    115, //last_significant_coeff_x_prefix
-    169, //last_significant_coeff_y_prefix
+    78, //mvp_l0_flag
+    78, //mvp_l1_flag
+    80, //no_residual_data_flag
+    82, //split_transform_flag
+    91, //cbf_luma
+    97, //cbf_cb, cbf_cr
+    106, //transform_skip_flag[][][0]
+    106, //transform_skip_flag[][][1|2]
+    112, //last_significant_coeff_x_prefix
+    166, //last_significant_coeff_y_prefix
     -1, //last_significant_coeff_x_suffix
     -1, //last_significant_coeff_y_suffix
-    223, //significant_coeff_group_flag
-    235, //significant_coeff_flag
-    361, //coeff_abs_level_greater1_flag
-    433, //coeff_abs_level_greater2_flag
+    220, //significant_coeff_group_flag
+    232, //significant_coeff_flag
+    358, //coeff_abs_level_greater1_flag
+    430, //coeff_abs_level_greater2_flag
     -1, //coeff_abs_level_remaining
     -1, //coeff_sign_flag
 };
@@ -345,8 +340,7 @@ static const int elem_offset[] =
  */
 static const uint8_t init_values[CTX_IDX_COUNT] =
 {
-    153, 153, 153, //sao_merge_left_flag
-    175, 153, 153, //sao_merge_up_flag
+    153, 153, 153, //sao_merge_left_flag and sao_merge_up_flag
     160, 185, 200, //sao_type_idx
     143, 140, 185, 140, 200, 140, //sao_offset_abs
     153, 153, 153, //alf_cu_flag
@@ -674,12 +668,12 @@ int ff_hevc_cabac_decode(HEVCContext *s, enum SyntaxElement elem)
     return binarization_funcs[binarization[elem][0]](s, binarization[elem][1]);
 }
 
-int ff_hevc_sao_merge_left_flag_decode(HEVCContext *s)
+int ff_hevc_sao_merge_left_up_flag_decode(HEVCContext *s)
 {
     HEVCCabacContext *cc = &s->cc;
     const int8_t ctx_idx_inc[1] = { 0 };
 
-    cc->elem = SAO_MERGE_LEFT_FLAG;
+    cc->elem = SAO_MERGE_LEFT_UP_FLAG;
     cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 0;

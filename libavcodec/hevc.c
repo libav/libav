@@ -269,7 +269,7 @@ static int sao_param(HEVCContext *s, int rx, int ry)
             (s->pps->tile_id[s->ctb_addr_ts] ==
              s->pps->tile_id[s->pps->ctb_addr_rs_to_ts[s->ctb_addr_rs - 1]]);
         if (left_ctb_in_slice && left_ctb_in_tile)
-            sao_merge_left_flag = ff_hevc_sao_merge_left_flag_decode(s);
+            sao_merge_left_flag = ff_hevc_sao_merge_left_up_flag_decode(s);
     }
     if (ry > 0 && !sao_merge_left_flag) {
         int up_ctb_in_slice =
@@ -278,7 +278,7 @@ static int sao_param(HEVCContext *s, int rx, int ry)
         int up_ctb_in_tile = (s->pps->tile_id[s->ctb_addr_ts] ==
                               s->pps->tile_id[s->pps->ctb_addr_rs_to_ts[s->ctb_addr_rs - s->sps->PicWidthInCtbs]]);
         if (up_ctb_in_slice && up_ctb_in_tile)
-            sao_merge_up_flag = ff_hevc_cabac_decode(s, SAO_MERGE_UP_FLAG);
+            sao_merge_up_flag = ff_hevc_sao_merge_left_up_flag_decode(s);
     }
     for (int c_idx = 0; c_idx < 3; c_idx++) {
         int bit_depth = c_idx ? s->sps->bit_depth_chroma: s->sps->bit_depth_luma;

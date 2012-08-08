@@ -273,8 +273,7 @@ typedef struct {
 } SliceHeader;
 
 enum SyntaxElement {
-    SAO_MERGE_LEFT_FLAG = 0,
-    SAO_MERGE_UP_FLAG,
+    SAO_MERGE_LEFT_UP_FLAG = 0,
     SAO_TYPE_IDX,
     SAO_EO_CLASS,
     SAO_BAND_POSITION,
@@ -533,7 +532,7 @@ int ff_hevc_decode_nal_sei(HEVCContext *s);
 
 void ff_hevc_cabac_init(HEVCContext *s);
 int ff_hevc_cabac_decode(HEVCContext *s, enum SyntaxElement elem);
-int ff_hevc_sao_merge_left_flag_decode(HEVCContext *s);
+int ff_hevc_sao_merge_left_up_flag_decode(HEVCContext *s);
 int ff_hevc_sao_type_idx_decode(HEVCContext *s);
 int ff_hevc_sao_offset_abs_decode(HEVCContext *s, int bit_depth);
 int ff_hevc_sao_offset_sign_decode(HEVCContext *s);
