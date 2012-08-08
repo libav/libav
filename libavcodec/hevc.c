@@ -373,7 +373,7 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
     trafo_width = 1 << log2_trafo_width;
     trafo_height = 1 << log2_trafo_height;
 
-    if (s->sps->transform_skip_enabled_flag && !s->cu.cu_transquant_bypass_flag &&
+    if (s->pps->transform_skip_enabled_flag && !s->cu.cu_transquant_bypass_flag &&
         (log2_trafo_width == 2) && (log2_trafo_height == 2)) {
         transform_skip_flag = ff_hevc_transform_skip_flag_decode(s, c_idx);
     }

@@ -177,7 +177,6 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
         goto err;
     }
 
-    sps->transform_skip_enabled_flag                = get_bits1(gb);
     sps->seq_loop_filter_across_slices_enabled_flag = get_bits1(gb);
     sps->asymmetric_motion_partitions_enabled_flag  = get_bits1(gb);
     sps->sample_adaptive_offset_enabled_flag        = get_bits1(gb);
@@ -275,6 +274,7 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
     pps->pic_init_qp_minus26 = get_se_golomb(gb);
 
     pps->constrained_intra_pred_flag = get_bits1(gb);
+    pps->transform_skip_enabled_flag = get_bits1(gb);
 
     pps->cu_qp_delta_enabled_flag = get_bits1(gb);
     if (pps->cu_qp_delta_enabled_flag)

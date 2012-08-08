@@ -143,7 +143,6 @@ typedef struct {
 
     int scaling_list_enable_flag;
 
-    uint8_t transform_skip_enabled_flag;
     uint8_t deblocking_filter_in_aps_enabled_flag;
 
     uint8_t seq_loop_filter_across_slices_enabled_flag;
@@ -184,6 +183,7 @@ typedef struct {
     int pic_init_qp_minus26;
 
     uint8_t constrained_intra_pred_flag;
+    uint8_t transform_skip_enabled_flag;
 
     uint8_t cu_qp_delta_enabled_flag;
     int diff_cu_qp_delta_depth;
