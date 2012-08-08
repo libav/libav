@@ -114,6 +114,10 @@ static int decode_nal_slice_header(HEVCContext *s)
     // Coded parameters
 
     sh->first_slice_in_pic_flag = get_bits1(gb);
+    if (s->nal_unit_type >= 4 && s->nal_unit_type <= 8) {
+        sh->no_output_of_prior_pics_flag = get_bits1(gb);
+    }
+
     sh->pps_id = get_ue_golomb(gb);
     if (sh->pps_id >= MAX_PPS_COUNT || s->pps_list[sh->pps_id] == NULL) {
         av_log(s->avctx, AV_LOG_ERROR, "PPS id out of range: %d\n", sh->pps_id);
@@ -167,10 +171,6 @@ static int decode_nal_slice_header(HEVCContext *s)
         if (s->sps->separate_colour_plane_flag == 1)
             sh->colour_plane_id = get_bits(gb, 2);
 
-        if (s->nal_unit_type >= 4 && s->nal_unit_type <= 8) {
-            sh->rap_pic_id                   = get_ue_golomb(gb);
-            sh->no_output_of_prior_pics_flag = get_bits1(gb);
-        }
         if (s->nal_unit_type != NAL_IDR_SLICE) {
             av_log(s->avctx, AV_LOG_ERROR, "TODO: nal_unit_type != NAL_IDR_SLICE\n");
             return -1;
