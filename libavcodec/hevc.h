@@ -488,7 +488,7 @@ typedef struct HEVCContext {
 
     int nal_ref_flag;
     NALUnitType nal_unit_type;
-    int temporal_id;
+    int temporal_id;  ///< temporal_id_plus1 - 1
 
     struct VPS *vps_list[MAX_VPS_COUNT];
     SPS *sps_list[MAX_SPS_COUNT];
