@@ -248,6 +248,9 @@ typedef struct {
     int pps_id; ///< pic_parameter_set_id
     uint8_t pic_output_flag;
     uint8_t colour_plane_id;
+
+    int pic_order_cnt_lsb;
+
     uint8_t no_output_of_prior_pics_flag;
 
     uint8_t slice_sample_adaptive_offset_flag[3];
