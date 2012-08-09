@@ -541,8 +541,7 @@ int ff_hevc_split_coding_unit_flag_decode(HEVCContext *s, int ct_depth, int x0, 
 int ff_hevc_part_mode_decode(HEVCContext *s, int log2_cb_size);
 int ff_hevc_split_transform_flag_decode(HEVCContext *s, int log2_trafo_size);
 int ff_hevc_cbf_cb_cr_decode(HEVCContext *s, int trafo_depth);
-int ff_hevc_cbf_luma_decode(HEVCContext *s, int trafo_depth, int log2_trafo_size,
-                            int log2_max_trafo_size);
+int ff_hevc_cbf_luma_decode(HEVCContext *s, int trafo_depth);
 int ff_hevc_transform_skip_flag_decode(HEVCContext *s, int c_idx);
 int ff_hevc_last_significant_coeff_prefix_decode(HEVCContext *s, int c_idx,
                                                  int log2_size, int is_x);

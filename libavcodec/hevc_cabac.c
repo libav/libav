@@ -842,13 +842,10 @@ int ff_hevc_cbf_cb_cr_decode(HEVCContext *s, int trafo_depth)
     return fl_binarization(s, 1);
 }
 
-int ff_hevc_cbf_luma_decode(HEVCContext *s, int trafo_depth, int log2_trafo_size,
-                            int log2_max_trafo_size)
+int ff_hevc_cbf_luma_decode(HEVCContext *s, int trafo_depth)
 {
     HEVCCabacContext *cc = &s->cc;
-    const int8_t ctx_idx_inc[1] = {
-        (trafo_depth == 0) || (log2_trafo_size == log2_max_trafo_size)
-    };
+    const int8_t ctx_idx_inc[1] = { trafo_depth == 0 };
 
     cc->elem = CBF_LUMA;
     cc->state = states + elem_offset[cc->elem];

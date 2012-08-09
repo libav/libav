@@ -726,8 +726,6 @@ static void transform_tree(HEVCContext *s, int x0L, int y0L, int x0C, int y0C,
                            int log2_trafo_height, int trafo_depth, int blk_idx)
 {
     int log2_trafo_size = (log2_trafo_width + log2_trafo_height) >> 1;
-    int log2_max_trafo_size = s->sps->log2_min_transform_block_size +
-                              s->sps->log2_diff_max_min_transform_block_size;
     int trafo_height = 1 << log2_trafo_height;
     int trafo_width = 1 << log2_trafo_width;
     int x1L, y1L, x2L, y2L, x3L, y3L;
@@ -820,8 +818,7 @@ static void transform_tree(HEVCContext *s, int x0L, int y0L, int x0C, int y0C,
         if (s->cu.pred_mode == MODE_INTRA || trafo_depth != 0 ||
             SAMPLE(s->tt.cbf_cb[trafo_depth], x0C, y0C) ||
             SAMPLE(s->tt.cbf_cr[trafo_depth], x0C, y0C))
-            s->tt.cbf_luma = ff_hevc_cbf_luma_decode(s, trafo_depth, log2_trafo_size,
-                                                     log2_max_trafo_size);
+            s->tt.cbf_luma = ff_hevc_cbf_luma_decode(s, trafo_depth);
 
         transform_unit(s, x0L, y0L, x0C,
                        y0C, log2_trafo_width, log2_trafo_height, trafo_depth, blk_idx);
