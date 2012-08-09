@@ -1260,7 +1260,7 @@ static int decode_nal_slice_data(HEVCContext *s)
     s->ctb_addr_rs = s->sh.slice_ctb_addr_rs;
     s->ctb_addr_ts = s->pps->ctb_addr_rs_to_ts[s->ctb_addr_rs];
 
-    while (1) {
+    while (s->ctb_addr_ts < s->sps->PicWidthInCtbs*s->sps->PicHeightInCtbs) {
         x_ctb = INVERSE_RASTER_SCAN(s->ctb_addr_rs, ctb_size, ctb_size, s->sps->pic_width_in_luma_samples, 0);
         y_ctb = INVERSE_RASTER_SCAN(s->ctb_addr_rs, ctb_size, ctb_size, s->sps->pic_width_in_luma_samples, 1);
         s->num_pcm_block = 0;
