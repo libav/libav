@@ -198,6 +198,10 @@ static int decode_nal_slice_header(HEVCContext *s)
             sh->cabac_init_flag = get_bits1(gb);
 
         sh->slice_qp_delta = get_se_golomb(gb);
+        if (s->pps->pic_slice_level_chroma_qp_offsets_present_flag) {
+            sh->slice_cb_qp_offset = get_se_golomb(gb);
+            sh->slice_cr_qp_offset = get_se_golomb(gb);
+        }
         if (s->pps->deblocking_filter_control_present_flag) {
             int deblocking_filter_override_flag = 1;
             if (s->pps->deblocking_filter_override_enabled_flag)

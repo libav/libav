@@ -281,6 +281,7 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
 
     pps->cb_qp_offset = get_se_golomb(gb);
     pps->cr_qp_offset = get_se_golomb(gb);
+    pps->pic_slice_level_chroma_qp_offsets_present_flag = get_bits1(gb);
 
     pps->weighted_pred_flag            = get_bits1(gb);
     pps->weighted_bipred_flag          = get_bits1(gb);

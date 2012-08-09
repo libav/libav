@@ -189,6 +189,7 @@ typedef struct {
 
     int cb_qp_offset;
     int cr_qp_offset;
+    uint8_t pic_slice_level_chroma_qp_offsets_present_flag;
     uint8_t weighted_pred_flag;
     uint8_t weighted_bipred_flag;
     uint8_t output_flag_present_flag;
@@ -253,6 +254,8 @@ typedef struct {
 
     uint8_t cabac_init_flag;
     int slice_qp_delta;
+    int slice_cb_qp_offset;
+    int slice_cr_qp_offset;
 
     uint8_t disable_deblocking_filter_flag; ///< slice_header_disable_deblocking_filter_flag
     int beta_offset; ///< beta_offset_div2 * 2
