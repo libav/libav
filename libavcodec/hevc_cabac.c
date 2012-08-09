@@ -1088,11 +1088,9 @@ int ff_hevc_coeff_abs_level_greater2_flag_decode(HEVCContext *s, int c_idx,
 int ff_hevc_coeff_abs_level_remaining(HEVCContext *s, int first_elem, int base_level)
 {
     HEVCCabacContext *cc = &s->cc;
-    int c_tr_max;
     static int c_rice_param, last_coeff_abs_level_remaining;
     int prefix = 0;
     int suffix = 0;
-    int last = last_coeff_abs_level_remaining;
 
     cc->elem = COEFF_ABS_LEVEL_REMAINING;
     cc->state = states + elem_offset[cc->elem];
@@ -1106,26 +1104,17 @@ int ff_hevc_coeff_abs_level_remaining(HEVCContext *s, int first_elem, int base_l
            "c_rice_param reset to 0\n");
     }
 
-    c_tr_max = 9 << c_rice_param;
-
-#if REFERENCE_ENCODER_QUIRKS
     prefix = u_binarization(s, 0);
-    if (prefix < 8) {
+    if (prefix < 3) {
         for (int i = 0; i < c_rice_param; i++)
             suffix = (suffix << 1) | decode_bin(s, i);
         last_coeff_abs_level_remaining = (prefix << c_rice_param) + suffix;
     } else {
-        for (int i = 0; i < prefix - 8 + c_rice_param; i++)
+        for (int i = 0; i < prefix - 3 + c_rice_param; i++)
             suffix = (suffix << 1) | decode_bin(s, i);
-        last_coeff_abs_level_remaining = (((1 << (prefix - 8)) + 8 - 1)
+        last_coeff_abs_level_remaining = (((1 << (prefix - 3)) + 3 - 1)
                                           << c_rice_param) + suffix;
     }
-#else
-    prefix = tu_binarization(s, c_tr_max >> c_rice_param);
-    if (prefix != 9 + c_rice_param)
-        suffix = eg_binarization(s, c_rice_param + 1);
-    last_coeff_abs_level_remaining = (prefix << c_rice_param) + suffix;
-#endif
 
     av_log(s->avctx, AV_LOG_DEBUG,
            "coeff_abs_level_remaining c_rice_param: %d\n", c_rice_param);
