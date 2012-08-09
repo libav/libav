@@ -178,10 +178,8 @@ static int decode_nal_slice_header(HEVCContext *s)
 
         if (s->sps->sample_adaptive_offset_enabled_flag) {
             sh->slice_sample_adaptive_offset_flag[0] = get_bits1(gb);
-            if (sh->slice_sample_adaptive_offset_flag[0]) {
-                sh->slice_sample_adaptive_offset_flag[2] =
-                    sh->slice_sample_adaptive_offset_flag[1] = get_bits1(gb);
-            }
+            sh->slice_sample_adaptive_offset_flag[2] =
+                sh->slice_sample_adaptive_offset_flag[1] = get_bits1(gb);
         }
 
         if (sh->slice_type != I_SLICE) {
