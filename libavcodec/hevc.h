@@ -107,8 +107,10 @@ typedef struct {
         int bottom_offset;
     } pic_crop;
 
-    int bit_depth_luma; ///< bit_depth_luma_minus8 + 8
-    int bit_depth_chroma; ///< bit_depth_chroma_minus8 + 8
+    // bit_depth_luma_minus8 + 8
+    // bit_depth_chroma_minus8 + 8
+    // bit_depth_chroma_minus8 + 8
+    int bit_depth[3];
 
     int pcm_enabled_flag;
     struct {
@@ -168,6 +170,9 @@ typedef struct {
     int pic_height_in_min_cbs;
 
     int log2_min_pu_size;
+
+    int hshift[3];
+    int vshift[3];
 } SPS;
 
 typedef struct {

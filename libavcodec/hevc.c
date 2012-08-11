@@ -150,8 +150,14 @@ static int decode_nal_slice_header(HEVCContext *s)
         } else {
             s->avctx->pix_fmt = PIX_FMT_YUV444P;
         }
-        ff_hevc_pred_init(&s->hpc, s->sps->bit_depth_luma);
-        ff_hevc_dsp_init(&s->hevcdsp, s->sps->bit_depth_luma);
+        s->sps->hshift[0] = s->sps->vshift[0] = 0;
+        s->sps->hshift[2] =
+            s->sps->hshift[1] = av_pix_fmt_descriptors[s->avctx->pix_fmt].log2_chroma_w;
+        s->sps->vshift[2] =
+            s->sps->vshift[1] = av_pix_fmt_descriptors[s->avctx->pix_fmt].log2_chroma_h;
+
+        ff_hevc_pred_init(&s->hpc, s->sps->bit_depth[0]);
+        ff_hevc_dsp_init(&s->hevcdsp, s->sps->bit_depth[0]);
     }
 
     if (!sh->first_slice_in_pic_flag) {
@@ -301,7 +307,7 @@ static int sao_param(HEVCContext *s, int rx, int ry)
             sao_merge_up_flag = ff_hevc_sao_merge_left_up_flag_decode(s);
     }
     for (int c_idx = 0; c_idx < 3; c_idx++) {
-        int bit_depth = c_idx ? s->sps->bit_depth_chroma: s->sps->bit_depth_luma;
+        int bit_depth = s->sps->bit_depth[c_idx];
         int shift = bit_depth - FFMIN(bit_depth, 10);
 
         if (!s->sh.slice_sample_adaptive_offset_flag[c_idx])
@@ -376,8 +382,8 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
     const uint8_t *scan_x_cg, *scan_y_cg, *scan_x_off, *scan_y_off;
 
     int stride = s->frame.linesize[c_idx];
-    int hshift = c_idx ? av_pix_fmt_descriptors[s->avctx->pix_fmt].log2_chroma_w : 0;
-    int vshift = c_idx ? av_pix_fmt_descriptors[s->avctx->pix_fmt].log2_chroma_h : 0;
+    int hshift = s->sps->hshift[c_idx];
+    int vshift = s->sps->vshift[c_idx];
     uint8_t *dst = &s->frame.data[c_idx][(y0 >> vshift) * stride + (x0 >> hshift)];
 
     int16_t coeffs[MAX_TB_SIZE * MAX_TB_SIZE] = { 0 };
@@ -638,7 +644,7 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
     }
 
     if (!s->cu.cu_transquant_bypass_flag) {
-        int bit_depth = c_idx ? s->sps->bit_depth_chroma : s->sps->bit_depth_luma;
+        int bit_depth = s->sps->bit_depth[c_idx];
         //TODO: don't hardcode QP
         int qp = c_idx ? 31 : 32;
         s->hevcdsp.dequant(coeffs, log2_trafo_width, qp, bit_depth);
@@ -863,7 +869,7 @@ static void pcm_sample(HEVCContext *s, int x0, int y0, int log2_cb_size)
         for (int i = 0; i < cb_size; i++)
             s->frame.data[0][(y0 + j) * s->frame.linesize[0] + (x0 + i)]
                 = get_bits(gb, s->sps->pcm.bit_depth_luma) <<
-                (s->sps->bit_depth_luma - s->sps->pcm.bit_depth_luma);
+                (s->sps->bit_depth[0] - s->sps->pcm.bit_depth_luma);
 
     //TODO: put the samples at the correct place in the frame
     for (int i = 0; i < (1 << (log2_cb_size << 1)) >> 1; i++)

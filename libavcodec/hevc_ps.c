@@ -136,8 +136,9 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
         sps->pic_crop.bottom_offset = get_ue_golomb(gb);
     }
 
-    sps->bit_depth_luma = get_ue_golomb(gb) + 8;
-    sps->bit_depth_chroma = get_ue_golomb(gb) + 8;
+    sps->bit_depth[0] = get_ue_golomb(gb) + 8;
+    sps->bit_depth[2] =
+        sps->bit_depth[1] = get_ue_golomb(gb) + 8;
 
     sps->pcm_enabled_flag = get_bits1(gb);
     if (sps->pcm_enabled_flag) {

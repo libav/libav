@@ -46,8 +46,8 @@ static void FUNCC(intra_pred)(struct HEVCContext *s, int x0, int y0, int log2_si
 #define EXTEND_DOWN(ptr, length) EXTEND_RIGHT(ptr, length)
 
     int size = (1 << log2_size);
-    int hshift = c_idx ? av_pix_fmt_descriptors[s->avctx->pix_fmt].log2_chroma_w : 0;
-    int vshift = c_idx ? av_pix_fmt_descriptors[s->avctx->pix_fmt].log2_chroma_h : 0;
+    int hshift = s->sps->hshift[c_idx];
+    int vshift = s->sps->vshift[c_idx];
     int x = x0 >> hshift;
     int y = y0 >> vshift;
 
@@ -146,7 +146,7 @@ static void FUNCC(intra_pred)(struct HEVCContext *s, int x0, int y0, int log2_si
             left_available = 1;
             bottom_left_available = 1;
         } else { // No samples available
-            top[0] = left[-1] = (1 << (s->sps->bit_depth_luma - 1));
+            top[0] = left[-1] = (1 << (s->sps->bit_depth[c_idx] - 1));
             EXTEND_RIGHT(&top[0], 2*size-1);
             EXTEND_DOWN(&left[-1], 2*size);
         }
@@ -204,7 +204,7 @@ static void FUNCC(intra_pred)(struct HEVCContext *s, int x0, int y0, int log2_si
         break;
     default:
         s->hpc.pred_angular((uint8_t*)src, (uint8_t*)top, (uint8_t*)left, stride, log2_size, c_idx,
-                                    mode, s->sps->bit_depth_luma);
+                                    mode, s->sps->bit_depth[c_idx]);
         break;
     }
 }
