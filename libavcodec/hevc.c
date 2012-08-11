@@ -896,10 +896,8 @@ static int luma_intra_pred_mode(HEVCContext *s, int x0, int y0, int pu_size,
     int cand_left = s->pu.pu_vert[y_pu].intra_pred_mode;
 
     int y_ctb = (y0 >>
-                 (s->sps->log2_min_coding_block_size +
-                  s->sps->log2_diff_max_min_coding_block_size))
-                << (s->sps->log2_min_coding_block_size +
-                    s->sps->log2_diff_max_min_coding_block_size);
+                 (s->sps->log2_ctb_size))
+                << (s->sps->log2_ctb_size);
 
     // intra_pred_mode prediction does not cross vertical CTB boundaries
     if ((y0 - 1) < y_ctb)
@@ -1232,15 +1230,12 @@ static int coding_tree(HEVCContext *s, int x0, int y0, int log2_cb_size, int cb_
         }
 
         av_log(s->avctx, AV_LOG_DEBUG, "x0: %d, y0: %d, cb: %d, %d\n",
-               x0, y0, (1 << log2_cb_size), (1 << (s->sps->log2_min_coding_block_size
-                                               + s->sps->log2_diff_max_min_coding_block_size)));
+               x0, y0, (1 << log2_cb_size), (1 << (s->sps->log2_ctb_size)));
         if ((!((x0 + (1 << log2_cb_size)) %
-               (1 << (s->sps->log2_min_coding_block_size +
-                       s->sps->log2_diff_max_min_coding_block_size))) ||
+               (1 << (s->sps->log2_ctb_size))) ||
              (x0 + (1 << log2_cb_size) >= s->sps->pic_width_in_luma_samples)) &&
             (!((y0 + (1 << log2_cb_size)) %
-               (1 << (s->sps->log2_min_coding_block_size +
-                       s->sps->log2_diff_max_min_coding_block_size))) ||
+               (1 << (s->sps->log2_ctb_size))) ||
                 (y0 + (1 << log2_cb_size) >= s->sps->pic_height_in_luma_samples)) &&
                s->num_pcm_block == 0) {
             int end_of_slice_flag = ff_hevc_cabac_decode(s, END_OF_SLICE_FLAG);

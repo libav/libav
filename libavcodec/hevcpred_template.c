@@ -64,8 +64,7 @@ static void FUNCC(intra_pred)(struct HEVCContext *s, int x0, int y0, int log2_si
     pixel *filtered_left = filtered_left_array + 1;
     pixel *filtered_top = filtered_top_array + 1;
 
-    const uint32_t mask = (1 << (s->sps->log2_min_coding_block_size +
-                                 s->sps->log2_diff_max_min_coding_block_size)) - 1;
+    const uint32_t mask = (1 << (s->sps->log2_ctb_size)) - 1;
 
     // Each bit determine the position of the block in its parent quadtree,
     // read the bits from right to left to go up in the tree.
