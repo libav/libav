@@ -48,7 +48,7 @@ static void clear_pu(struct PUContent *pu_band, int start, int end)
 static int pic_arrays_init(HEVCContext *s)
 {
     int pic_size = s->sps->pic_width_in_luma_samples * s->sps->pic_height_in_luma_samples;
-    int ctb_count = s->sps->PicWidthInCtbs * s->sps->PicHeightInCtbs;
+    int ctb_count = s->sps->pic_width_in_ctbs * s->sps->pic_height_in_ctbs;
     int pic_width_in_min_pu = s->sps->pic_width_in_min_cbs * 4;
     int pic_height_in_min_pu = s->sps->pic_height_in_min_cbs * 4;
 
@@ -161,8 +161,8 @@ static int decode_nal_slice_header(HEVCContext *s)
     }
 
     if (!sh->first_slice_in_pic_flag) {
-        slice_address_length = av_ceil_log2_c(s->sps->PicWidthInCtbs *
-                                              s->sps->PicHeightInCtbs);
+        slice_address_length = av_ceil_log2_c(s->sps->pic_width_in_ctbs *
+                                              s->sps->pic_height_in_ctbs);
         sh->slice_address = get_bits(gb, slice_address_length);
     }
 
@@ -266,7 +266,7 @@ static int decode_nal_slice_header(HEVCContext *s)
     return 0;
 }
 
-#define CTB(tab,x,y) ((tab)[(x) * s->sps->PicHeightInCtbs + (y)])
+#define CTB(tab,x,y) ((tab)[(x) * s->sps->pic_height_in_ctbs + (y)])
 
 #define set_sao(elem, value)\
     if (!sao_merge_up_flag && !sao_merge_left_flag) {\
@@ -299,10 +299,10 @@ static int sao_param(HEVCContext *s, int rx, int ry)
     }
     if (ry > 0 && !sao_merge_left_flag) {
         int up_ctb_in_slice =
-            (s->ctb_addr_ts - s->pps->ctb_addr_rs_to_ts[s->ctb_addr_rs - s->sps->PicWidthInCtbs])
+            (s->ctb_addr_ts - s->pps->ctb_addr_rs_to_ts[s->ctb_addr_rs - s->sps->pic_width_in_ctbs])
             <=  s->ctb_addr_in_slice;
         int up_ctb_in_tile = (s->pps->tile_id[s->ctb_addr_ts] ==
-                              s->pps->tile_id[s->pps->ctb_addr_rs_to_ts[s->ctb_addr_rs - s->sps->PicWidthInCtbs]]);
+                              s->pps->tile_id[s->pps->ctb_addr_rs_to_ts[s->ctb_addr_rs - s->sps->pic_width_in_ctbs]]);
         if (up_ctb_in_slice && up_ctb_in_tile)
             sao_merge_up_flag = ff_hevc_sao_merge_left_up_flag_decode(s);
     }
@@ -1259,23 +1259,23 @@ static int coding_tree(HEVCContext *s, int x0, int y0, int log2_cb_size, int cb_
  */
 static int decode_nal_slice_data(HEVCContext *s)
 {
-    int ctb_size = 1 << s->sps->Log2CtbSize;
+    int ctb_size = 1 << s->sps->log2_ctb_size;
     int more_data = 1;
     int x_ctb, y_ctb;
 
     s->ctb_addr_rs = s->sh.slice_ctb_addr_rs;
     s->ctb_addr_ts = s->pps->ctb_addr_rs_to_ts[s->ctb_addr_rs];
 
-    while (s->ctb_addr_ts < s->sps->PicWidthInCtbs*s->sps->PicHeightInCtbs) {
+    while (s->ctb_addr_ts < s->sps->pic_width_in_ctbs*s->sps->pic_height_in_ctbs) {
         x_ctb = INVERSE_RASTER_SCAN(s->ctb_addr_rs, ctb_size, ctb_size, s->sps->pic_width_in_luma_samples, 0);
         y_ctb = INVERSE_RASTER_SCAN(s->ctb_addr_rs, ctb_size, ctb_size, s->sps->pic_width_in_luma_samples, 1);
         s->num_pcm_block = 0;
         s->ctb_addr_in_slice = s->ctb_addr_rs - s->sh.slice_address;
         if (s->sh.slice_sample_adaptive_offset_flag[0] ||
             s->sh.slice_sample_adaptive_offset_flag[1])
-                sao_param(s, x_ctb >> s->sps->Log2CtbSize, y_ctb >> s->sps->Log2CtbSize);
+                sao_param(s, x_ctb >> s->sps->log2_ctb_size, y_ctb >> s->sps->log2_ctb_size);
 
-        more_data = coding_tree(s, x_ctb, y_ctb, s->sps->Log2CtbSize, 0);
+        more_data = coding_tree(s, x_ctb, y_ctb, s->sps->log2_ctb_size, 0);
         if (!more_data)
             return 0;
 
@@ -1286,7 +1286,7 @@ static int decode_nal_slice_data(HEVCContext *s)
                           s->pps->tile_id[s->ctb_addr_ts] !=
                           s->pps->tile_id[s->ctb_addr_ts - 1]) ||
             (s->pps->tiles_or_entropy_coding_sync_idc == 2 &&
-             ((s->ctb_addr_ts % s->sps->PicWidthInCtbs) == 0)))
+             ((s->ctb_addr_ts % s->sps->pic_width_in_ctbs) == 0)))
             align_get_bits(&s->gb);
     }
 

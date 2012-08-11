@@ -163,9 +163,9 @@ typedef struct {
 #endif
 
     // Inferred parameters
-    int Log2CtbSize;
-    int PicWidthInCtbs;
-    int PicHeightInCtbs;
+    int log2_ctb_size; ///< Log2CtbSize
+    int pic_width_in_ctbs; ///< PicWidthInCtbs
+    int pic_height_in_ctbs; ///< PicHeightInCtbs
     int pic_width_in_min_cbs;
     int pic_height_in_min_cbs;
 
