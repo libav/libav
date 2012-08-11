@@ -35,7 +35,7 @@
 /**
  * Value of the luma sample at position (x,y) in the 2D array tab.
  */
-#define SAMPLE(tab,x,y) ((tab)[(x) * s->sps->pic_height_in_luma_samples + (y)])
+#define SAMPLE(tab,x,y) ((tab)[(y) * s->sps->pic_width_in_luma_samples + (x)])
 
 static void clear_pu(struct PUContent *pu_band, int start, int end)
 {
@@ -266,7 +266,7 @@ static int decode_nal_slice_header(HEVCContext *s)
     return 0;
 }
 
-#define CTB(tab,x,y) ((tab)[(x) * s->sps->pic_height_in_ctbs + (y)])
+#define CTB(tab,x,y) ((tab)[(y) * s->sps->pic_width_in_ctbs + (x)])
 
 #define set_sao(elem, value)\
     if (!sao_merge_up_flag && !sao_merge_left_flag) {\
@@ -356,7 +356,7 @@ static int sao_param(HEVCContext *s, int rx, int ry)
 
 static av_always_inline int min_cb_addr_zs(HEVCContext *s, int x, int y)
 {
-    return s->pps->min_cb_addr_zs[s->sps->pic_height_in_min_cbs * x + y];
+    return s->pps->min_cb_addr_zs[y * s->sps->pic_width_in_min_cbs + x];
 }
 
 /**

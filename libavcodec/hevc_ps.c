@@ -428,7 +428,7 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
         for (int i = 0; i < pps->num_tile_columns; i++, tile_id++)
             for (int y = pps->row_bd[j]; y < pps->row_bd[j+1]; y++)
                 for (int x = pps->col_bd[j]; x < pps->col_bd[j+1]; x++)
-                    pps->tile_id[pps->ctb_addr_rs_to_ts[y*sps->pic_width_in_ctbs + x]] =
+                    pps->tile_id[pps->ctb_addr_rs_to_ts[y * sps->pic_width_in_ctbs + x]] =
                         tile_id;
 
     for (int y = 0; y < sps->pic_height_in_min_cbs; y++) {
@@ -442,7 +442,7 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
                 int m = 1 << i;
                 val += (m & x ? m*m : 0) + (m & y ? 2*m*m : 0);
             }
-            pps->min_cb_addr_zs[sps->pic_height_in_min_cbs * x + y] = val;
+            pps->min_cb_addr_zs[y * sps->pic_width_in_min_cbs + x] = val;
         }
     }
 
