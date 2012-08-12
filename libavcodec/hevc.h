@@ -168,6 +168,8 @@ typedef struct {
     int pic_height_in_ctbs; ///< PicHeightInCtbs
     int pic_width_in_min_cbs;
     int pic_height_in_min_cbs;
+    int pic_width_in_min_tbs;
+    int pic_height_in_min_tbs;
 
     int log2_min_pu_size;
 
@@ -235,6 +237,7 @@ typedef struct {
     int *ctb_addr_ts_to_rs; ///< CtbAddrTSToRS
     int *tile_id; ///< TileId
     int *min_cb_addr_zs; ///< MinCbAddrZS
+    int *min_tb_addr_zs; ///< MinTbAddrZS
 } PPS;
 
 typedef enum {

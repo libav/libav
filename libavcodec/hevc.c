@@ -1419,6 +1419,7 @@ static av_cold int hevc_decode_free(AVCodecContext *avctx)
             av_freep(&s->pps_list[i]->ctb_addr_ts_to_rs);
             av_freep(&s->pps_list[i]->tile_id);
             av_freep(&s->pps_list[i]->min_cb_addr_zs);
+            av_freep(&s->pps_list[i]->min_tb_addr_zs);
         }
         av_freep(&s->pps_list[i]);
     }

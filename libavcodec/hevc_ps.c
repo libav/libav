@@ -214,8 +214,14 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
                                   (1 << sps->log2_ctb_size));
     sps->pic_height_in_ctbs = ROUNDED_DIV(sps->pic_height_in_luma_samples,
                                   (1 << sps->log2_ctb_size));
-    sps->pic_width_in_min_cbs = sps->pic_width_in_luma_samples / (1 << sps->log2_min_coding_block_size);
-    sps->pic_height_in_min_cbs = sps->pic_height_in_luma_samples / (1 << sps->log2_min_coding_block_size);
+    sps->pic_width_in_min_cbs = sps->pic_width_in_luma_samples >>
+                                sps->log2_min_coding_block_size;
+    sps->pic_height_in_min_cbs = sps->pic_height_in_luma_samples >>
+                                 sps->log2_min_coding_block_size;
+    sps->pic_width_in_min_tbs = sps->pic_width_in_luma_samples >>
+                                sps->log2_min_transform_block_size;
+    sps->pic_height_in_min_tbs = sps->pic_height_in_luma_samples >>
+                                 sps->log2_min_transform_block_size;
     sps->log2_min_pu_size = sps->log2_min_coding_block_size - 1;
 
     av_free(s->sps_list[sps_id]);
@@ -236,6 +242,7 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
 
     SPS *sps = 0;
     int pps_id = 0;
+    int log2_diff_ctb_min_tb_size;
 
     PPS *pps = av_mallocz(sizeof(PPS));
     if (pps == NULL)
@@ -385,8 +392,12 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
                              sps->pic_height_in_ctbs * sizeof(int));
     pps->min_cb_addr_zs = av_malloc(sps->pic_width_in_min_cbs *
                                     sps->pic_height_in_min_cbs * sizeof(int));
+
+    pps->min_tb_addr_zs = av_malloc(sps->pic_width_in_min_tbs *
+                                    sps->pic_height_in_min_tbs * sizeof(int));
     if (pps->ctb_addr_rs_to_ts == NULL || pps->ctb_addr_ts_to_rs == NULL ||
-        pps->tile_id == NULL || pps->min_cb_addr_zs == NULL)
+        pps->tile_id == NULL || pps->min_cb_addr_zs == NULL ||
+        pps->min_tb_addr_zs == NULL)
         goto err;
 
     for (int ctb_addr_rs = 0;
@@ -446,6 +457,22 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
         }
     }
 
+    log2_diff_ctb_min_tb_size = sps->log2_ctb_size - sps->log2_min_transform_block_size;
+    for (int y = 0; y < sps->pic_height_in_min_tbs; y++) {
+        for (int x = 0; x < sps->pic_width_in_min_tbs; x++) {
+            int tb_x = x >> log2_diff_ctb_min_tb_size;
+            int tb_y = y >> log2_diff_ctb_min_tb_size;
+            int ctb_addr_rs = sps->pic_width_in_ctbs * tb_y + tb_x;
+            int val = pps->ctb_addr_rs_to_ts[ctb_addr_rs] <<
+                      (log2_diff_ctb_min_tb_size * 2);
+            for (int i = 0; i < log2_diff_ctb_min_tb_size; i++) {
+                int m = 1 << i;
+                val += (m & x ? m*m : 0) + (m & y ? 2*m*m : 0);
+            }
+            pps->min_tb_addr_zs[y * sps->pic_width_in_min_tbs + x] = val;
+        }
+    }
+
     av_free(s->pps_list[pps_id]);
     s->pps_list[pps_id] = pps;
     return 0;
@@ -459,6 +486,7 @@ err:
     av_free(pps->ctb_addr_ts_to_rs);
     av_free(pps->tile_id);
     av_free(pps->min_cb_addr_zs);
+    av_free(pps->min_tb_addr_zs);
 
     av_free(pps);
     return -1;

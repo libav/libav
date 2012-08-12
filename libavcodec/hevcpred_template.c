@@ -28,6 +28,8 @@
 
 static void FUNCC(intra_pred)(struct HEVCContext *s, int x0, int y0, int log2_size, int c_idx)
 {
+#define MIN_TB_ADDR_ZS(x, y)\
+    s->pps->min_tb_addr_zs[(y) * s->sps->pic_width_in_min_tbs + (x)]
 #define LEFT_CB_AVAILABLE(i)                                            \
     (x0 > 0 && (y0 + (i)) >= 0 && (y0 + (i)) < s->sps->pic_height_in_luma_samples && \
      (x0 != s->cu.x || s->cu.left_cb_available[(y0+(i))>>s->sps->log2_min_coding_block_size]))
@@ -45,11 +47,16 @@ static void FUNCC(intra_pred)(struct HEVCContext *s, int x0, int y0, int log2_si
 #define EXTEND_UP(ptr, length) EXTEND_LEFT(ptr, length)
 #define EXTEND_DOWN(ptr, length) EXTEND_RIGHT(ptr, length)
 
-    int size = (1 << log2_size);
     int hshift = s->sps->hshift[c_idx];
     int vshift = s->sps->vshift[c_idx];
+    int size = (1 << log2_size);
+    int size_in_luma = size << hshift;
+    int size_in_tbs = size_in_luma >> s->sps->log2_min_transform_block_size;
     int x = x0 >> hshift;
     int y = y0 >> vshift;
+    int x_tb = x0 >> s->sps->log2_min_transform_block_size;
+    int y_tb = y0 >> s->sps->log2_min_transform_block_size;
+    int cur_tb_addr = MIN_TB_ADDR_ZS(x_tb, y_tb);
 
     int stride = s->frame.linesize[c_idx]/sizeof(pixel);
     pixel *src = (pixel*)&s->frame.data[c_idx][x + y * stride];
@@ -64,43 +71,17 @@ static void FUNCC(intra_pred)(struct HEVCContext *s, int x0, int y0, int log2_si
     pixel *filtered_left = filtered_left_array + 1;
     pixel *filtered_top = filtered_top_array + 1;
 
-    const uint32_t mask = (1 << (s->sps->log2_ctb_size)) - 1;
 
-    // Each bit determine the position of the block in its parent quadtree,
-    // read the bits from right to left to go up in the tree.
-    uint32_t right_mask = (x0 & mask) >> (log2_size + hshift);
-    uint32_t top_mask   = (~y0 & mask) >> (log2_size + vshift);
+    int has_bottom_left = cur_tb_addr > MIN_TB_ADDR_ZS(x_tb - 1, y_tb + size_in_tbs);
+    int has_top_right = cur_tb_addr > MIN_TB_ADDR_ZS(x_tb + size_in_tbs, y_tb - 1);
 
-    int bottom_left_available, left_available, top_left_available;
-    int top_available, top_right_available;
-
-    int has_bottom_left = 0;
-    int has_top_right = 1;
-    int left_block = (right_mask & 1) == 0;
-
-    if (left_block) {
-        // Bottom left samples are available only if the current block is on
-        // the left side of a top left block
-        uint32_t first_right = right_mask & (-right_mask);
-        uint32_t first_top   = top_mask & (-top_mask);
-        has_bottom_left = first_top != 0 && (first_right == 0 || first_right > first_top);
-    } else {
-        // Top right samples are available only if the current block is _not_ on
-        // the right side of a bottom right block
-        uint32_t left_mask   = (~right_mask) & mask;
-        uint32_t bottom_mask = (~top_mask) & mask;
-        uint32_t first_left   = left_mask & (-left_mask);
-        uint32_t first_bottom = bottom_mask & (-bottom_mask);
-        has_top_right = !(first_bottom != 0 && (first_left == 0 || (first_left > first_bottom)));
-    }
-
-    bottom_left_available = has_bottom_left &&
-                            LEFT_CB_AVAILABLE(size << vshift);
-    left_available = LEFT_CB_AVAILABLE(0);
-    top_left_available = LEFT_CB_AVAILABLE(-1);
-    top_available = TOP_CB_AVAILABLE(0);
-    top_right_available = has_top_right &&
-                           TOP_CB_AVAILABLE(size << hshift);
+    int bottom_left_available = has_bottom_left &&
+                            LEFT_CB_AVAILABLE(size_in_luma);
+    int left_available = LEFT_CB_AVAILABLE(0);
+    int top_left_available = LEFT_CB_AVAILABLE(-1);
+    int top_available = TOP_CB_AVAILABLE(0);
+    int top_right_available = has_top_right &&
+                              TOP_CB_AVAILABLE(size_in_luma);
 
     // Fill left and top with the available samples
     if (bottom_left_available) {
@@ -175,6 +156,7 @@ static void FUNCC(intra_pred)(struct HEVCContext *s, int x0, int y0, int log2_si
 #undef EXTEND_DOWN
 #undef LEFT_CB_AVAILABLE
 #undef TOP_CB_AVAILABLE
+#undef MIN_TB_ADDR_ZS
 
     if (c_idx == 0 && mode != INTRA_DC && size != 4) {
         int intra_hor_ver_dist_thresh[] = { 7, 1, 0 };
