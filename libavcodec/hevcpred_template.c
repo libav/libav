@@ -72,8 +72,10 @@ static void FUNCC(intra_pred)(struct HEVCContext *s, int x0, int y0, int log2_si
     pixel *filtered_top = filtered_top_array + 1;
 
 
-    int has_bottom_left = cur_tb_addr > MIN_TB_ADDR_ZS(x_tb - 1, y_tb + size_in_tbs);
-    int has_top_right = cur_tb_addr > MIN_TB_ADDR_ZS(x_tb + size_in_tbs, y_tb - 1);
+    int has_bottom_left = x_tb > 0 && (y_tb + size_in_tbs) < s->sps->pic_height_in_min_tbs &&
+                          cur_tb_addr > MIN_TB_ADDR_ZS(x_tb - 1, y_tb + size_in_tbs);
+    int has_top_right = y_tb > 0 && (x_tb + size_in_tbs) < s->sps->pic_width_in_min_tbs &&
+                        cur_tb_addr > MIN_TB_ADDR_ZS(x_tb + size_in_tbs, y_tb - 1);
 
     int bottom_left_available = has_bottom_left &&
                             LEFT_CB_AVAILABLE(size_in_luma);
