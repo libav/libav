@@ -1354,8 +1354,8 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     case NAL_SLICE: {
         int pic_width_in_min_pu = s->sps->pic_width_in_min_cbs * 4;
         int pic_height_in_min_pu = s->sps->pic_height_in_min_cbs * 4;
-        memset(s->pu.pu_vert, 0, pic_height_in_min_pu * sizeof(struct PUContent));
-        memset(s->pu.pu_horiz, 0, pic_width_in_min_pu * sizeof(struct PUContent));
+        clear_pu(s->pu.pu_vert, 0, pic_height_in_min_pu);
+        clear_pu(s->pu.pu_horiz, 0, pic_width_in_min_pu);
         // fall-through
     }
     case NAL_IDR_SLICE:
