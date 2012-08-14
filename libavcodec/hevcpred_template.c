@@ -73,9 +73,14 @@ static void FUNCC(intra_pred)(struct HEVCContext *s, int x0, int y0, int log2_si
     int top_right_available = y_tb > 0 && (x_tb + size_in_tbs) < s->sps->pic_width_in_min_tbs &&
                               cur_tb_addr > MIN_TB_ADDR_ZS(x_tb + size_in_tbs, y_tb - 1);
 
+    int bottom_left_size = (FFMIN(y0 + 2*size_in_luma, s->sps->pic_height_in_luma_samples) -
+                            (y0 + size_in_luma)) >> vshift;
+    int top_right_size = (FFMIN(x0 + 2*size_in_luma, s->sps->pic_width_in_luma_samples) -
+                          (x0 + size_in_luma)) >> hshift;
+
     // Fill left and top with the available samples
     if (bottom_left_available) {
-        for (int i = 0; i < size; i++)
+        for (int i = 0; i < bottom_left_size; i++)
             left[size + i] = POS(-1, size + i);
     }
     if (left_available) {
@@ -84,12 +89,13 @@ static void FUNCC(intra_pred)(struct HEVCContext *s, int x0, int y0, int log2_si
     }
     if (top_left_available)
         left[-1] = POS(-1, -1);
-    if (top_available && top_right_available) {
+    if (top_available && top_right_available && top_right_size == size) {
         top = &POS(0,-1);
-    } else if (top_available) {
-        memcpy(&top[0], &POS(0, -1), size * sizeof(pixel));
-    } else if (top_right_available) {
-        memcpy(&top[size], &POS(size, -1), size * sizeof(pixel));
+    } else {
+        if (top_available)
+            memcpy(&top[0], &POS(0, -1), size * sizeof(pixel));
+        if (top_right_available)
+            memcpy(&top[size], &POS(size, -1), top_right_size * sizeof(pixel));
     }
 
     // Infer the unavailable samples
@@ -137,6 +143,11 @@ static void FUNCC(intra_pred)(struct HEVCContext *s, int x0, int y0, int log2_si
     if (!top_right_available) {
         EXTEND_RIGHT(&top[size-1], size);
     }
+
+    if (bottom_left_size < size)
+        EXTEND_DOWN(&left[size + bottom_left_size - 1], size - bottom_left_size);
+    if (top_right_size < size)
+        EXTEND_RIGHT(&top[size + top_right_size - 1], size - top_right_size);
 
     top[-1] = left[-1];
 
