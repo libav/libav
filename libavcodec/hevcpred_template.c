@@ -30,13 +30,6 @@ static void FUNCC(intra_pred)(struct HEVCContext *s, int x0, int y0, int log2_si
 {
 #define MIN_TB_ADDR_ZS(x, y)\
     s->pps->min_tb_addr_zs[(y) * s->sps->pic_width_in_min_tbs + (x)]
-#define LEFT_CB_AVAILABLE(i)                                            \
-    (x0 > 0 && (y0 + (i)) >= 0 && (y0 + (i)) < s->sps->pic_height_in_luma_samples && \
-     (x0 != s->cu.x || s->cu.left_cb_available[(y0+(i))>>s->sps->log2_min_coding_block_size]))
-
-#define TOP_CB_AVAILABLE(i)\
-    (y0 > 0 && (x0 + (i)) >= 0 && (x0 + (i)) < s->sps->pic_width_in_luma_samples && \
-     (y0 != s->cu.y || s->cu.top_cb_available[(x0+(i))>>s->sps->log2_min_coding_block_size]))
 
 #define EXTEND_LEFT(ptr, length)\
     for (int i = 0; i < (length); i++)\
@@ -72,18 +65,13 @@ static void FUNCC(intra_pred)(struct HEVCContext *s, int x0, int y0, int log2_si
     pixel *filtered_top = filtered_top_array + 1;
 
 
-    int has_bottom_left = x_tb > 0 && (y_tb + size_in_tbs) < s->sps->pic_height_in_min_tbs &&
-                          cur_tb_addr > MIN_TB_ADDR_ZS(x_tb - 1, y_tb + size_in_tbs);
-    int has_top_right = y_tb > 0 && (x_tb + size_in_tbs) < s->sps->pic_width_in_min_tbs &&
-                        cur_tb_addr > MIN_TB_ADDR_ZS(x_tb + size_in_tbs, y_tb - 1);
-
-    int bottom_left_available = has_bottom_left &&
-                            LEFT_CB_AVAILABLE(size_in_luma);
-    int left_available = LEFT_CB_AVAILABLE(0);
-    int top_left_available = LEFT_CB_AVAILABLE(-1);
-    int top_available = TOP_CB_AVAILABLE(0);
-    int top_right_available = has_top_right &&
-                              TOP_CB_AVAILABLE(size_in_luma);
+    int bottom_left_available = x_tb > 0 && (y_tb + size_in_tbs) < s->sps->pic_height_in_min_tbs &&
+                                cur_tb_addr > MIN_TB_ADDR_ZS(x_tb - 1, y_tb + size_in_tbs);
+    int left_available = x0 > 0;
+    int top_left_available = x0 > 0 && y0 > 0;
+    int top_available = y0 > 0;
+    int top_right_available = y_tb > 0 && (x_tb + size_in_tbs) < s->sps->pic_width_in_min_tbs &&
+                              cur_tb_addr > MIN_TB_ADDR_ZS(x_tb + size_in_tbs, y_tb - 1);
 
     // Fill left and top with the available samples
     if (bottom_left_available) {
@@ -156,8 +144,6 @@ static void FUNCC(intra_pred)(struct HEVCContext *s, int x0, int y0, int log2_si
 #undef EXTEND_RIGHT
 #undef EXTEND_UP
 #undef EXTEND_DOWN
-#undef LEFT_CB_AVAILABLE
-#undef TOP_CB_AVAILABLE
 #undef MIN_TB_ADDR_ZS
 
     if (c_idx == 0 && mode != INTRA_DC && size != 4) {

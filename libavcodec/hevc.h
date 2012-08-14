@@ -386,8 +386,8 @@ typedef struct CodingUnit {
 
     int x;
     int y;
-    uint8_t *top_cb_available;
-    uint8_t *left_cb_available;
+    uint8_t *top_ct_depth;
+    uint8_t *left_ct_depth;
 } CodingUnit;
 
 enum IntraPredMode {
@@ -428,11 +428,6 @@ enum IntraPredMode {
     INTRA_ANGULAR_34
 };
 
-struct PUContent {
-    enum IntraPredMode intra_pred_mode;
-    int ct_depth;
-};
-
 typedef struct PredictionUnit {
     uint8_t pcm_flag;
     uint8_t merge_flag;
@@ -440,11 +435,11 @@ typedef struct PredictionUnit {
     int mpm_idx;
     int rem_intra_luma_pred_mode;
 
-    enum IntraPredMode intra_pred_mode[4];
-    enum IntraPredMode intra_pred_mode_c;
+    uint8_t intra_pred_mode[4];
+    uint8_t intra_pred_mode_c;
 
-    struct PUContent *pu_vert;
-    struct PUContent *pu_horiz;
+    uint8_t *left_ipm;
+    uint8_t *top_ipm;
 } PredictionUnit;
 
 typedef struct TransformTree {

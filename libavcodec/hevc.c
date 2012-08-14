@@ -37,14 +37,6 @@
  */
 #define SAMPLE(tab,x,y) ((tab)[(y) * s->sps->pic_width_in_luma_samples + (x)])
 
-static void clear_pu(struct PUContent *pu_band, int start, int end)
-{
-    for (int i = start; i < end; i++) {
-        pu_band[i].intra_pred_mode = INTRA_DC;
-        pu_band[i].ct_depth = -1;
-    }
-}
-
 static int pic_arrays_init(HEVCContext *s)
 {
     int pic_size = s->sps->pic_width_in_luma_samples * s->sps->pic_height_in_luma_samples;
@@ -57,18 +49,18 @@ static int pic_arrays_init(HEVCContext *s)
     s->split_coding_unit_flag = av_malloc(pic_size * sizeof(uint8_t));
     s->cu.skip_flag = av_malloc(pic_size * sizeof(uint8_t));
 
-    s->cu.left_cb_available = av_malloc(s->sps->pic_height_in_min_cbs);
-    s->cu.top_cb_available = av_malloc(s->sps->pic_width_in_min_cbs);
+    s->cu.left_ct_depth = av_malloc(s->sps->pic_height_in_min_cbs);
+    s->cu.top_ct_depth = av_malloc(s->sps->pic_width_in_min_cbs);
 
-    s->pu.pu_vert = av_mallocz(pic_height_in_min_pu * sizeof(struct PUContent));
-    s->pu.pu_horiz = av_mallocz(pic_width_in_min_pu * sizeof(struct PUContent));
+    s->pu.left_ipm = av_malloc(pic_height_in_min_pu);
+    s->pu.top_ipm = av_malloc(pic_width_in_min_pu);
 
     if (s->split_coding_unit_flag == NULL || s->cu.skip_flag == NULL ||
-        s->pu.pu_vert == NULL || s->pu.pu_horiz == NULL)
+        s->pu.left_ipm == NULL || s->pu.top_ipm == NULL)
         return -1;
 
-    clear_pu(s->pu.pu_vert, 0, pic_height_in_min_pu);
-    clear_pu(s->pu.pu_horiz, 0, pic_width_in_min_pu);
+    memset(s->pu.left_ipm, INTRA_DC, pic_height_in_min_pu);
+    memset(s->pu.top_ipm, INTRA_DC, pic_width_in_min_pu);
 
     for (int i = 0; i < MAX_TRANSFORM_DEPTH; i++) {
         s->tt.split_transform_flag[i] = av_malloc(pic_size * sizeof(uint8_t));
@@ -89,8 +81,8 @@ static void pic_arrays_free(HEVCContext *s)
     av_freep(&s->split_coding_unit_flag);
     av_freep(&s->cu.skip_flag);
 
-    av_freep(&s->pu.pu_vert);
-    av_freep(&s->pu.pu_horiz);
+    av_freep(&s->pu.left_ipm);
+    av_freep(&s->pu.top_ipm);
 
     for (int i = 0; i < MAX_TRANSFORM_DEPTH; i++) {
         av_freep(&s->tt.split_transform_flag[i]);
@@ -890,19 +882,16 @@ static int luma_intra_pred_mode(HEVCContext *s, int x0, int y0, int pu_size,
                                 uint8_t prev_intra_luma_pred_flag)
 {
     int candidate[3];
-    enum IntraPredMode intra_pred_mode;
+    uint8_t intra_pred_mode;
 
     int x_pu = x0 >> s->sps->log2_min_pu_size;
     int y_pu = y0 >> s->sps->log2_min_pu_size;
-    int next_x_pu = (x0 + pu_size) >> s->sps->log2_min_pu_size;
-    int next_y_pu = (y0 + pu_size) >> s->sps->log2_min_pu_size;
+    int size_in_pus = pu_size >> s->sps->log2_min_pu_size;
 
-    int cand_up = s->pu.pu_horiz[x_pu].intra_pred_mode;
-    int cand_left = s->pu.pu_vert[y_pu].intra_pred_mode;
+    int cand_up = s->pu.top_ipm[x_pu];
+    int cand_left = s->pu.left_ipm[y_pu];
 
-    int y_ctb = (y0 >>
-                 (s->sps->log2_ctb_size))
-                << (s->sps->log2_ctb_size);
+    int y_ctb = (y0 >> (s->sps->log2_ctb_size)) << (s->sps->log2_ctb_size);
 
     // intra_pred_mode prediction does not cross vertical CTB boundaries
     if ((y0 - 1) < y_ctb)
@@ -937,11 +926,11 @@ static int luma_intra_pred_mode(HEVCContext *s, int x0, int y0, int pu_size,
         intra_pred_mode = candidate[s->pu.mpm_idx];
     } else {
         if (candidate[0] > candidate[1])
-            FFSWAP(enum IntraPredMode, candidate[0], candidate[1]);
+            FFSWAP(uint8_t, candidate[0], candidate[1]);
         if (candidate[0] > candidate[2])
-            FFSWAP(enum IntraPredMode, candidate[0], candidate[2]);
+            FFSWAP(uint8_t, candidate[0], candidate[2]);
         if (candidate[1] > candidate[2])
-            FFSWAP(enum IntraPredMode, candidate[1], candidate[2]);
+            FFSWAP(uint8_t, candidate[1], candidate[2]);
 
         intra_pred_mode = s->pu.rem_intra_luma_pred_mode;
         for (int i = 0; i < 3; i++) {
@@ -952,15 +941,8 @@ static int luma_intra_pred_mode(HEVCContext *s, int x0, int y0, int pu_size,
         }
     }
 
-    for (int i = x_pu; i < next_x_pu; i++) {
-        s->pu.pu_horiz[i].intra_pred_mode = intra_pred_mode;
-        s->pu.pu_horiz[i].ct_depth = s->ct.depth;
-    }
-
-    for (int i = y_pu; i < next_y_pu; i++) {
-        s->pu.pu_vert[i].intra_pred_mode = intra_pred_mode;
-        s->pu.pu_vert[i].ct_depth = s->ct.depth;
-    }
+    memset(&s->pu.top_ipm[x_pu], intra_pred_mode, size_in_pus);
+    memset(&s->pu.left_ipm[y_pu], intra_pred_mode, size_in_pus);
 
     av_log(s->avctx, AV_LOG_DEBUG, "intra_pred_mode: %d\n",
            intra_pred_mode);
@@ -1047,15 +1029,15 @@ static void prediction_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
     }
 }
 
-static av_always_inline void set_cu_available(HEVCContext *s, int x0, int y0,
-                                              int log2_cb_size, int available)
+static av_always_inline void set_ct_depth(HEVCContext *s, int x0, int y0,
+                                          int log2_cb_size, int ct_depth)
 {
     int length = (1 << log2_cb_size) >> s->sps->log2_min_coding_block_size;
     int x_cb = x0 >> s->sps->log2_min_coding_block_size;
     int y_cb = y0 >> s->sps->log2_min_coding_block_size;
 
-    memset(&s->cu.top_cb_available[x_cb], available, length);
-    memset(&s->cu.left_cb_available[y_cb], available, length);
+    memset(&s->cu.top_ct_depth[x_cb], ct_depth, length);
+    memset(&s->cu.left_ct_depth[y_cb], ct_depth, length);
 }
 
 /**
@@ -1065,8 +1047,6 @@ static void coding_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
 {
     int cb_size = 1 << log2_cb_size;
     int x1, y1, x2, y2, x3, y3;
-    int available = (s->cu.pred_mode == MODE_INTRA ||
-                     !s->pps->constrained_intra_pred_flag);
 
     s->cu.x = x0;
     s->cu.y = y0;
@@ -1161,7 +1141,7 @@ static void coding_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
         }
     }
 
-    set_cu_available(s, x0, y0, log2_cb_size, available);
+    set_ct_depth(s, x0, y0, log2_cb_size, s->ct.depth);
 }
 
 /**
@@ -1191,37 +1171,16 @@ static int coding_tree(HEVCContext *s, int x0, int y0, int log2_cb_size, int cb_
         int cb_size = (1 << (log2_cb_size)) >> 1;
         int x1 = x0 + cb_size;
         int y1 = y0 + cb_size;
-        int x0_pu = x0 >> s->sps->log2_min_pu_size;
-        int x1_pu = x1 >> s->sps->log2_min_pu_size;
-        int x2_pu = (x1 + cb_size) >> s->sps->log2_min_pu_size;
-        int y0_pu = y0 >> s->sps->log2_min_pu_size;
-        int y1_pu = y1 >> s->sps->log2_min_pu_size;
-        int y2_pu = (y1 + cb_size) >> s->sps->log2_min_pu_size;
 
         more_data = coding_tree(s, x0, y0, log2_cb_size - 1, cb_depth + 1);
 
-        if(more_data && x1 < s->sps->pic_width_in_luma_samples) {
+        if(more_data && x1 < s->sps->pic_width_in_luma_samples)
             more_data = coding_tree(s, x1, y0, log2_cb_size - 1, cb_depth + 1);
-        } else if (x1 < s->sps->pic_width_in_luma_samples) {
-            set_cu_available(s, x1, y0, log2_cb_size - 1, 0);
-            clear_pu(s->pu.pu_vert, y0_pu, y1_pu);
-            clear_pu(s->pu.pu_horiz, x1_pu, x2_pu);
-        }
-        if (more_data && y1 < s->sps->pic_height_in_luma_samples) {
+        if (more_data && y1 < s->sps->pic_height_in_luma_samples)
             more_data = coding_tree(s, x0, y1, log2_cb_size - 1, cb_depth + 1);
-        } else if (y1 < s->sps->pic_height_in_luma_samples) {
-            set_cu_available(s, x0, y1, log2_cb_size - 1, 0);
-            clear_pu(s->pu.pu_vert, y1_pu, y2_pu);
-            clear_pu(s->pu.pu_horiz, x0_pu, x1_pu);
-        }
         if(more_data && x1 < s->sps->pic_width_in_luma_samples &&
            y1 < s->sps->pic_height_in_luma_samples) {
             return coding_tree(s, x1, y1, log2_cb_size - 1, cb_depth + 1);
-        } else if (x1 < s->sps->pic_width_in_luma_samples &&
-                   y1 < s->sps->pic_height_in_luma_samples) {
-            set_cu_available(s, x1, y1, log2_cb_size - 1, 0);
-            clear_pu(s->pu.pu_vert, y1_pu, y2_pu);
-            clear_pu(s->pu.pu_horiz, x1_pu, x2_pu);
         }
         return ((x1 + cb_size) < s->sps->pic_width_in_luma_samples ||
                 (y1 + cb_size) < s->sps->pic_height_in_luma_samples);
@@ -1352,10 +1311,10 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         ff_hevc_decode_nal_sei(s);
         break;
     case NAL_SLICE: {
-        int pic_width_in_min_pu = s->sps->pic_width_in_min_cbs * 4;
         int pic_height_in_min_pu = s->sps->pic_height_in_min_cbs * 4;
-        clear_pu(s->pu.pu_vert, 0, pic_height_in_min_pu);
-        clear_pu(s->pu.pu_horiz, 0, pic_width_in_min_pu);
+        int pic_width_in_min_pu = s->sps->pic_width_in_min_cbs * 4;
+        memset(s->pu.left_ipm, INTRA_DC, pic_height_in_min_pu);
+        memset(s->pu.top_ipm, INTRA_DC, pic_width_in_min_pu);
         // fall-through
     }
     case NAL_IDR_SLICE:

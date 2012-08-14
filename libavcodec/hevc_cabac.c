@@ -748,17 +748,22 @@ int ff_hevc_split_coding_unit_flag_decode(HEVCContext *s, int ct_depth, int x0, 
     HEVCCabacContext *cc = &s->cc;
     int8_t ctx_idx_inc[1] = { 0 };
 
-    int depth_left = s->pu.pu_vert[y0 >> s->sps->log2_min_pu_size].ct_depth;
-    int depth_up = s->pu.pu_horiz[x0 >> s->sps->log2_min_pu_size].ct_depth;
+    int depth_left = 0;
+    int depth_top = 0;
+
+    if (x0 > 0)
+        depth_left = s->cu.left_ct_depth[y0 >> s->sps->log2_min_coding_block_size];
+    if (y0 > 0)
+        depth_top = s->cu.top_ct_depth[x0 >> s->sps->log2_min_coding_block_size];
 
     cc->elem = SPLIT_CODING_UNIT_FLAG;
     cc->state = states + elem_offset[cc->elem];
 
-    av_log(s->avctx, AV_LOG_DEBUG, "depth cur: %d, left: %d, up: %d\n",
-           ct_depth, depth_left, depth_up);
+    av_log(s->avctx, AV_LOG_DEBUG, "depth cur: %d, left: %d, top: %d\n",
+           ct_depth, depth_left, depth_top);
 
     ctx_idx_inc[0] += (depth_left > ct_depth);
-    ctx_idx_inc[0] += (depth_up > ct_depth);
+    ctx_idx_inc[0] += (depth_top > ct_depth);
 
     cc->max_bin_idx_ctx = 0;
     cc->ctx_idx_offset = 3 * cc->init_type;
