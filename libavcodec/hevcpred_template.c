@@ -28,14 +28,14 @@
 
 static void FUNCC(intra_pred)(struct HEVCContext *s, int x0, int y0, int log2_size, int c_idx)
 {
-#define MIN_TB_ADDR_ZS(x, y)\
+#define MIN_TB_ADDR_ZS(x, y)                                            \
     s->pps->min_tb_addr_zs[(y) * s->sps->pic_width_in_min_tbs + (x)]
 
-#define EXTEND_LEFT(ptr, length)\
-    for (int i = 0; i < (length); i++)\
+#define EXTEND_LEFT(ptr, length)                \
+    for (int i = 0; i < (length); i++)          \
         (ptr)[-(i+1)] = (ptr)[0];
-#define EXTEND_RIGHT(ptr, length)\
-    for (int i = 0; i < (length); i++)\
+#define EXTEND_RIGHT(ptr, length)               \
+    for (int i = 0; i < (length); i++)          \
         (ptr)[i+1] = (ptr)[0];
 #define EXTEND_UP(ptr, length) EXTEND_LEFT(ptr, length)
 #define EXTEND_DOWN(ptr, length) EXTEND_RIGHT(ptr, length)
@@ -184,7 +184,7 @@ static void FUNCC(intra_pred)(struct HEVCContext *s, int x0, int y0, int log2_si
         break;
     default:
         s->hpc.pred_angular((uint8_t*)src, (uint8_t*)top, (uint8_t*)left, stride, log2_size, c_idx,
-                                    mode, s->sps->bit_depth[c_idx]);
+                            mode, s->sps->bit_depth[c_idx]);
         break;
     }
 }
@@ -248,7 +248,7 @@ static void FUNCC(pred_angular)(uint8_t *_src, const uint8_t *_top, const uint8_
     };
     const int inv_angle[] = {
         -4096, -1638, -910, -630, -482, -390, -315, -256, -315, -390, -482,
-         -630, -910, -1638, -4096
+        -630, -910, -1638, -4096
     };
 
     int angle = intra_pred_angle[mode-2];

@@ -311,7 +311,7 @@ void ff_hevc_cabac_init(HEVCContext *s)
         int m = (init_value >> 4)*5 - 45;
         int n = ((init_value & 15) << 3) - 16;
         int pre_ctx_state = av_clip_c(((m * av_clip_c(s->sh.slice_qp, 0, 51)) >> 4) + n,
-                                    1, 126);
+                                      1, 126);
         states[i][0] = (pre_ctx_state <= 63) ? 0 : 1; //mps
         states[i][1] = states[i][0] ? (pre_ctx_state - 64) : (63 - pre_ctx_state); //stateIdx
     }
@@ -841,7 +841,7 @@ int ff_hevc_coeff_abs_level_remaining(HEVCContext *s, int first_elem, int base_l
         c_rice_param = 0;
         last_coeff_abs_level_remaining = 0;
         av_log(s->avctx, AV_LOG_DEBUG,
-           "c_rice_param reset to 0\n");
+               "c_rice_param reset to 0\n");
     }
 
     prefix = u_binarization(s);

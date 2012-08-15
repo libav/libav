@@ -209,11 +209,11 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
     // Inferred parameters
 
     sps->log2_ctb_size = sps->log2_min_coding_block_size
-        + sps->log2_diff_max_min_coding_block_size;
+                         + sps->log2_diff_max_min_coding_block_size;
     sps->pic_width_in_ctbs = ROUNDED_DIV(sps->pic_width_in_luma_samples,
-                                  (1 << sps->log2_ctb_size));
+                                         (1 << sps->log2_ctb_size));
     sps->pic_height_in_ctbs = ROUNDED_DIV(sps->pic_height_in_luma_samples,
-                                  (1 << sps->log2_ctb_size));
+                                          (1 << sps->log2_ctb_size));
     sps->pic_width_in_min_cbs = sps->pic_width_in_luma_samples >>
                                 sps->log2_min_coding_block_size;
     sps->pic_height_in_min_cbs = sps->pic_height_in_luma_samples >>
