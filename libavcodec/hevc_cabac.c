@@ -212,19 +212,17 @@ static int decode_bin(HEVCContext *s, int bin_idx)
 
     cc->range -= lpsrange;
     if (cc->offset >= cc->range) {
-        bin_val = 1 - mps;
         cc->offset -= cc->range;
         cc->range = lpsrange;
-    } else {
-        bin_val = mps;
-    }
 
-    if (bin_val == mps) {
-        state[1] = mps_state[pstate];
-    } else {
+        bin_val = 1 - mps;
+        state[1] = lps_state[pstate];
+
         if (pstate == 0)
             state[0] = !mps;
-        state[1] = lps_state[pstate];
+    } else {
+        bin_val = mps;
+        state[1] = mps_state[pstate];
     }
 
     renormalization(s);
