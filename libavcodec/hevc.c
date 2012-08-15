@@ -892,6 +892,12 @@ static void hls_pcm_sample(HEVCContext *s, int x0, int y0, int log2_cb_size)
     s->num_pcm_block--;
 }
 
+static void hls_prediction_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
+{
+    av_log(s->avctx, AV_LOG_ERROR, "TODO: pred_mode != MODE_INTRA\n");
+    return;
+}
+
 /**
  * 8.4.1
  */
@@ -966,81 +972,6 @@ static int luma_intra_pred_mode(HEVCContext *s, int x0, int y0, int pu_size,
     return intra_pred_mode;
 }
 
-static void hls_prediction_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
-{
-    s->pu.pcm_flag = 0;
-    if (s->cu.pred_mode == MODE_INTRA) {
-        if (s->cu.part_mode == PART_2Nx2N && s->sps->pcm_enabled_flag &&
-            log2_cb_size >= s->sps->pcm.log2_min_pcm_coding_block_size &&
-            log2_cb_size <= (s->sps->pcm.log2_min_pcm_coding_block_size +
-                             s->sps->pcm.log2_diff_max_min_pcm_coding_block_size)) {
-            s->pu.pcm_flag = ff_hevc_pcm_flag_decode(s);
-            av_log(s->avctx, AV_LOG_ERROR, "pcm_flag: %d\n", s->pu.pcm_flag);
-        }
-        if (s->pu.pcm_flag) {
-            s->num_pcm_block = 1;
-            while (s->num_pcm_block < 4 && get_bits1(&s->gb))
-                s->num_pcm_block++;
-
-            align_get_bits(&s->gb);
-            hls_pcm_sample(s, x0, y0, log2_cb_size);
-        } else {
-            uint8_t prev_intra_luma_pred_flag[4];
-            int d0 = 1 << log2_cb_size;
-            int d1 = d0 >> 1;
-            if (!(x0 % d0) && !(y0 % d0)) {
-                int part = s->cu.part_mode == PART_2Nx2N ? 1 : 2;
-                for (int i = 0; i < part; i++)
-                    for (int j = 0; j < part; j++)
-                        prev_intra_luma_pred_flag[2*i+j] =
-                            ff_hevc_prev_intra_luma_pred_flag_decode(s);
-
-                for (int i = 0; i < part; i++) {
-                    for (int j = 0; j < part; j++) {
-                        if (prev_intra_luma_pred_flag[2*i+j]) {
-                            s->pu.mpm_idx = ff_hevc_mpm_idx_decode(s);
-                            av_log(s->avctx, AV_LOG_DEBUG, "mpm_idx: %d\n", s->pu.mpm_idx);
-                        } else {
-                            s->pu.rem_intra_luma_pred_mode =
-                                ff_hevc_rem_intra_luma_pred_mode_decode(s);
-                            av_log(s->avctx, AV_LOG_DEBUG, "rem_intra_luma_pred_mode: %d\n", s->pu.rem_intra_luma_pred_mode);
-                        }
-                        s->pu.intra_pred_mode[2*i+j] =
-                            luma_intra_pred_mode(s, x0 + d1*j, y0 + d1*i,
-                                                 (s->cu.part_mode == PART_2Nx2N) ? d0 : d1,
-                                                 prev_intra_luma_pred_flag[2*i+j]);
-                    }
-                }
-            }
-            if (s->cu.part_mode == PART_2Nx2N || ((x0 % d0) && (y0 % d0))) {
-                int intra_chroma_pred_mode = ff_hevc_intra_chroma_pred_mode_decode(s);
-                switch (intra_chroma_pred_mode) {
-                case 0:
-                    s->pu.intra_pred_mode_c = (s->pu.intra_pred_mode[0] == 0) ? 34 : 0;
-                    break;
-                case 1:
-                    s->pu.intra_pred_mode_c = (s->pu.intra_pred_mode[0] == 26) ? 34 : 26;
-                    break;
-                case 2:
-                    s->pu.intra_pred_mode_c = (s->pu.intra_pred_mode[0] == 10) ? 34 : 10;
-                    break;
-                case 3:
-                    s->pu.intra_pred_mode_c = (s->pu.intra_pred_mode[0] == 1) ? 34 : 1;
-                    break;
-                case 4:
-                    s->pu.intra_pred_mode_c = s->pu.intra_pred_mode[0];
-                    break;
-                }
-                av_log(s->avctx, AV_LOG_DEBUG, "intra_pred_mode_c: %d\n",
-                       s->pu.intra_pred_mode_c);
-            }
-        }
-    } else {
-        av_log(s->avctx, AV_LOG_ERROR, "TODO: pred_mode != MODE_INTRA\n");
-        return;
-    }
-}
-
 static av_always_inline void set_ct_depth(HEVCContext *s, int x0, int y0,
                                           int log2_cb_size, int ct_depth)
 {
@@ -1052,6 +983,58 @@ static av_always_inline void set_ct_depth(HEVCContext *s, int x0, int y0,
     memset(&s->cu.left_ct_depth[y_cb], ct_depth, length);
 }
 
+static void intra_prediction_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
+{
+    uint8_t prev_intra_luma_pred_flag[4];
+    int intra_chroma_pred_mode;
+
+    int split = s->cu.part_mode == PART_NxN;
+    int pb_size = (1 << log2_cb_size) >> split;
+    int side = split + 1;
+
+    for (int i = 0; i < side; i++)
+        for (int j = 0; j < side; j++)
+            prev_intra_luma_pred_flag[2*i+j] =
+                ff_hevc_prev_intra_luma_pred_flag_decode(s);
+
+    for (int i = 0; i < side; i++) {
+        for (int j = 0; j < side; j++) {
+            if (prev_intra_luma_pred_flag[2*i+j]) {
+                s->pu.mpm_idx = ff_hevc_mpm_idx_decode(s);
+                av_log(s->avctx, AV_LOG_DEBUG, "mpm_idx: %d\n", s->pu.mpm_idx);
+            } else {
+                s->pu.rem_intra_luma_pred_mode =
+                    ff_hevc_rem_intra_luma_pred_mode_decode(s);
+                av_log(s->avctx, AV_LOG_DEBUG, "rem_intra_luma_pred_mode: %d\n", s->pu.rem_intra_luma_pred_mode);
+            }
+            s->pu.intra_pred_mode[2*i+j] =
+                luma_intra_pred_mode(s, x0 + pb_size * j, y0 + pb_size * i, pb_size,
+                                     prev_intra_luma_pred_flag[2*i+j]);
+        }
+    }
+
+    intra_chroma_pred_mode = ff_hevc_intra_chroma_pred_mode_decode(s);
+    switch (intra_chroma_pred_mode) {
+    case 0:
+        s->pu.intra_pred_mode_c = (s->pu.intra_pred_mode[0] == 0) ? 34 : 0;
+        break;
+    case 1:
+        s->pu.intra_pred_mode_c = (s->pu.intra_pred_mode[0] == 26) ? 34 : 26;
+        break;
+    case 2:
+        s->pu.intra_pred_mode_c = (s->pu.intra_pred_mode[0] == 10) ? 34 : 10;
+        break;
+    case 3:
+        s->pu.intra_pred_mode_c = (s->pu.intra_pred_mode[0] == 1) ? 34 : 1;
+        break;
+    case 4:
+        s->pu.intra_pred_mode_c = s->pu.intra_pred_mode[0];
+        break;
+    }
+    av_log(s->avctx, AV_LOG_DEBUG, "intra_pred_mode_c: %d\n",
+           s->pu.intra_pred_mode_c);
+}
+
 static void hls_coding_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
 {
     int cb_size = 1 << log2_cb_size;
@@ -1060,6 +1043,7 @@ static void hls_coding_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
     s->cu.x = x0;
     s->cu.y = y0;
     s->cu.no_residual_data_flag = 0;
+    s->cu.pcm_flag = 0;
 
     s->cu.pred_mode = MODE_INTRA;
     s->cu.part_mode = PART_2Nx2N;
@@ -1090,50 +1074,70 @@ static void hls_coding_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
             s->cu.intra_split_flag = (s->cu.part_mode == PART_NxN &&
                                       s->cu.pred_mode == MODE_INTRA);
         }
-        x1 = x0 + (cb_size >> 1);
-        y1 = y0 + (cb_size >> 1);
-        x2 = x1 - (cb_size >> 2);
-        y2 = y1 - (cb_size >> 2);
-        x3 = x1 + (cb_size >> 2);
-        y3 = y1 + (cb_size >> 2);
 
-        switch (s->cu.part_mode) {
-        case PART_2Nx2N:
-            hls_prediction_unit(s, x0, y0, log2_cb_size);
-            break;
-        case PART_2NxN:
-            hls_prediction_unit(s, x0, y0, log2_cb_size);
-            hls_prediction_unit(s, x0, y1, log2_cb_size);
-            break;
-        case PART_Nx2N:
-            hls_prediction_unit(s, x0, y0, log2_cb_size);
-            hls_prediction_unit(s, x1, y0, log2_cb_size);
-            break;
-        case PART_2NxnU:
-            hls_prediction_unit(s, x0, y0, log2_cb_size);
-            hls_prediction_unit(s, x0, y2, log2_cb_size);
-            break;
-        case PART_2NxnD:
-            hls_prediction_unit(s, x0, y0, log2_cb_size);
-            hls_prediction_unit(s, x0, y3, log2_cb_size);
-            break;
-        case PART_nLx2N:
-            hls_prediction_unit(s, x0, y0, log2_cb_size);
-            hls_prediction_unit(s, x2, y0, log2_cb_size);
-            break;
-        case PART_nRx2N:
-            hls_prediction_unit(s, x0, y0, log2_cb_size);
-            hls_prediction_unit(s, x3, y0, log2_cb_size);
-            break;
-        case PART_NxN:
-            hls_prediction_unit(s, x0, y0, log2_cb_size);
-            hls_prediction_unit(s, x1, y0, log2_cb_size);
-            hls_prediction_unit(s, x0, y1, log2_cb_size);
-            hls_prediction_unit(s, x1, y1, log2_cb_size);
-            break;
+        if (s->cu.pred_mode == MODE_INTRA) {
+            if (s->cu.part_mode == PART_2Nx2N && s->sps->pcm_enabled_flag &&
+                log2_cb_size >= s->sps->pcm.log2_min_pcm_coding_block_size &&
+                log2_cb_size <= (s->sps->pcm.log2_min_pcm_coding_block_size +
+                                 s->sps->pcm.log2_diff_max_min_pcm_coding_block_size)) {
+                s->cu.pcm_flag = ff_hevc_pcm_flag_decode(s);
+                av_log(s->avctx, AV_LOG_ERROR, "pcm_flag: %d\n", s->cu.pcm_flag);
+            }
+            if (s->cu.pcm_flag) {
+                s->num_pcm_block = 1;
+                while (s->num_pcm_block < 4 && get_bits1(&s->gb))
+                    s->num_pcm_block++;
+
+                align_get_bits(&s->gb);
+                hls_pcm_sample(s, x0, y0, log2_cb_size);
+            } else {
+                intra_prediction_unit(s, x0, y0, log2_cb_size);
+            }
+        } else {
+            x1 = x0 + (cb_size >> 1);
+            y1 = y0 + (cb_size >> 1);
+            x2 = x1 - (cb_size >> 2);
+            y2 = y1 - (cb_size >> 2);
+            x3 = x1 + (cb_size >> 2);
+            y3 = y1 + (cb_size >> 2);
+
+            switch (s->cu.part_mode) {
+            case PART_2Nx2N:
+                hls_prediction_unit(s, x0, y0, log2_cb_size);
+                break;
+            case PART_2NxN:
+                hls_prediction_unit(s, x0, y0, log2_cb_size);
+                hls_prediction_unit(s, x0, y1, log2_cb_size);
+                break;
+            case PART_Nx2N:
+                hls_prediction_unit(s, x0, y0, log2_cb_size);
+                hls_prediction_unit(s, x1, y0, log2_cb_size);
+                break;
+            case PART_2NxnU:
+                hls_prediction_unit(s, x0, y0, log2_cb_size);
+                hls_prediction_unit(s, x0, y2, log2_cb_size);
+                break;
+            case PART_2NxnD:
+                hls_prediction_unit(s, x0, y0, log2_cb_size);
+                hls_prediction_unit(s, x0, y3, log2_cb_size);
+                break;
+            case PART_nLx2N:
+                hls_prediction_unit(s, x0, y0, log2_cb_size);
+                hls_prediction_unit(s, x2, y0, log2_cb_size);
+                break;
+            case PART_nRx2N:
+                hls_prediction_unit(s, x0, y0, log2_cb_size);
+                hls_prediction_unit(s, x3, y0, log2_cb_size);
+                break;
+            case PART_NxN:
+                hls_prediction_unit(s, x0, y0, log2_cb_size);
+                hls_prediction_unit(s, x1, y0, log2_cb_size);
+                hls_prediction_unit(s, x0, y1, log2_cb_size);
+                hls_prediction_unit(s, x1, y1, log2_cb_size);
+                break;
+            }
         }
-
-        if (!s->pu.pcm_flag) {
+        if (!s->cu.pcm_flag) {
             if (s->cu.pred_mode != MODE_INTRA &&
                 !(s->cu.part_mode == PART_2Nx2N && s->pu.merge_flag)) {
                 av_log(s->avctx, AV_LOG_ERROR, "TODO: pred_mode != MODE_INTRA\n");

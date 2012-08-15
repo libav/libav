@@ -383,6 +383,8 @@ typedef struct CodingUnit {
     enum PartMode part_mode; ///< PartMode
     uint8_t no_residual_data_flag;
 
+    uint8_t pcm_flag;
+
     // Inferred parameters
     uint8_t intra_split_flag; ///< IntraSplitFlag
     uint8_t max_trafo_depth; ///< MaxTrafoDepth
@@ -432,7 +434,6 @@ enum IntraPredMode {
 };
 
 typedef struct PredictionUnit {
-    uint8_t pcm_flag;
     uint8_t merge_flag;
 
     int mpm_idx;
