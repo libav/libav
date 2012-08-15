@@ -328,9 +328,9 @@ static int sao_param(HEVCContext *s, int rx, int ry)
                     sao->offset_sign[c_idx][i] = 0;
                 }
             }
-            set_sao(band_position[c_idx], ff_hevc_cabac_decode(s, SAO_BAND_POSITION));
+            set_sao(band_position[c_idx], ff_hevc_sao_band_position_decode(s));
         } else if (c_idx != 2) {
-            set_sao(eo_class[c_idx], ff_hevc_cabac_decode(s, SAO_EO_CLASS));
+            set_sao(eo_class[c_idx], ff_hevc_sao_eo_class_decode(s));
         }
 
         // Inferred parameters
@@ -697,7 +697,7 @@ static void transform_unit(HEVCContext *s, int x0L, int  y0L, int x0C, int y0C,
         SAMPLE(s->tt.cbf_cb[trafo_depth], x0C, y0C) ||
         SAMPLE(s->tt.cbf_cr[trafo_depth], x0C, y0C)) {
         if (s->pps->cu_qp_delta_enabled_flag && !s->tu.is_cu_qp_delta_coded) {
-            s->tu.cu_qp_delta = ff_hevc_cabac_decode(s, CU_QP_DELTA);
+            av_log(s->avctx, AV_LOG_ERROR, "TODO: cu_qp_delta_enabled_flag\n");
             s->tu.is_cu_qp_delta_coded = 1;
         }
 
@@ -960,7 +960,7 @@ static void prediction_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
             log2_cb_size >= s->sps->pcm.log2_min_pcm_coding_block_size &&
             log2_cb_size <= (s->sps->pcm.log2_min_pcm_coding_block_size +
                              s->sps->pcm.log2_diff_max_min_pcm_coding_block_size)) {
-            s->pu.pcm_flag = ff_hevc_cabac_decode(s, PCM_FLAG);
+            s->pu.pcm_flag = ff_hevc_pcm_flag_decode(s);
             av_log(s->avctx, AV_LOG_ERROR, "pcm_flag: %d\n", s->pu.pcm_flag);
         }
         if (s->pu.pcm_flag) {
@@ -979,17 +979,16 @@ static void prediction_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
                 for (int i = 0; i < part; i++)
                     for (int j = 0; j < part; j++)
                         prev_intra_luma_pred_flag[2*i+j] =
-                            ff_hevc_cabac_decode(s, PREV_INTRA_LUMA_PRED_FLAG);
+                            ff_hevc_prev_intra_luma_pred_flag_decode(s);
 
                 for (int i = 0; i < part; i++) {
                     for (int j = 0; j < part; j++) {
                         if (prev_intra_luma_pred_flag[2*i+j]) {
-                            s->pu.mpm_idx =
-                                ff_hevc_cabac_decode(s, MPM_IDX);
+                            s->pu.mpm_idx = ff_hevc_mpm_idx_decode(s);
                             av_log(s->avctx, AV_LOG_DEBUG, "mpm_idx: %d\n", s->pu.mpm_idx);
                         } else {
                             s->pu.rem_intra_luma_pred_mode =
-                                ff_hevc_cabac_decode(s, REM_INTRA_LUMA_PRED_MODE);
+                                ff_hevc_rem_intra_luma_pred_mode_decode(s);
                             av_log(s->avctx, AV_LOG_DEBUG, "rem_intra_luma_pred_mode: %d\n", s->pu.rem_intra_luma_pred_mode);
                         }
                         s->pu.intra_pred_mode[2*i+j] =
@@ -1000,8 +999,7 @@ static void prediction_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
                 }
             }
             if (s->cu.part_mode == PART_2Nx2N || ((x0 % d0) && (y0 % d0))) {
-                int intra_chroma_pred_mode =
-                    ff_hevc_cabac_decode(s, INTRA_CHROMA_PRED_MODE);
+                int intra_chroma_pred_mode = ff_hevc_intra_chroma_pred_mode_decode(s);
                 switch (intra_chroma_pred_mode) {
                 case 0:
                     s->pu.intra_pred_mode_c = (s->pu.intra_pred_mode[0] == 0) ? 34 : 0;
@@ -1063,7 +1061,6 @@ static void coding_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
     if (s->sh.slice_type != I_SLICE) {
         av_log(s->avctx, AV_LOG_ERROR, "TODO: slice_type != I_SLICE\n");
         return;
-        //SAMPLE(s->cu.skip_flag, x0, y0) = ff_hevc_cabac_decode(s, SKIP_FLAG);
         s->cu.pred_mode = s->cu.skip_flag ? MODE_SKIP : MODE_INTER;
     }
 
@@ -1202,7 +1199,7 @@ static int coding_tree(HEVCContext *s, int x0, int y0, int log2_cb_size, int cb_
                (1 << (s->sps->log2_ctb_size))) ||
                 (y0 + (1 << log2_cb_size) >= s->sps->pic_height_in_luma_samples)) &&
                s->num_pcm_block == 0) {
-            int end_of_slice_flag = ff_hevc_cabac_decode(s, END_OF_SLICE_FLAG);
+            int end_of_slice_flag = ff_hevc_end_of_slice_flag_decode(s);
             return !end_of_slice_flag;
         } else {
             return 1;

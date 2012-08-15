@@ -26,257 +26,6 @@
 #include "hevc.h"
 
 /**
- * Binarization methods described in 9.2.2
- */
-enum Binarization {
-    FL_BIN = 0,
-    U_BIN,
-    EG_BIN,
-    TU_BIN,
-    CU_QP_DELTA_BIN,
-    PART_MODE_BIN,
-    INTRA_CHROMA_PRED_MODE_BIN,
-    COEFF_ABS_LEVEL_REMAINING_BIN,
-    BINARIZATION_COUNT
-};
-
-static int fl_binarization(HEVCContext *s, int cMax);
-static int u_binarization(HEVCContext *s, int unused);
-static int eg_binarization(HEVCContext *s, int k);
-static int tu_binarization(HEVCContext *s, int cMax);
-static int cu_qp_delta_binarization(HEVCContext *s, int unused);
-static int part_mode_binarization(HEVCContext *s, int unused);
-static int intra_chroma_pred_mode_binarization(HEVCContext *s, int unused);
-static int coeff_abs_level_remaining_binarization(HEVCContext *s, int unused);
-
-typedef int (*binarization_func)(HEVCContext *s, int arg);
-
-static const binarization_func binarization_funcs[BINARIZATION_COUNT] =
-{
-    &fl_binarization,
-    &u_binarization,
-    &eg_binarization,
-    &tu_binarization,
-    &cu_qp_delta_binarization,
-    &part_mode_binarization,
-    &intra_chroma_pred_mode_binarization,
-    &coeff_abs_level_remaining_binarization
-};
-
-/**
- * Binarization type from Table 9-63, indexed by SyntaxElement.
- */
-static const int8_t binarization[][2] =
-{
-    { FL_BIN, 1 }, //sao_merge_left_flag and sao_merge_up_flag
-    { TU_BIN, 2 }, //sao_type_idx
-    { FL_BIN, 2 }, //sao_eo_class
-    { FL_BIN, 31 }, //sao_band_position
-    { TU_BIN, -1 }, //sao_offset_abs
-    { FL_BIN, 1 }, //sao_offset_sign
-    { FL_BIN, 1 }, //alf_cu_flag
-    { FL_BIN, 1 }, //end_of_slice_flag
-    { FL_BIN, 1 }, //split_coding_unit_flag
-    { FL_BIN, 1 }, //cu_transquant_bypass_flag
-    { FL_BIN, 1 }, //skip_flag
-    { CU_QP_DELTA_BIN }, //cu_qp_delta
-    { FL_BIN, 1 }, //pred_mode
-    { PART_MODE_BIN }, //part_mode
-    { FL_BIN, 1 }, //pcm_flag
-    { FL_BIN, 1 }, //prev_intra_luma_pred_flag
-    { TU_BIN, 2 }, //mpm_idx
-    { FL_BIN, 31 }, //rem_intra_luma_pred_mode
-    { INTRA_CHROMA_PRED_MODE_BIN }, //intra_chroma_pred_mode
-    { FL_BIN, 1 }, //merge_flag
-    { TU_BIN, -1 }, //merge_idx
-    { FL_BIN, -1 }, //inter_pred_idc
-    { TU_BIN, -1 }, //ref_idx_l0
-    { TU_BIN, -1 }, //ref_idx_l1
-    { FL_BIN, 1 }, //abs_mvd_greater0_flag
-    { FL_BIN, 1 }, //abs_mvd_greater1_flag]
-    { EG_BIN, 1 }, //abs_mvd_minus2
-    { FL_BIN, 1 }, //mvd_sign_flag
-    { FL_BIN, 1 }, //mvp_l0_flag
-    { FL_BIN, 1 }, //mvp_l1_flag
-    { FL_BIN, 1 }, //no_residual_data_flag
-    { FL_BIN, 1 }, //split_transform_flag
-    { FL_BIN, 1 }, //cbf_luma
-    { FL_BIN, 1 }, //cbf_cb, cbf_cr
-    { FL_BIN, 1 }, //transform_skip_flag[][][0]
-    { FL_BIN, 1 }, //transform_skip_flag[][][1|2]
-    { TU_BIN, -1 }, //last_significant_coeff_x_prefix
-    { TU_BIN, -1 }, //last_significant_coeff_y_prefix
-    { FL_BIN, -1 }, //last_significant_coeff_x_suffix
-    { FL_BIN, -1 }, //last_significant_coeff_y_suffix
-    { FL_BIN, 1 }, //significant_coeff_group_flag
-    { FL_BIN, 1 }, //significant_coeff_flag
-    { FL_BIN, 1 }, //coeff_abs_level_greater1_flag
-    { FL_BIN, 1 }, //coeff_abs_level_greater2_flag
-    { COEFF_ABS_LEVEL_REMAINING_BIN }, //coeff_abs_level_remaining
-    { FL_BIN, 1 } //coeff_sign_flag
-
-};
-
-/**
- * maxBinIdxCtx from Table 9-63, indexed by SyntaxElement.
- */
-static const uint8_t max_bin_idx_ctxs[][3] =
-{
-    { 0, 0, 0 }, //sao_merge_left_flag and sao_merge_up_flag
-    { 0, 0, 0 }, //sao_type_idx
-    { -1, -1, -1 }, //sao_eo_class
-    { -1, -1, -1 }, //sao_band_position
-    { -1, -1, -1 }, //sao_offset_abs
-    { -1, -1, -1 }, //sao_offset_sign
-    { 0, 0, 0 }, //alf_cu_flag
-    { 0, 0, 0 }, //end_of_slice_flag
-    { 0, 0, 0 }, //split_coding_unit_flag
-    { 0, 0, 0 }, //cu_transquant_bypass_flag
-    { 0, 0, 0 }, //skip_flag
-    { 2, 2, 2 }, //cu_qp_delta
-    { -1, 0, 0 }, //pred_mode
-    { 0, 3, 3 }, //part_mode
-    { 0, 0, 0 }, //pcm_flag
-    { 0, 0, 0 }, //prev_intra_luma_pred_flag
-    { -1, -1, -1 }, // mpm_idx
-    { -1, -1, -1 }, //rem_intra_luma_pred_mode
-    { 1, 1, 1 }, //intra_chroma_pred_mode
-    { -1, 0, 0 }, //merge_flag
-    { -1, 0, 0 }, //merge_idx
-    { -1, 0, 0 }, //inter_pred_idc
-    { -1, 2, 2 }, //ref_idx_l0
-    { -1, 2, 2 }, //ref_idx_l1
-    { -1, 0, 0 }, //abs_mvd_greater0_flag
-    { -1, 0, 0 }, //abs_mvd_greater1_flag
-    { -1, -1, -1 }, //abs_mvd_minus2
-    { -1, -1, -1 }, //mvd_sign_flag
-    { -1, 0, 0 }, //mvp_l0_flag
-    { -1, 0, 0 }, //mvp_l1_flag
-    { -1, 0, 0 }, //no_residual_data_flag
-    { 0, 0, 0 }, //split_transform_flag
-    { 0, 0, 0 }, //cbf_luma
-    { 0, 0, 0 }, //cbf_cb, cbf_cr
-    { 0, 0, 0 }, //transform_skip_flag[][][0]
-    { 0, 0, 0 }, //transform_skip_flag[][][1|2]
-    { 8, 8, 8 }, //last_significant_coeff_x_prefix
-    { 8, 8, 8 }, //last_significant_coeff_y_prefix
-    { -1, -1, -1 }, //last_significant_coeff_x_suffix
-    { -1, -1, -1 }, //last_significant_coeff_y_suffix
-    { 0, 0, 0 }, //significant_coeff_group_flag
-    { 0, 0, 0 }, //significant_coeff_flag
-    { 0, 0, 0 }, //coeff_abs_level_greater1_flag
-    { 0, 0, 0 }, //coeff_abs_level_greater2_flag
-    { -1, -1, -1 }, //coeff_abs_level_remaining
-    { -1, -1, -1 } //coeff_sign_flag
-};
-
-/**
- * CtxIdxOffset from Table 9-63, indexed by SyntaxElement.
- */
-static const int8_t ctx_idx_offsets[][3] =
-{
-    { 0, 1, 2 }, //sao_merge_left_flag and sao_merge_up_flag
-    { 0, 1, 2 }, //sao_type_idx
-    { -1, -1, -1 }, //sao_eo_class
-    { -1, -1, -1 }, //sao_band_position
-    { -1, -1, -1 }, //sao_offset_abs
-    { -1, -1, -1 }, //sao_offset_sign
-    { 0, 1, 2 }, //alf_cu_flag
-    { 0, 0, 0 }, //end_of_slice_flag
-    { 0, 3, 6 }, //split_coding_unit_flag
-    { 0, 1, 2 }, //cu_transquant_bypass_flag
-    { -1, 0, 3 }, //skip_flag
-    { 0, 3, 6 }, //cu_qp_delta
-    { -1, 0, 1 }, //pred_mode
-    { 2, 3, 6 }, //part_mode
-    { 0, 0, 0 }, //pcm_flag
-    { 0, 1, 2 }, //prev_intra_luma_pred_flag
-    { -1, -1, -1 }, //mpm_idx
-    { -1, -1, -1 }, //rem_intra_luma_pred_mode
-    { 0, 2, 4 }, //intra_chroma_pred_mode
-    { -1, 0, 1 }, //merge_flag
-    { -1, 0, 1 }, //merge_idx
-    { -1, 0, 0 }, //inter_pred_idc
-    { -1, 0, 3 }, //ref_idx_l0
-    { -1, 0, 3 }, //ref_idx_l1
-    { -1, 0, 1 }, //abs_mvd_greater0_flag
-    { -1, 2, 3 }, //abs_mvd_greater1_flag
-    { -1, -1, -1 }, //abs_mvd_minus2
-    { -1, -1, -1 }, //mvd_sign_flag
-    { -1, 0, 1 }, //mvp_l0_flag
-    { -1, 0, 1 }, //mvp_l1_flag
-    { -1, 0, 1 }, //no_residual_data_flag
-    { 0, 3, 6 }, //split_transform_flag
-    { 0, 2, 4 }, //cbf_luma
-    { 0, 3, 6 }, //cbf_cb, cbf_cr
-    { 0, 1, 2 }, //transform_skip_flag[][][0]
-    { 3, 4, 5 }, //transform_skip_flag[][][1|2]
-    { 0, 18, 36 }, //last_significant_coeff_x_prefix
-    { 0, 18, 36 }, //last_significant_coeff_y_prefix
-    { -1, -1, -1 }, //last_significant_coeff_x_suffix
-    { -1, -1, -1 }, //last_significant_coeff_y_suffix
-    { 0, 4, 8 }, //significant_coeff_group_flag
-    { 0, 48, 96 }, //significant_coeff_flag
-    { 0, 24, 48 }, //coeff_abs_level_greater1_flag
-    { 0, 6, 12 }, //coeff_abs_level_greater2_flag
-    { -1, -1, -1 }, //coeff_abs_level_remaining
-    { -1, -1, -1 } //coeff_sign_flag
-};
-
-/**
- * ctxIdxInc from Table 9-71, indexed by SyntaxElement.
- */
-static const int8_t ctx_idx_incs[][5] =
-{
-    { 0 }, //sao_merge_left_flag and sao_merge_up_flag
-    { 0 }, //sao_type_idx
-    { }, //sao_eo_class
-    { }, //sao_band_position
-    { }, //sao_offset_abs
-    { }, //sao_offset_sign
-    { 0 }, //alf_cu_flag
-    { }, //end_of_slice_flag
-    { -1 }, //split_coding_unit_flag
-    { 0 }, //cu_transquant_bypass_flag
-    { -1 }, //skip_flag
-    { 0 }, //cu_qp_delta
-    { 0 }, //pred_mode
-    { 0, 1, 2 }, //part_mode
-    { }, //pcm_flag
-    { 0 }, //prev_intra_luma_pred_flag
-    { }, //mpm_idx
-    { }, //rem_intra_luma_pred_mode
-    { 0, 1 }, //intra_chroma_pred_mode
-    { 0 }, //merge_flag
-    { 0 }, //merge_idx
-    { }, //inter_pred_idc
-    { 0, 1, 2, 2, 2 }, //ref_idx_l0
-    { 0, 1, 2, 2, 2 }, //ref_idx_l1
-    { 0 }, //abs_mvd_greater0_flag
-    { 0 }, //abs_mvd_greater1_flag
-    { }, //abs_mvd_minus2
-    { }, //mvd_sign_flag
-    { 0 }, //mvp_l0_flag
-    { 0 }, //mvp_l1_flag
-    { 0 }, //no_residual_data_flag
-    { -1 }, //split_transform_flag
-    { -1 }, //cbf_luma
-    { -1 }, //cbf_cb, cbf_cr
-    { 0 }, //transform_skip_flag[][][0]
-    { 0 }, //transform_skip_flag[][][1|2]
-    { -1, -1, -1, -1, -1 }, //last_significant_coeff_x_prefix
-    { -1, -1, -1, -1, -1 }, //last_significant_coeff_y_prefix
-    { }, //last_significant_coeff_x_suffix
-    { }, //last_significant_coeff_y_suffix
-    { -1 }, //significant_coeff_group_flag
-    { -1 }, //significant_coeff_flag
-    { -1 }, //coeff_abs_level_greater1_flag
-    { -1 }, //coeff_abs_level_greater2_flag
-    { }, //coeff_abs_level_remaining
-    { }  //coeff_sign_flag
-};
-
-/**
  * Offset to ctxIdx 0 in init_values and states, indexed by SyntaxElement.
  */
 static const int elem_offset[] =
@@ -329,16 +78,11 @@ static const int elem_offset[] =
     -1, //coeff_sign_flag
 };
 
-#define CTX_IDX_COUNT 445
-
 /**
  * initValue from Tables 9-38 to 9-65, indexed by ctx_idx for each SyntaxElement
  * value.
- *
- * NOTE: these values do not match the spec because the spec
- * is wrong, see http://hevc.kw.bbc.co.uk/trac/ticket/473 .
  */
-static const uint8_t init_values[CTX_IDX_COUNT] =
+static const uint8_t init_values[] =
 {
     153, 153, 153, //sao_merge_left_flag and sao_merge_up_flag
     160, 185, 200, //sao_type_idx
@@ -402,25 +146,13 @@ static const uint8_t init_values[CTX_IDX_COUNT] =
 /**
  * mps and pstate, indexed by ctx_idx
  */
-static uint8_t states[CTX_IDX_COUNT][2];
+static uint8_t states[sizeof(init_values)][2];
 
-/**
- * 9.2.3.1
- */
 static int derive_ctx_idx(HEVCContext *s, int bin_idx)
 {
     HEVCCabacContext *cc = &s->cc;
 
     int ctx_idx_inc = cc->ctx_idx_inc[FFMIN(bin_idx, cc->max_bin_idx_ctx)];
-
-    if (ctx_idx_inc == -1) {
-        switch (cc->elem) {
-        default:
-            av_log(s->avctx, AV_LOG_ERROR,
-                   "TODO: ctxIdxInc for elem %d, assuming 0.\n", cc->elem);
-            ctx_idx_inc = 0;
-        }
-    }
 
     return cc->ctx_idx_offset + ctx_idx_inc;
 }
@@ -437,11 +169,8 @@ static void renormalization(HEVCContext *s)
     }
 }
 
-static int abc = 0;
+static int cnt = 0;
 
-/**
- * 9.2.3.2
- */
 static int decode_bin(HEVCContext *s, int bin_idx)
 {
     HEVCCabacContext *cc = &s->cc;
@@ -466,19 +195,6 @@ static int decode_bin(HEVCContext *s, int bin_idx)
         return bin_val;
     }
 
-    if (cc->elem == END_OF_SLICE_FLAG || cc->elem == PCM_FLAG) {
-        cc->range -= 2;
-        if (cc->offset >= cc->range) {
-            bin_val = 1;
-        } else {
-            bin_val = 0;
-            renormalization(s);
-        }
-        av_log(s->avctx, AV_LOG_DEBUG, "cc->range: %d, cc->offset: %d, bin_val: %d\n",
-           cc->range, cc->offset, bin_val);
-        return bin_val;
-    }
-
     ctx_idx = derive_ctx_idx(s, bin_idx);
     state = cc->state[ctx_idx];
 
@@ -489,7 +205,7 @@ static int decode_bin(HEVCContext *s, int bin_idx)
     bin_val = 0;
 
     av_log(s->avctx, AV_LOG_DEBUG,
-           "ctx_idx: %d, %d#pstate: %d, mps: %d\n", ctx_idx, abc++, pstate, mps);
+           "ctx_idx: %d, %d#pstate: %d, mps: %d\n", ctx_idx, cnt++, pstate, mps);
 
     av_log(s->avctx, AV_LOG_DEBUG,
            "old cc->range: %d, cc->offset: %d, lpsrange: %d\n", cc->range, cc->offset, lpsrange);
@@ -518,10 +234,24 @@ static int decode_bin(HEVCContext *s, int bin_idx)
     return bin_val;
 }
 
-/**
- * 9.2.2.1
- */
-static int u_binarization(HEVCContext *s, int unused)
+static int bypass_decode_bin(HEVCContext *s)
+{
+    HEVCCabacContext *cc = &s->cc;
+    int bin_val;
+
+    cc->range -= 2;
+    if (cc->offset >= cc->range) {
+        bin_val = 1;
+    } else {
+        bin_val = 0;
+        renormalization(s);
+    }
+    av_log(s->avctx, AV_LOG_DEBUG, "cc->range: %d, cc->offset: %d, bin_val: %d\n",
+           cc->range, cc->offset, bin_val);
+    return bin_val;
+}
+
+static int u_binarization(HEVCContext *s)
 {
     int i = 0;
 
@@ -530,9 +260,6 @@ static int u_binarization(HEVCContext *s, int unused)
     return i - 1;
 }
 
-/**
- * 9.2.2.4
- */
 static int eg_binarization(HEVCContext *s, int k)
 {
     int suffix = 0;
@@ -548,13 +275,10 @@ static int eg_binarization(HEVCContext *s, int k)
     return (1 << (k + log)) - (1 << k) + suffix;
 }
 
-/**
- * 9.2.2.5
- */
-static int fl_binarization(HEVCContext *s, int cMax)
+static int fl_binarization(HEVCContext *s, int c_max)
 {
     int value = 0;
-    int length = av_ceil_log2_c(cMax + 1);
+    int length = av_ceil_log2_c(c_max + 1);
 
     for (int i = 0; i < length; i++)
         value = (value << 1) | decode_bin(s, i);
@@ -562,67 +286,15 @@ static int fl_binarization(HEVCContext *s, int cMax)
     return value;
 }
 
-/**
- * 9.2.2.2
- */
-static int tu_binarization(HEVCContext *s, int cMax)
+static int tu_binarization(HEVCContext *s, int c_max)
 {
     int i = 0;
 
-    for (i = 0; i < cMax && decode_bin(s, i); i++);
+    for (i = 0; i < c_max && decode_bin(s, i); i++);
 
     return i;
 }
 
-/**
- * 9.2.2.6
- */
-static int cu_qp_delta_binarization(HEVCContext *s, int unused)
-{
-    av_log(s->avctx, AV_LOG_ERROR, "TODO: cu_qp_delta_binarization\n");
-    return 0;
-}
-
-/**
- * 9.2.2.7
- */
-static int part_mode_binarization(HEVCContext *s, int unused)
-{
-    av_log(s->avctx, AV_LOG_ERROR, "TODO: part_mode_binarization\n");
-    return 0;
-}
-
-/**
- * 9.2.2.9
- */
-static int intra_chroma_pred_mode_binarization(HEVCContext *s, int unused)
-{
-    int ret = 0;
-    int i = 0;
-
-    if (decode_bin(s, i++) == 0) // value 0
-        return 4;
-    // the last two bits are bypass-coded
-    s->cc.ctx_idx_offset = -1;
-    ret = decode_bin(s, i++) << 1;
-    ret |= decode_bin(s, i++);
-    return ret;
-}
-
-
-/**
- * 9.2.2.8
- */
-static int coeff_abs_level_remaining_binarization(HEVCContext *s, int unused)
-{
-    av_log(s->avctx, AV_LOG_ERROR,
-           "TODO: coeff_abs_level_remaining_binarization\n");
-    return 0;
-}
-
-/**
- * 9.2.1
- */
 void ff_hevc_cabac_init(HEVCContext *s)
 {
     HEVCCabacContext *cc = &s->cc;
@@ -636,7 +308,7 @@ void ff_hevc_cabac_init(HEVCContext *s)
     if (s->sh.cabac_init_flag && s->sh.slice_type != I_SLICE)
         cc->init_type ^= 3;
 
-    for (int i = 0; i < CTX_IDX_COUNT; i++) {
+    for (int i = 0; i < sizeof(init_values); i++) {
         int init_value = init_values[i];
         int m = (init_value >> 4)*5 - 45;
         int n = ((init_value & 15) << 3) - 16;
@@ -645,26 +317,6 @@ void ff_hevc_cabac_init(HEVCContext *s)
         states[i][0] = (pre_ctx_state <= 63) ? 0 : 1; //mps
         states[i][1] = states[i][0] ? (pre_ctx_state - 64) : (63 - pre_ctx_state); //stateIdx
     }
-}
-
-//TODO: replace this function by one function for each syntax element
-int ff_hevc_cabac_decode(HEVCContext *s, enum SyntaxElement elem)
-{
-    HEVCCabacContext *cc = &s->cc;
-
-    cc->elem = elem;
-    cc->state = states + elem_offset[elem];
-
-    cc->max_bin_idx_ctx = max_bin_idx_ctxs[elem][cc->init_type];
-    cc->ctx_idx_offset = ctx_idx_offsets[elem][cc->init_type];
-    cc->ctx_idx_inc = ctx_idx_incs[elem];
-
-    if (binarization[elem][1] == -1) {
-        av_log(s->avctx, AV_LOG_ERROR, "TODO: binarization argument for elem %d\n",
-               cc->elem);
-    }
-
-    return binarization_funcs[binarization[elem][0]](s, binarization[elem][1]);
 }
 
 int ff_hevc_sao_merge_left_up_flag_decode(HEVCContext *s)
@@ -704,12 +356,22 @@ int ff_hevc_sao_type_idx_decode(HEVCContext *s)
     return SAO_EDGE;
 }
 
+int ff_hevc_sao_band_position_decode(HEVCContext *s)
+{
+    HEVCCabacContext *cc = &s->cc;
+
+    cc->elem = SAO_BAND_POSITION;
+
+    cc->ctx_idx_offset = -1;
+
+    return fl_binarization(s, 31);
+}
+
 int ff_hevc_sao_offset_abs_decode(HEVCContext *s, int bit_depth)
 {
     HEVCCabacContext *cc = &s->cc;
 
     cc->elem = SAO_OFFSET_ABS;
-    cc->state = states + elem_offset[cc->elem];
 
     cc->ctx_idx_offset = -1;
 
@@ -721,11 +383,26 @@ int ff_hevc_sao_offset_sign_decode(HEVCContext *s)
     HEVCCabacContext *cc = &s->cc;
 
     cc->elem = SAO_OFFSET_SIGN;
-    cc->state = states + elem_offset[cc->elem];
 
     cc->ctx_idx_offset = -1;
 
     return fl_binarization(s, 1);
+}
+
+int ff_hevc_sao_eo_class_decode(HEVCContext *s)
+{
+    HEVCCabacContext *cc = &s->cc;
+
+    cc->elem = SAO_EO_CLASS;
+
+    cc->ctx_idx_offset = -1;
+
+    return fl_binarization(s, 2);
+}
+
+int ff_hevc_end_of_slice_flag_decode(HEVCContext *s)
+{
+    return bypass_decode_bin(s);
 }
 
 int ff_hevc_cu_transquant_bypass_flag_decode(HEVCContext *s)
@@ -776,7 +453,6 @@ int ff_hevc_part_mode_decode(HEVCContext *s, int log2_cb_size)
 {
     HEVCCabacContext *cc = &s->cc;
     const int8_t ctx_idx_inc[3] = { 0, 1, 2 };
-    const int8_t ctx_idx_offsets[3] = { 2, 3, 6 };
     int i = 0;
 
     cc->elem = PART_MODE;
@@ -816,6 +492,72 @@ int ff_hevc_part_mode_decode(HEVCContext *s, int log2_cb_size)
     return  PART_nLx2N; // 0000
 }
 
+int ff_hevc_pcm_flag_decode(HEVCContext *s)
+{
+    return bypass_decode_bin(s);
+}
+
+int ff_hevc_prev_intra_luma_pred_flag_decode(HEVCContext *s)
+{
+    HEVCCabacContext *cc = &s->cc;
+    const int8_t ctx_idx_inc[1] = { 0 };
+
+    cc->elem = PREV_INTRA_LUMA_PRED_FLAG;
+    cc->state = states + elem_offset[cc->elem];
+
+    cc->max_bin_idx_ctx = 0;
+    cc->ctx_idx_offset = cc->init_type;
+    cc->ctx_idx_inc = ctx_idx_inc;
+
+    return fl_binarization(s, 1);
+}
+
+int ff_hevc_mpm_idx_decode(HEVCContext *s)
+{
+    HEVCCabacContext *cc = &s->cc;
+
+    cc->elem = MPM_IDX;
+
+    cc->ctx_idx_offset = -1;
+
+    return tu_binarization(s, 2);
+}
+
+int ff_hevc_rem_intra_luma_pred_mode_decode(HEVCContext *s)
+{
+    HEVCCabacContext *cc = &s->cc;
+
+    cc->elem = REM_INTRA_LUMA_PRED_MODE;
+
+    cc->ctx_idx_offset = -1;
+
+    return fl_binarization(s, 31);
+}
+
+int ff_hevc_intra_chroma_pred_mode_decode(HEVCContext *s)
+{
+    HEVCCabacContext *cc = &s->cc;
+    const int8_t ctx_idx_inc[2] = { 0, 1 };
+
+    int ret = 0;
+    int i = 0;
+
+    cc->elem = INTRA_CHROMA_PRED_MODE;
+    cc->state = states + elem_offset[cc->elem];
+
+    cc->max_bin_idx_ctx = 1;
+    cc->ctx_idx_offset = 2 * cc->init_type;
+    cc->ctx_idx_inc = ctx_idx_inc;
+
+    if (decode_bin(s, i++) == 0)
+        return 4;
+
+    // the last two bits are bypass-coded
+    s->cc.ctx_idx_offset = -1;
+    ret = decode_bin(s, i++) << 1;
+    ret |= decode_bin(s, i++);
+    return ret;
+}
 
 int ff_hevc_split_transform_flag_decode(HEVCContext *s, int log2_trafo_size)
 {
@@ -917,7 +659,6 @@ int ff_hevc_last_significant_coeff_suffix_decode(HEVCContext *s,
 
     cc->elem = is_x ? LAST_SIGNIFICANT_COEFF_X_SUFFIX
                : LAST_SIGNIFICANT_COEFF_Y_SUFFIX;
-    cc->state = states + elem_offset[cc->elem];
 
     cc->ctx_idx_offset = -1;
 
@@ -1095,7 +836,6 @@ int ff_hevc_coeff_abs_level_remaining(HEVCContext *s, int first_elem, int base_l
     int suffix = 0;
 
     cc->elem = COEFF_ABS_LEVEL_REMAINING;
-    cc->state = states + elem_offset[cc->elem];
 
     cc->ctx_idx_offset = -1;
 
@@ -1106,7 +846,7 @@ int ff_hevc_coeff_abs_level_remaining(HEVCContext *s, int first_elem, int base_l
            "c_rice_param reset to 0\n");
     }
 
-    prefix = u_binarization(s, 0);
+    prefix = u_binarization(s);
     if (prefix < 3) {
         for (int i = 0; i < c_rice_param; i++)
             suffix = (suffix << 1) | decode_bin(s, i);
