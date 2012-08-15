@@ -390,7 +390,7 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
            scan_idx, c_idx);
 
     //TODO
-    memset(s->rc.significant_coeff_group_flag, 0, 64*64);
+    memset(s->rc.significant_coeff_group_flag, 0, 8*8);
 
     if (log2_trafo_width == 1 || log2_trafo_height == 1) {
         log2_trafo_width = 2;

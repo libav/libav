@@ -461,8 +461,7 @@ typedef struct TransformUnit {
 } TransformUnit;
 
 typedef struct ResidualCoding {
-    //FIXME: check size
-    uint8_t significant_coeff_group_flag[64][64];
+    uint8_t significant_coeff_group_flag[8][8];
 } ResidualCoding;
 
 enum SAOType {
