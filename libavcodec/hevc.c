@@ -389,7 +389,6 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
     av_log(s->avctx, AV_LOG_DEBUG, "scan_idx: %d, c_idx: %d\n",
            scan_idx, c_idx);
 
-    //TODO
     memset(s->rc.significant_coeff_group_flag, 0, 8*8);
 
     if (log2_trafo_width == 1 || log2_trafo_height == 1) {
@@ -1161,8 +1160,6 @@ static int coding_tree(HEVCContext *s, int x0, int y0, int log2_cb_size, int cb_
     av_log(s->avctx, AV_LOG_DEBUG, "split_coding_unit_flag: %d\n",
            SAMPLE(s->split_coding_unit_flag, x0, y0));
 
-    //TODO
-
     if (SAMPLE(s->split_coding_unit_flag, x0, y0)) {
         int more_data = 0;
         int cb_size = (1 << (log2_cb_size)) >> 1;
@@ -1182,8 +1179,6 @@ static int coding_tree(HEVCContext *s, int x0, int y0, int log2_cb_size, int cb_
         return ((x1 + cb_size) < s->sps->pic_width_in_luma_samples ||
                 (y1 + cb_size) < s->sps->pic_height_in_luma_samples);
     } else {
-        //TODO
-
         if (s->num_pcm_block == 0) {
             coding_unit(s, x0, y0, log2_cb_size);
         } else {
@@ -1206,7 +1201,6 @@ static int coding_tree(HEVCContext *s, int x0, int y0, int log2_cb_size, int cb_
         }
     }
 
-    //TODO
     return 0;
 }
 
