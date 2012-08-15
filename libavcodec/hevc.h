@@ -175,6 +175,9 @@ typedef struct {
 
     int hshift[3];
     int vshift[3];
+
+    int qp_bd_offset_luma; ///< QpBdOffsetY
+    int qp_bd_offset_chroma; ///< QPBdOffsetC
 } SPS;
 
 typedef struct {

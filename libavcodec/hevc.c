@@ -640,9 +640,37 @@ static void residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_width
     }
 
     if (!s->cu.cu_transquant_bypass_flag) {
+        int qp;
         int bit_depth = s->sps->bit_depth[c_idx];
-        //TODO: don't hardcode QP
-        int qp = c_idx ? 31 : 32;
+
+        //TODO: handle non-constant QP
+       int qp_y_pred = s->sh.slice_qp;
+       int qp_y = ((qp_y_pred + s->tu.cu_qp_delta + 52 + 2 * s->sps->qp_bd_offset_luma) %
+                   (52 + s->sps->qp_bd_offset_luma))
+                  - s->sps->qp_bd_offset_luma;
+       static int qp_c[] = { 29, 30, 31, 32, 33, 33, 34, 34, 35, 35, 36, 36, 37, 37 };
+
+        if (c_idx == 0) {
+            qp = qp_y + s->sps->qp_bd_offset_luma;
+        } else {
+            int qp_i, offset;
+
+            if (c_idx == 1) {
+                offset = s->pps->cb_qp_offset + s->sh.slice_cb_qp_offset;
+            } else {
+                offset = s->pps->cr_qp_offset + s->sh.slice_cr_qp_offset;
+            }
+            qp_i = av_clip_c(qp_y + offset, - s->sps->qp_bd_offset_luma, 57);
+            if (qp_i < 30) {
+                qp = qp_i;
+            } else if (qp_i > 43) {
+                qp = qp_i - 6;
+            } else {
+                qp = qp_c[qp_i - 30];
+            }
+
+            qp += s->sps->qp_bd_offset_chroma;
+        }
         s->hevcdsp.dequant(coeffs, log2_trafo_width, qp, bit_depth);
 
         if (transform_skip_flag) {

@@ -224,6 +224,9 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
                                  sps->log2_min_transform_block_size;
     sps->log2_min_pu_size = sps->log2_min_coding_block_size - 1;
 
+    sps->qp_bd_offset_luma   = 6 * (sps->bit_depth[0] - 8);
+    sps->qp_bd_offset_chroma = 6 * (sps->bit_depth[1] - 8);
+
     av_free(s->sps_list[sps_id]);
     s->sps_list[sps_id] = sps;
     return 0;
