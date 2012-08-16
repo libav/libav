@@ -20,6 +20,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/common.h"
 #include "parser.h"
 
 #define START_CODE 0x000001 ///< start_code_prefix_one_3bytes
