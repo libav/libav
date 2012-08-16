@@ -60,8 +60,8 @@ static int pic_arrays_init(HEVCContext *s)
     s->pu.left_ipm = av_malloc(pic_height_in_min_pu);
     s->pu.top_ipm = av_malloc(pic_width_in_min_pu);
 
-    if (s->split_coding_unit_flag == NULL || s->cu.skip_flag == NULL ||
-        s->pu.left_ipm == NULL || s->pu.top_ipm == NULL)
+    if (!s->split_coding_unit_flag || !s->cu.skip_flag ||
+        !s->pu.left_ipm || !s->pu.top_ipm)
         return -1;
 
     memset(s->pu.left_ipm, INTRA_DC, pic_height_in_min_pu);
@@ -71,8 +71,8 @@ static int pic_arrays_init(HEVCContext *s)
         s->tt.split_transform_flag[i] = av_malloc(pic_size * sizeof(uint8_t));
         s->tt.cbf_cb[i] = av_malloc(pic_size * sizeof(uint8_t));
         s->tt.cbf_cr[i] = av_malloc(pic_size * sizeof(uint8_t));
-        if (s->tt.split_transform_flag[i] == NULL || s->tt.cbf_cb[i] == NULL ||
-            s->tt.cbf_cr[i] == NULL)
+        if (!s->tt.split_transform_flag[i] || !s->tt.cbf_cb[i] ||
+            !s->tt.cbf_cr[i])
             return -1;
     }
 
@@ -113,7 +113,7 @@ static int hls_slice_header(HEVCContext *s)
     }
 
     sh->pps_id = get_ue_golomb(gb);
-    if (sh->pps_id >= MAX_PPS_COUNT || s->pps_list[sh->pps_id] == NULL) {
+    if (sh->pps_id >= MAX_PPS_COUNT || !s->pps_list[sh->pps_id]) {
         av_log(s->avctx, AV_LOG_ERROR, "PPS id out of range: %d\n", sh->pps_id);
         return -1;
     }
@@ -203,7 +203,7 @@ static int hls_slice_header(HEVCContext *s)
             return -1;
         }
 
-        if (s->pps == NULL) {
+        if (!s->pps) {
             av_log(s->avctx, AV_LOG_ERROR, "No PPS active while decoding slice\n");
             return -1;
         }
@@ -1325,7 +1325,7 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             return -1;
         }
 
-        if (s->frame.data[0] != NULL)
+        if (s->frame.data[0])
             s->avctx->release_buffer(s->avctx, &s->frame);
         if (s->avctx->get_buffer(s->avctx, &s->frame) < 0) {
             av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
@@ -1365,7 +1365,7 @@ static av_cold int hevc_decode_free(AVCodecContext *avctx)
 {
     HEVCContext *s = avctx->priv_data;
 
-    if (s->frame.data[0] != NULL)
+    if (s->frame.data[0])
         s->avctx->release_buffer(s->avctx, &s->frame);
 
     for (int i = 0; i < MAX_SPS_COUNT; i++) {

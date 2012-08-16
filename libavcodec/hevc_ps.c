@@ -32,7 +32,7 @@ int ff_hevc_decode_short_term_rps(HEVCContext *s, int idx, ShortTermRPS **prps)
 
     ShortTermRPS *rps = NULL;
     *prps = av_malloc(sizeof(ShortTermRPS));
-    if (*prps == NULL)
+    if (!*prps)
         return -1;
 
     rps = *prps;
@@ -61,7 +61,7 @@ int ff_hevc_decode_nal_vps(HEVCContext *s)
 
     av_log(s->avctx, AV_LOG_DEBUG, "Decoding VPS\n");
 
-    if (vps == NULL)
+    if (!vps)
         return -1;
     vps->vps_max_temporal_layers = get_bits(gb, 3) + 1;
     vps->vps_max_layers = get_bits(gb, 5) + 1;
@@ -92,7 +92,7 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
     int max_cu_depth = 0;
 #endif
     SPS *sps = av_mallocz(sizeof(SPS));
-    if (sps == NULL)
+    if (!sps)
         goto err;
 
     av_log(s->avctx, AV_LOG_DEBUG, "Decoding SPS\n");
@@ -248,7 +248,7 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
     int log2_diff_ctb_min_tb_size;
 
     PPS *pps = av_mallocz(sizeof(PPS));
-    if (pps == NULL)
+    if (!pps)
         goto err;
 
     av_log(s->avctx, AV_LOG_DEBUG, "Decoding PPS\n");
@@ -312,7 +312,7 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
 
         pps->column_width = av_malloc(pps->num_tile_columns * sizeof(int));
         pps->row_height   = av_malloc(pps->num_tile_rows * sizeof(int));
-        if (pps->column_width == NULL || pps->row_height == NULL)
+        if (!pps->column_width || !pps->row_height)
             goto err;
 
         pps->uniform_spacing_flag = get_bits1(gb);
@@ -354,13 +354,13 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
     // Inferred parameters
     pps->col_bd = av_malloc((pps->num_tile_columns + 1) * sizeof(int));
     pps->row_bd = av_malloc((pps->num_tile_rows + 1) * sizeof(int));
-    if (pps->col_bd == NULL || pps->row_bd == NULL)
+    if (!pps->col_bd || !pps->row_bd)
         goto err;
 
     if (pps->uniform_spacing_flag) {
         pps->column_width = av_malloc(pps->num_tile_columns * sizeof(int));
         pps->row_height   = av_malloc(pps->num_tile_rows * sizeof(int));
-        if (pps->column_width == NULL || pps->row_height == NULL)
+        if (!pps->column_width || !pps->row_height)
             goto err;
 
         for (int i = 0; i < pps->num_tile_columns; i++) {
@@ -398,9 +398,9 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
 
     pps->min_tb_addr_zs = av_malloc(sps->pic_width_in_min_tbs *
                                     sps->pic_height_in_min_tbs * sizeof(int));
-    if (pps->ctb_addr_rs_to_ts == NULL || pps->ctb_addr_ts_to_rs == NULL ||
-        pps->tile_id == NULL || pps->min_cb_addr_zs == NULL ||
-        pps->min_tb_addr_zs == NULL)
+    if (!pps->ctb_addr_rs_to_ts || !pps->ctb_addr_ts_to_rs ||
+        !pps->tile_id || !pps->min_cb_addr_zs ||
+        !pps->min_tb_addr_zs)
         goto err;
 
     for (int ctb_addr_rs = 0;
