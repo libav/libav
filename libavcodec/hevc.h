@@ -37,7 +37,7 @@
 /**
  * Table 7-3: NAL unit type codes
  */
-typedef enum {
+enum NALUnitType {
     NAL_SLICE = 1,
     NAL_TFD_SLICE = 2,
     NAL_TLA_SLICE = 3,
@@ -53,9 +53,9 @@ typedef enum {
     NAL_AUD = 29,
     NAL_FILLER_DATA = 30,
     NAL_SEI = 31,
-} NALUnitType;
+};
 
-typedef struct {
+typedef struct ShortTermRPS {
     uint8_t inter_ref_pic_set_prediction_flag;
     int num_negative_pics;
     int num_positive_pics;
@@ -75,7 +75,7 @@ typedef struct {
 
 #define MAX_TB_SIZE 32
 
-struct VPS {
+typedef struct VPS {
     int vps_max_temporal_layers; ///< vps_max_temporal_layers_minus1 + 1
     int vps_max_layers; ///< vps_max_layers_minus1 + 1
 
@@ -83,9 +83,9 @@ struct VPS {
     int vps_max_dec_pic_buffering[MAX_TEMPORAL_LAYERS];
     int vps_num_reorder_pics[MAX_TEMPORAL_LAYERS];
     int vps_max_latency_increase[MAX_TEMPORAL_LAYERS];
-};
+} VPS;
 
-typedef struct {
+typedef struct SPS {
     uint8_t profile_space;
     uint8_t profile_idc;
     uint8_t level_idc;
@@ -180,7 +180,7 @@ typedef struct {
     int qp_bd_offset_chroma; ///< QPBdOffsetC
 } SPS;
 
-typedef struct {
+typedef struct PPS {
     int sps_id; ///< seq_parameter_set_id
 
     uint8_t sign_data_hiding_flag;
@@ -243,17 +243,17 @@ typedef struct {
     int *min_tb_addr_zs; ///< MinTbAddrZS
 } PPS;
 
-typedef enum {
+enum SliceType {
     B_SLICE = 0,
     P_SLICE = 1,
     I_SLICE = 2
-} SliceType;
+};
 
-typedef struct {
+typedef struct SliceHeader {
     uint8_t first_slice_in_pic_flag;
     int slice_address;
 
-    SliceType slice_type;
+    enum SliceType slice_type;
 
     uint8_t dependent_slice_flag;
     int pps_id; ///< pic_parameter_set_id
@@ -474,7 +474,7 @@ enum SAOType {
     SAO_EDGE
 };
 
-struct SAOParams {
+typedef struct SAOParams {
     uint8_t type_idx[3]; ///< sao_type_idx
 
     int offset_abs[3][4]; ///< sao_offset_abs
@@ -486,32 +486,32 @@ struct SAOParams {
 
     // Inferred parameters
     int offset_val[3][5]; ///<SaoOffsetVal
-};
+} SAOParams;
 
 typedef struct HEVCContext {
     AVCodecContext *avctx;
     AVFrame frame;
 
-    struct HEVCPredContext hpc;
-    struct HEVCDSPContext hevcdsp;
+    HEVCPredContext hpc;
+    HEVCDSPContext hevcdsp;
 
     GetBitContext gb;
     HEVCCabacContext cc;
 
     int nal_ref_flag;
-    NALUnitType nal_unit_type;
+    enum NALUnitType nal_unit_type;
     int temporal_id;  ///< temporal_id_plus1 - 1
 
-    struct VPS *vps_list[MAX_VPS_COUNT];
+    VPS *vps_list[MAX_VPS_COUNT];
     SPS *sps_list[MAX_SPS_COUNT];
     PPS *pps_list[MAX_PPS_COUNT];
 
-    struct VPS *vps;
+    VPS *vps;
     SPS *sps;
     PPS *pps;
 
     SliceHeader sh;
-    struct SAOParams *sao;
+    SAOParams *sao;
 
     int ctb_addr_in_slice; ///< CtbAddrInSlice
     int num_pcm_block; ///< NumPCMBlock

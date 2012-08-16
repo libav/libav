@@ -57,7 +57,7 @@ int ff_hevc_decode_nal_vps(HEVCContext *s)
 {
     GetBitContext *gb = &s->gb;
     int vps_id = 0;
-    struct VPS *vps = av_mallocz(sizeof(struct VPS));
+    VPS *vps = av_mallocz(sizeof(VPS));
 
     av_log(s->avctx, AV_LOG_DEBUG, "Decoding VPS\n");
 

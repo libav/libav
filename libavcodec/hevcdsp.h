@@ -23,8 +23,6 @@
 #ifndef AVCODEC_HEVCDSP_H
 #define AVCODEC_HEVCDSP_H
 
-struct HEVCContext;
-
 typedef struct HEVCDSPContext {
     void (*dequant)(int16_t *coeffs, int log2_size, int qp, int bit_depth);
     void (*transform_4x4_luma_add)(uint8_t *dst, int16_t *coeffs, int stride, int bit_depth);
@@ -33,6 +31,6 @@ typedef struct HEVCDSPContext {
 
 } HEVCDSPContext;
 
-void ff_hevc_dsp_init(struct HEVCDSPContext *hpc, int bit_depth);
+void ff_hevc_dsp_init(HEVCDSPContext *hpc, int bit_depth);
 
 #endif /* AVCODEC_HEVCDSP_H */

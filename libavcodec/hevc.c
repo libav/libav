@@ -49,7 +49,7 @@ static int pic_arrays_init(HEVCContext *s)
     int pic_width_in_min_pu = s->sps->pic_width_in_min_cbs * 4;
     int pic_height_in_min_pu = s->sps->pic_height_in_min_cbs * 4;
 
-    s->sao = av_malloc(ctb_count * sizeof(struct SAOParams));
+    s->sao = av_malloc(ctb_count * sizeof(SAOParams));
 
     s->split_coding_unit_flag = av_malloc(pic_size * sizeof(uint8_t));
     s->cu.skip_flag = av_malloc(pic_size * sizeof(uint8_t));
@@ -278,7 +278,7 @@ static int hls_sao_param(HEVCContext *s, int rx, int ry)
     int sao_merge_left_flag = 0;
     int sao_merge_up_flag = 0;
 
-    struct SAOParams *sao = &CTB(s->sao, rx, ry);
+    SAOParams *sao = &CTB(s->sao, rx, ry);
 
     if (rx > 0) {
         int left_ctb_in_slice = (s->ctb_addr_in_slice > 0);

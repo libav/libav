@@ -26,7 +26,7 @@
 
 #define POS(x,y) src[(x) + stride * (y)]
 
-static void FUNCC(intra_pred)(struct HEVCContext *s, int x0, int y0, int log2_size, int c_idx)
+static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int c_idx)
 {
 #define MIN_TB_ADDR_ZS(x, y)                                            \
     s->pps->min_tb_addr_zs[(y) * s->sps->pic_width_in_min_tbs + (x)]

@@ -25,7 +25,7 @@
 #define START_CODE 0x000001 ///< start_code_prefix_one_3bytes
 #define EMULATION_CODE 0x03 ///< emulation_prevention_three_byte
 
-typedef struct {
+typedef struct HEVCParserContext {
     ParseContext pc;
     uint8_t *nal_buffer;
     unsigned int nal_buffer_size;
