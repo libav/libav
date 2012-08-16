@@ -492,8 +492,8 @@ typedef struct HEVCContext {
     AVCodecContext *avctx;
     AVFrame frame;
 
-    HEVCPredContext hpc;
-    HEVCDSPContext hevcdsp;
+    HEVCPredContext *(hpc[3]);
+    HEVCDSPContext *(hevcdsp[3]);
 
     GetBitContext gb;
     HEVCCabacContext cc;

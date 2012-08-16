@@ -177,13 +177,13 @@ static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int
 
     switch(mode) {
     case INTRA_PLANAR:
-        s->hpc.pred_planar((uint8_t*)src, (uint8_t*)top, (uint8_t*)left, stride, log2_size);
+        s->hpc[c_idx]->pred_planar((uint8_t*)src, (uint8_t*)top, (uint8_t*)left, stride, log2_size);
         break;
     case INTRA_DC:
-        s->hpc.pred_dc((uint8_t*)src, (uint8_t*)top, (uint8_t*)left, stride, log2_size, c_idx);
+        s->hpc[c_idx]->pred_dc((uint8_t*)src, (uint8_t*)top, (uint8_t*)left, stride, log2_size, c_idx);
         break;
     default:
-        s->hpc.pred_angular((uint8_t*)src, (uint8_t*)top, (uint8_t*)left, stride, log2_size, c_idx,
+        s->hpc[c_idx]->pred_angular((uint8_t*)src, (uint8_t*)top, (uint8_t*)left, stride, log2_size, c_idx,
                             mode, s->sps->bit_depth[c_idx]);
         break;
     }

@@ -150,8 +150,10 @@ static int hls_slice_header(HEVCContext *s)
         s->sps->vshift[2] =
             s->sps->vshift[1] = av_pix_fmt_descriptors[s->avctx->pix_fmt].log2_chroma_h;
 
-        ff_hevc_pred_init(&s->hpc, s->sps->bit_depth[0]);
-        ff_hevc_dsp_init(&s->hevcdsp, s->sps->bit_depth[0]);
+        ff_hevc_pred_init(s->hpc[0], s->sps->bit_depth[0]);
+        ff_hevc_pred_init(s->hpc[1], s->sps->bit_depth[1]);
+        ff_hevc_dsp_init(s->hevcdsp[0], s->sps->bit_depth[0]);
+        ff_hevc_dsp_init(s->hevcdsp[1], s->sps->bit_depth[1]);
     }
 
     if (!sh->first_slice_in_pic_flag) {
@@ -636,6 +638,7 @@ static void hls_residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_w
     }
 
     if (!s->cu.cu_transquant_bypass_flag) {
+        HEVCDSPContext *hevcdsp = s->hevcdsp[c_idx];
         int qp;
         int bit_depth = s->sps->bit_depth[c_idx];
 
@@ -667,7 +670,7 @@ static void hls_residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_w
 
             qp += s->sps->qp_bd_offset_chroma;
         }
-        s->hevcdsp.dequant(coeffs, log2_trafo_width, qp, bit_depth);
+        hevcdsp->dequant(coeffs, log2_trafo_width, qp, bit_depth);
 
         if (transform_skip_flag) {
 #if REFERENCE_ENCODER_QUIRKS
@@ -688,9 +691,9 @@ static void hls_residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_w
                     dst[y * stride + x] += coeffs[y * size + x] << 7;
 #endif
         } else if (s->cu.pred_mode == MODE_INTRA && c_idx == 0 && log2_trafo_width == 2) {
-            s->hevcdsp.transform_4x4_luma_add(dst, coeffs, stride, bit_depth);
+            hevcdsp->transform_4x4_luma_add(dst, coeffs, stride, bit_depth);
         } else {
-            s->hevcdsp.transform_add[log2_trafo_width-2](dst, coeffs, stride, bit_depth);
+            hevcdsp->transform_add[log2_trafo_width-2](dst, coeffs, stride, bit_depth);
         }
     }
 }
@@ -703,13 +706,13 @@ static void hls_transform_unit(HEVCContext *s, int x0L, int  y0L, int x0C, int y
     int scan_idx_c = SCAN_DIAG;
 
     if (s->cu.pred_mode == MODE_INTRA) {
-        s->hpc.intra_pred(s, x0L, y0L, log2_trafo_width, 0);
+        s->hpc[0]->intra_pred(s, x0L, y0L, log2_trafo_width, 0);
         if (log2_trafo_size > 2) {
-            s->hpc.intra_pred(s, x0C, y0C, log2_trafo_width - 1, 1);
-            s->hpc.intra_pred(s, x0C, y0C, log2_trafo_width - 1, 2);
+            s->hpc[1]->intra_pred(s, x0C, y0C, log2_trafo_width - 1, 1);
+            s->hpc[2]->intra_pred(s, x0C, y0C, log2_trafo_width - 1, 2);
         } else if (blk_idx == 3) {
-            s->hpc.intra_pred(s, x0C, y0C, log2_trafo_width, 1);
-            s->hpc.intra_pred(s, x0C, y0C, log2_trafo_width, 2);
+            s->hpc[1]->intra_pred(s, x0C, y0C, log2_trafo_width, 1);
+            s->hpc[2]->intra_pred(s, x0C, y0C, log2_trafo_width, 2);
         }
     }
 
@@ -1358,6 +1361,17 @@ static av_cold int hevc_decode_init(AVCodecContext *avctx)
     s->avctx = avctx;
     memset(s->sps_list, 0, sizeof(s->sps_list));
     memset(s->pps_list, 0, sizeof(s->pps_list));
+
+    s->hevcdsp[0] = av_malloc(sizeof(HEVCDSPContext));
+    s->hevcdsp[2] =
+        s->hevcdsp[1] = av_malloc(sizeof(HEVCDSPContext));
+    s->hpc[0] = av_malloc(sizeof(HEVCPredContext));
+    s->hpc[2] =
+        s->hpc[1] = av_malloc(sizeof(HEVCPredContext));
+
+    if (!s->hevcdsp[0] || !s->hevcdsp[1] ||
+        !s->hpc[0] || !s->hpc[1])
+        return -1;
     return 0;
 }
 
