@@ -904,11 +904,11 @@ static void hls_prediction_unit(HEVCContext *s, int x0, int y0, int log2_cb_size
  * 8.4.1
  */
 static int luma_intra_pred_mode(HEVCContext *s, int x0, int y0, int pu_size,
-                                uint8_t prev_intra_luma_pred_flag)
+                                int prev_intra_luma_pred_flag)
 {
     int i;
     int candidate[3];
-    uint8_t intra_pred_mode;
+    int intra_pred_mode;
 
     int x_pu = x0 >> s->sps->log2_min_pu_size;
     int y_pu = y0 >> s->sps->log2_min_pu_size;
