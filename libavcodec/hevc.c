@@ -61,7 +61,7 @@ static int pic_arrays_init(HEVCContext *s)
     s->pu.left_ipm = av_malloc(pic_height_in_min_pu);
     s->pu.top_ipm = av_malloc(pic_width_in_min_pu);
 
-    if (!s->split_coding_unit_flag || !s->cu.skip_flag ||
+    if (!s->sao || !s->split_coding_unit_flag || !s->cu.skip_flag ||
         !s->pu.left_ipm || !s->pu.top_ipm)
         return -1;
 
