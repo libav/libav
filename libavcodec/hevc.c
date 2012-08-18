@@ -673,24 +673,7 @@ static void hls_residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_w
         hevcdsp->dequant(coeffs, log2_trafo_width, qp, bit_depth);
 
         if (transform_skip_flag) {
-            int x, y;
-#if REFERENCE_ENCODER_QUIRKS
-            int shift = 15 - bit_depth - log2_trafo_width;
-            if (shift > 0) {
-                int offset = 1 << (shift - 1);
-                for (y = 0; y < size; y++)
-                    for (x = 0; x < size; x++)
-                        dst[y * stride + x] += (coeffs[y * size + x] + offset) >> shift;
-            } else {
-                for (y = 0; y < size; y++)
-                    for (x = 0; x < size; x++)
-                        dst[y * stride + x] += coeffs[y * size + x] << (-shift);
-            }
-#else
-            for (y = 0; y < size; y++)
-                for (x = 0; x < size; x++)
-                    dst[y * stride + x] += coeffs[y * size + x] << 7;
-#endif
+            hevcdsp->transform_skip(dst, coeffs, stride, log2_trafo_width, bit_depth);
         } else if (s->cu.pred_mode == MODE_INTRA && c_idx == 0 && log2_trafo_width == 2) {
             hevcdsp->transform_4x4_luma_add(dst, coeffs, stride, bit_depth);
         } else {

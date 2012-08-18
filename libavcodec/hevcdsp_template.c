@@ -30,6 +30,37 @@
 #define SCALE(dst, x) (dst) = av_clip_int16_c(((x) + add) >> shift)
 #define ADD_AND_SCALE(dst, x) (dst) = av_clip_pixel((dst) + av_clip_int16_c(((x) + add) >> shift))
 
+static void FUNC(transform_skip)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stride, int log2_size, int bit_depth)
+{
+    int x, y;
+    pixel *dst = (pixel*)_dst;
+    ptrdiff_t stride = _stride / sizeof(pixel);
+    int size = 1 << log2_size;
+#if REFERENCE_ENCODER_QUIRKS
+    int shift = 15 - bit_depth - log2_size;
+    if (shift > 0) {
+        int offset = 1 << (shift - 1);
+        for (y = 0; y < size; y++) {
+            for (x = 0; x < size; x++)
+                dst[x] += (coeffs[y * size + x] + offset) >> shift;
+            dst += stride;
+        }
+    } else {
+        for (y = 0; y < size; y++) {
+            for (x = 0; x < size; x++)
+                dst[x] += coeffs[y * size + x] << (-shift);
+            dst += stride;
+        }
+    }
+#else
+    for (y = 0; y < size; y++) {
+        for (x = 0; x < size; x++)
+            dst[x] += coeffs[y * size + x] << 7;
+        dst += stride;
+    }
+#endif
+}
+
 static void FUNC(transform_4x4_luma_add)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stride, int bit_depth)
 {
 #define TR_4x4_LUMA(dst, src, step, assign)                                     \

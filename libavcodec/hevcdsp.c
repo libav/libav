@@ -54,6 +54,7 @@ void ff_hevc_dsp_init(HEVCDSPContext *hevcdsp, int bit_depth)
 #define FUNC(a, depth) a ## _ ## depth
 
 #define HEVC_DSP(depth)                                                     \
+    hevcdsp->transform_skip = FUNC(transform_skip, depth);                  \
     hevcdsp->transform_4x4_luma_add = FUNC(transform_4x4_luma_add, depth);  \
     hevcdsp->transform_add[0] = FUNC(transform_4x4_add, depth);             \
     hevcdsp->transform_add[1] = FUNC(transform_8x8_add, depth);             \
