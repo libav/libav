@@ -45,20 +45,21 @@ static void FUNC(transform_4x4_luma_add)(uint8_t *_dst, int16_t *coeffs, int _st
         assign(dst[3*step], 55 * c0 + 29 * c2 - c3);                            \
     } while (0)
 
+    int i;
     pixel *dst = (pixel*)_dst;
     int stride = _stride/sizeof(pixel);
     int shift = 7;
     int16_t add = 1 << (shift - 1);
     int16_t *src = coeffs;
 
-    for (int i = 0; i < 4; i++) {
+    for (i = 0; i < 4; i++) {
         TR_4x4_LUMA(src, src, 4, SCALE);
         src++;
     }
 
     shift = 20 - bit_depth;
     add = 1 << (shift - 1);
-    for (int i = 0; i < 4; i++) {
+    for (i = 0; i < 4; i++) {
         TR_4x4_LUMA(dst, coeffs, 1, ADD_AND_SCALE);
         coeffs += 4;
         dst += stride;
@@ -88,20 +89,21 @@ static void FUNC(transform_4x4_luma_add)(uint8_t *_dst, int16_t *coeffs, int _st
 
 static void FUNC(transform_4x4_add)(uint8_t *_dst, int16_t *coeffs, int _stride, int bit_depth)
 {
+    int i;
     pixel *dst = (pixel*)_dst;
     int stride = _stride/sizeof(pixel);
     int shift = 7;
     int16_t add = 1 << (shift - 1);
     int16_t *src = coeffs;
 
-    for (int i = 0; i < 4; i++) {
+    for (i = 0; i < 4; i++) {
         TR_4_1(src, src);
         src++;
     }
 
     shift = 20 - bit_depth;
     add = 1 << (shift - 1);
-    for (int i = 0; i < 4; i++) {
+    for (i = 0; i < 4; i++) {
         TR_4_2(dst, coeffs);
         coeffs += 4;
         dst += stride;
@@ -110,14 +112,15 @@ static void FUNC(transform_4x4_add)(uint8_t *_dst, int16_t *coeffs, int _stride,
 
 #define TR_8(dst, src, dstep, sstep, assign)                \
     do {                                                    \
+        int i, j;                                           \
         int e_8[4];                                         \
         int o_8[4] = { 0 };                                 \
-        for (int j = 0; j < 4; j++)                         \
-            for (int k = 1; k < 8; k += 2)                  \
-                o_8[j] += transform[4*k][j] * src[k*sstep]; \
+        for (i = 0; i < 4; i++)                             \
+            for (j = 1; j < 8; j += 2)                      \
+                o_8[i] += transform[4*j][i] * src[j*sstep]; \
         TR_4(e_8, src, 1, 2*sstep, SET);                    \
                                                             \
-        for (int i = 0; i < 4; i++) {                       \
+        for (i = 0; i < 4; i++) {                           \
             assign(dst[i*dstep], e_8[i] + o_8[i]);          \
             assign(dst[(7-i)*dstep], e_8[i] - o_8[i]);      \
         }                                                   \
@@ -125,14 +128,15 @@ static void FUNC(transform_4x4_add)(uint8_t *_dst, int16_t *coeffs, int _stride,
 
 #define TR_16(dst, src, dstep, sstep, assign)                   \
     do {                                                        \
+        int i, j;                                               \
         int e_16[8];                                            \
         int o_16[8] = { 0 };                                    \
-        for (int j = 0; j < 8; j++)                             \
-            for (int k = 1; k < 16; k += 2)                     \
-                o_16[j] += transform[2*k][j] * src[k*sstep];    \
+        for (i = 0; i < 8; i++)                                 \
+            for (j = 1; j < 16; j += 2)                         \
+                o_16[i] += transform[2*j][i] * src[j*sstep];    \
         TR_8(e_16, src, 1, 2*sstep, SET);                       \
                                                                 \
-        for (int i = 0; i < 8; i++) {                           \
+        for (i = 0; i < 8; i++) {                               \
             assign(dst[i*dstep], e_16[i] + o_16[i]);            \
             assign(dst[(15-i)*dstep], e_16[i] - o_16[i]);       \
         }                                                       \
@@ -140,14 +144,15 @@ static void FUNC(transform_4x4_add)(uint8_t *_dst, int16_t *coeffs, int _stride,
 
 #define TR_32(dst, src, dstep, sstep, assign)               \
     do {                                                    \
+        int i, j;                                           \
         int e_32[16];                                       \
         int o_32[16] = { 0 };                               \
-        for (int j = 0; j < 16; j++)                        \
-            for (int k = 1; k < 32; k += 2)                 \
-                o_32[j] += transform[k][j] * src[k*sstep];  \
+        for (i = 0; i < 16; i++)                            \
+            for (j = 1; j < 32; j += 2)                     \
+                o_32[i] += transform[j][i] * src[j*sstep];  \
         TR_16(e_32, src, 1, 2*sstep, SET);                  \
                                                             \
-        for (int i = 0; i < 16; i++) {                      \
+        for (i = 0; i < 16; i++) {                          \
             assign(dst[i*dstep], e_32[i] + o_32[i]);        \
             assign(dst[(31-i)*dstep], e_32[i] - o_32[i]);   \
         }                                                   \
@@ -163,20 +168,21 @@ static void FUNC(transform_4x4_add)(uint8_t *_dst, int16_t *coeffs, int _stride,
 
 static void FUNC(transform_8x8_add)(uint8_t *_dst, int16_t *coeffs, int _stride, int bit_depth)
 {
+    int i;
     pixel *dst = (pixel*)_dst;
     int stride = _stride/sizeof(pixel);
     int shift = 7;
     int16_t add = 1 << (shift - 1);
     int16_t *src = coeffs;
 
-    for (int i = 0; i < 8; i++) {
+    for (i = 0; i < 8; i++) {
         TR_8_1(src, src);
         src++;
     }
 
     shift = 20 - bit_depth;
     add = 1 << (shift - 1);
-    for (int i = 0; i < 8; i++) {
+    for (i = 0; i < 8; i++) {
         TR_8_2(dst, coeffs);
         coeffs += 8;
         dst += stride;
@@ -185,20 +191,21 @@ static void FUNC(transform_8x8_add)(uint8_t *_dst, int16_t *coeffs, int _stride,
 
 static void FUNC(transform_16x16_add)(uint8_t *_dst, int16_t *coeffs, int _stride, int bit_depth)
 {
+    int i;
     pixel *dst = (pixel*)_dst;
     int stride = _stride/sizeof(pixel);
     int shift = 7;
     int16_t add = 1 << (shift - 1);
     int16_t *src = coeffs;
 
-    for (int i = 0; i < 16; i++) {
+    for (i = 0; i < 16; i++) {
         TR_16_1(src, src);
         src++;
     }
 
     shift = 20 - bit_depth;
     add = 1 << (shift - 1);
-    for (int i = 0; i < 16; i++) {
+    for (i = 0; i < 16; i++) {
         TR_16_2(dst, coeffs);
         coeffs += 16;
         dst += stride;
@@ -207,20 +214,21 @@ static void FUNC(transform_16x16_add)(uint8_t *_dst, int16_t *coeffs, int _strid
 
 static void FUNC(transform_32x32_add)(uint8_t *_dst, int16_t *coeffs, int _stride, int bit_depth)
 {
+    int i;
     pixel *dst = (pixel*)_dst;
     int stride = _stride/sizeof(pixel);
     int shift = 7;
     int16_t add = 1 << (shift - 1);
     int16_t *src = coeffs;
 
-    for (int i = 0; i < 32; i++) {
+    for (i = 0; i < 32; i++) {
         TR_32_1(src, src);
         src++;
     }
 
     shift = 20 - bit_depth;
     add = 1 << (shift - 1);
-    for (int i = 0; i < 32; i++) {
+    for (i = 0; i < 32; i++) {
         TR_32_2(dst, coeffs);
         coeffs += 32;
         dst += stride;

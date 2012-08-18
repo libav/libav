@@ -32,14 +32,15 @@ static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int
     s->pps->min_tb_addr_zs[(y) * s->sps->pic_width_in_min_tbs + (x)]
 
 #define EXTEND_LEFT(ptr, length)                \
-    for (int i = 0; i < (length); i++)          \
+    for (i = 0; i < (length); i++)              \
         (ptr)[-(i+1)] = (ptr)[0];
 #define EXTEND_RIGHT(ptr, length)               \
-    for (int i = 0; i < (length); i++)          \
+    for (i = 0; i < (length); i++)              \
         (ptr)[i+1] = (ptr)[0];
 #define EXTEND_UP(ptr, length) EXTEND_LEFT(ptr, length)
 #define EXTEND_DOWN(ptr, length) EXTEND_RIGHT(ptr, length)
 
+    int i;
     int hshift = s->sps->hshift[c_idx];
     int vshift = s->sps->vshift[c_idx];
     int size = (1 << log2_size);
@@ -80,11 +81,11 @@ static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int
 
     // Fill left and top with the available samples
     if (bottom_left_available) {
-        for (int i = 0; i < bottom_left_size; i++)
+        for (i = 0; i < bottom_left_size; i++)
             left[size + i] = POS(-1, size + i);
     }
     if (left_available) {
-        for (int i = 0; i < size; i++)
+        for (i = 0; i < size; i++)
             left[i] = POS(-1, i);
     }
     if (top_left_available)
@@ -163,12 +164,12 @@ static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int
         if (min_dist_vert_hor > intra_hor_ver_dist_thresh[log2_size-3]) {
             filtered_left[2*size-1] = left[2*size-1];
             filtered_top[2*size-1]  = top[2*size-1];
-            for (int y = 2*size-2; y >= 0; y--) {
-                filtered_left[y] = (left[y+1] + 2*left[y] + left[y-1] + 2) >> 2;
+            for (i = 2*size-2; i >= 0; i--) {
+                filtered_left[i] = (left[i+1] + 2*left[i] + left[i-1] + 2) >> 2;
             }
             filtered_top[-1] = filtered_left[-1] = (left[0] + 2*left[-1] + top[0] + 2) >> 2;
-            for (int x = 2*size-2; x >= 0; x--) {
-                filtered_top[x] = (top[x+1] + 2*top[x] + top[x-1] + 2) >> 2;
+            for (i = 2*size-2; i >= 0; i--) {
+                filtered_top[i] = (top[i+1] + 2*top[i] + top[i-1] + 2) >> 2;
             }
             left = filtered_left;
             top = filtered_top;
@@ -192,12 +193,13 @@ static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int
 static void FUNCC(pred_planar)(uint8_t *_src, const uint8_t *_top, const uint8_t *_left,
                                int stride, int log2_size)
 {
+    int x, y;
     int size = (1 << log2_size);
     pixel *src = (pixel*)_src;
     const pixel *top = (const pixel*)_top;
     const pixel *left = (const pixel*)_left;
-    for (int y = 0; y < size; y++)
-        for (int x = 0; x < size; x++)
+    for (y = 0; y < size; y++)
+        for (x = 0; x < size; x++)
             POS(x,y) = ((size - 1 - x) * left[y]  + (x + 1) * top[size] +
                         (size - 1 - y) * top[x] + (y + 1) * left[size] + size) >>
                        (log2_size + 1);
@@ -206,28 +208,29 @@ static void FUNCC(pred_planar)(uint8_t *_src, const uint8_t *_top, const uint8_t
 static void FUNCC(pred_dc)(uint8_t *_src, const uint8_t *_top, const uint8_t *_left,
                            int stride, int log2_size, int c_idx)
 {
+    int i, j, x, y;
     int size = (1 << log2_size);
     pixel *src = (pixel*)_src;
     const pixel *top = (const pixel*)_top;
     const pixel *left = (const pixel*)_left;
     int dc = size;
     pixel4 a;
-    for (int i = 0; i < size; i++)
+    for (i = 0; i < size; i++)
         dc += left[i] + top[i];
 
     dc >>= log2_size + 1;
 
     a = PIXEL_SPLAT_X4(dc);
 
-    for (int i = 0; i < size; i++)
-        for (int j = 0; j < size/sizeof(pixel4); j++)
+    for (i = 0; i < size; i++)
+        for (j = 0; j < size/sizeof(pixel4); j++)
             AV_WN4PA(&POS(j * sizeof(pixel4), i), a);
 
     if (c_idx == 0) {
         POS(0, 0) = (left[0] + 2 * dc  + top[0] + 2) >> 2;
-        for (int x = 1; x < size; x++)
+        for (x = 1; x < size; x++)
             POS(x, 0) = (top[x] + 3 * dc + 2) >> 2;
-        for (int y = 1; y < size; y++)
+        for (y = 1; y < size; y++)
             POS(0, y) = (left[y] + 3 * dc + 2) >> 2;
     }
 }
@@ -237,6 +240,7 @@ static void FUNCC(pred_angular)(uint8_t *_src, const uint8_t *_top, const uint8_
 {
 #define CLIP_1(x) av_clip_c((x), 0, (1 << bit_depth) - 1)
 
+    int x, y;
     int size = 1 << log2_size;
     pixel *src = (pixel*)_src;
     const pixel *top = (const pixel*)_top;
@@ -259,43 +263,43 @@ static void FUNCC(pred_angular)(uint8_t *_src, const uint8_t *_top, const uint8_
     if (mode >= 18) {
         ref = top - 1;
         if (angle < 0 && last < -1) {
-            for (int x = 0; x <= size; x++)
+            for (x = 0; x <= size; x++)
                 (ref_array + size)[x] = top[x - 1];
-            for (int x = last; x <= -1; x++)
+            for (x = last; x <= -1; x++)
                 (ref_array + size)[x] = left[-1 + ((x * inv_angle[mode-11] + 128) >> 8)];
             ref = ref_array + size;
         }
 
-        for (int y = 0; y < size; y++) {
+        for (y = 0; y < size; y++) {
             int idx = ((y + 1) * angle) >> 5;
             int fact = ((y + 1) * angle) & 31;
-            for (int x = 0; x < size; x++) {
+            for (x = 0; x < size; x++) {
                 POS(x, y) = ((32 - fact) * ref[x + idx + 1] + fact * ref[x + idx + 2] + 16) >> 5;
             }
         }
         if (mode == 26 && c_idx == 0) {
-            for (int y = 0; y < size; y++)
+            for (y = 0; y < size; y++)
                 POS(0, y) = CLIP_1(top[0] + ((left[y] - left[-1]) >> 1));
         }
     } else {
         ref = left - 1;
         if (angle < 0 && last < -1) {
-            for (int x = 0; x <= size; x++)
+            for (x = 0; x <= size; x++)
                 (ref_array + size)[x] = left[x - 1];
-            for (int x = last; x <= -1; x++)
+            for (x = last; x <= -1; x++)
                 (ref_array + size)[x] = top[-1 + ((x * inv_angle[mode-11] + 128) >> 8)];
             ref = ref_array + size;
         }
 
-        for (int x = 0; x < size; x++) {
+        for (x = 0; x < size; x++) {
             int idx = ((x + 1) * angle) >> 5;
             int fact = ((x + 1) * angle) & 31;
-            for (int y = 0; y < size; y++) {
+            for (y = 0; y < size; y++) {
                 POS(x, y) = ((32 - fact) * ref[y + idx + 1] + fact * ref[y + idx + 2] + 16) >> 5;
             }
         }
         if (mode == 10 && c_idx == 0) {
-            for (int x = 0; x < size; x++)
+            for (x = 0; x < size; x++)
                 POS(x, 0) = CLIP_1(left[0] + ((top[x] - top[-1]) >> 1));
         }
     }

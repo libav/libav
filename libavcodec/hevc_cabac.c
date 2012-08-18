@@ -260,6 +260,7 @@ static int u_binarization(HEVCContext *s)
 
 static int eg_binarization(HEVCContext *s, int k)
 {
+    int j;
     int suffix = 0;
     int log = 0;
     int i = 0;
@@ -267,7 +268,7 @@ static int eg_binarization(HEVCContext *s, int k)
     while (decode_bin(s, i++) == 1);
 
     log = i - 1;
-    for (int j = 0; j < log; j++)
+    for (j = 0; j < log; j++)
         suffix = (suffix << 1) | decode_bin(s, i++);
 
     return (1 << (k + log)) - (1 << k) + suffix;
@@ -275,10 +276,11 @@ static int eg_binarization(HEVCContext *s, int k)
 
 static int fl_binarization(HEVCContext *s, int c_max)
 {
+    int i;
     int value = 0;
     int length = av_ceil_log2_c(c_max + 1);
 
-    for (int i = 0; i < length; i++)
+    for (i = 0; i < length; i++)
         value = (value << 1) | decode_bin(s, i);
 
     return value;
@@ -295,6 +297,7 @@ static int tu_binarization(HEVCContext *s, int c_max)
 
 void ff_hevc_cabac_init(HEVCContext *s)
 {
+    int i;
     HEVCCabacContext *cc = &s->cc;
     GetBitContext *gb = &s->gb;
 
@@ -306,7 +309,7 @@ void ff_hevc_cabac_init(HEVCContext *s)
     if (s->sh.cabac_init_flag && s->sh.slice_type != I_SLICE)
         cc->init_type ^= 3;
 
-    for (int i = 0; i < sizeof(init_values); i++) {
+    for (i = 0; i < sizeof(init_values); i++) {
         int init_value = init_values[i];
         int m = (init_value >> 4)*5 - 45;
         int n = ((init_value & 15) << 3) - 16;
@@ -620,6 +623,7 @@ int ff_hevc_transform_skip_flag_decode(HEVCContext *s, int c_idx)
 int ff_hevc_last_significant_coeff_prefix_decode(HEVCContext *s, int c_idx,
                                                  int log2_size, int is_x)
 {
+    int i;
     HEVCCabacContext *cc = &s->cc;
     int8_t ctx_idx_inc[9];
     int ctx_offset, ctx_shift;
@@ -635,7 +639,7 @@ int ff_hevc_last_significant_coeff_prefix_decode(HEVCContext *s, int c_idx,
         ctx_offset = 15;
         ctx_shift = log2_size - 2;
     }
-    for (int i = 0; i < 9; i++)
+    for (i = 0; i < 9; i++)
         ctx_idx_inc[i] = (i >> ctx_shift) + ctx_offset;
 
     cc->max_bin_idx_ctx = 8;
@@ -649,6 +653,7 @@ int ff_hevc_last_significant_coeff_suffix_decode(HEVCContext *s,
                                                  int last_significant_coeff_prefix,
                                                  int is_x)
 {
+    int i;
     HEVCCabacContext *cc = &s->cc;
     int length = (last_significant_coeff_prefix >> 1) - 1;
 #ifdef REFERENCE_ENCODER_QUIRKS
@@ -661,7 +666,7 @@ int ff_hevc_last_significant_coeff_suffix_decode(HEVCContext *s,
     cc->ctx_idx_offset = -1;
 
 #ifdef REFERENCE_ENCODER_QUIRKS
-    for (int i = 0; i < length; i++)
+    for (i = 0; i < length; i++)
         value = (value << 1) | decode_bin(s, i);
     return value;
 #else
@@ -828,6 +833,7 @@ int ff_hevc_coeff_abs_level_greater2_flag_decode(HEVCContext *s, int c_idx,
 
 int ff_hevc_coeff_abs_level_remaining(HEVCContext *s, int first_elem, int base_level)
 {
+    int i;
     HEVCCabacContext *cc = &s->cc;
     static int c_rice_param, last_coeff_abs_level_remaining;
     int prefix = 0;
@@ -846,11 +852,11 @@ int ff_hevc_coeff_abs_level_remaining(HEVCContext *s, int first_elem, int base_l
 
     prefix = u_binarization(s);
     if (prefix < 3) {
-        for (int i = 0; i < c_rice_param; i++)
+        for (i = 0; i < c_rice_param; i++)
             suffix = (suffix << 1) | decode_bin(s, i);
         last_coeff_abs_level_remaining = (prefix << c_rice_param) + suffix;
     } else {
-        for (int i = 0; i < prefix - 3 + c_rice_param; i++)
+        for (i = 0; i < prefix - 3 + c_rice_param; i++)
             suffix = (suffix << 1) | decode_bin(s, i);
         last_coeff_abs_level_remaining = (((1 << (prefix - 3)) + 3 - 1)
                                           << c_rice_param) + suffix;

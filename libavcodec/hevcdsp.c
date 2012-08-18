@@ -33,6 +33,7 @@
 
 static void dequant(int16_t *coeffs, int log2_size, int qp, int bit_depth)
 {
+    int x, y;
     int size = 1 << log2_size;
     const uint8_t level_scale[] = { 40, 45, 51, 57, 64, 72 };
 
@@ -41,8 +42,8 @@ static void dequant(int16_t *coeffs, int log2_size, int qp, int bit_depth)
     int shift = bit_depth + log2_size - 5;
     int scale = level_scale[qp % 6] << (qp/6);
 
-    for (int y = 0; y < size; y++)
-        for (int x = 0; x < size; x++)
+    for (y = 0; y < size; y++)
+        for (x = 0; x < size; x++)
             coeffs[size*y+x] = av_clip_int16_c(((coeffs[size*y+x] * m * scale) +
                                                 (1 << (shift - 1))) >> shift);
 }

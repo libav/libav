@@ -39,6 +39,7 @@ static int hevc_parse_nal_unit(HEVCParserContext *hpc, uint8_t **poutbuf,
                                int *poutbuf_size, const uint8_t *buf,
                                int buf_size)
 {
+    int i;
     ParseContext *pc = &hpc->pc;
     int mask = 0xFFFFFF;
     int skipped = 0;
@@ -46,7 +47,7 @@ static int hevc_parse_nal_unit(HEVCParserContext *hpc, uint8_t **poutbuf,
 
     // skip leading zeroes
     if (!pc->frame_start_found) {
-        for (int i = 0; i < buf_size; i++) {
+        for (i = 0; i < buf_size; i++) {
             pc->state = (pc->state << 8) | buf[i];
             if ((pc->state & mask) == START_CODE) {
                 pc->frame_start_found = 1;
@@ -65,7 +66,7 @@ static int hevc_parse_nal_unit(HEVCParserContext *hpc, uint8_t **poutbuf,
 
     // Remove emulation bytes and find the frame end
     if (pc->frame_start_found) {
-        for (int i = 0; i < buf_size; i++) {
+        for (i = 0; i < buf_size; i++) {
             pc->state = (pc->state << 8) | buf[i];
             switch (pc->state & mask) {
             case START_CODE:
