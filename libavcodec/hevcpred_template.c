@@ -52,7 +52,7 @@ static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int
     int y_tb = y0 >> s->sps->log2_min_transform_block_size;
     int cur_tb_addr = MIN_TB_ADDR_ZS(x_tb, y_tb);
 
-    int stride = s->frame.linesize[c_idx] / sizeof(pixel);
+    ptrdiff_t stride = s->frame.linesize[c_idx] / sizeof(pixel);
     pixel *src = (pixel*)&s->frame.data[c_idx][x + y * stride];
 
     enum IntraPredMode mode = c_idx ? s->pu.intra_pred_mode_c :
@@ -190,7 +190,7 @@ static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int
 }
 
 static void FUNCC(pred_planar)(uint8_t *_src, const uint8_t *_top, const uint8_t *_left,
-                               int stride, int log2_size)
+                               ptrdiff_t stride, int log2_size)
 {
     int x, y;
     int size = (1 << log2_size);
@@ -205,7 +205,7 @@ static void FUNCC(pred_planar)(uint8_t *_src, const uint8_t *_top, const uint8_t
 }
 
 static void FUNCC(pred_dc)(uint8_t *_src, const uint8_t *_top, const uint8_t *_left,
-                           int stride, int log2_size, int c_idx)
+                           ptrdiff_t stride, int log2_size, int c_idx)
 {
     int i, j, x, y;
     int size = (1 << log2_size);
@@ -235,7 +235,7 @@ static void FUNCC(pred_dc)(uint8_t *_src, const uint8_t *_top, const uint8_t *_l
 }
 
 static void FUNCC(pred_angular)(uint8_t *_src, const uint8_t *_top, const uint8_t *_left,
-                                int stride, int log2_size, int c_idx, int mode, int bit_depth)
+                                ptrdiff_t stride, int log2_size, int c_idx, int mode, int bit_depth)
 {
 #define CLIP_1(x) av_clip_c((x), 0, (1 << bit_depth) - 1)
 

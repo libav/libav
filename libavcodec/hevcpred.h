@@ -28,11 +28,11 @@ typedef struct HEVCContext HEVCContext;
 typedef struct HEVCPredContext {
     void (*intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int c_idx);
 
-    void(*pred_planar)(uint8_t *src, const uint8_t *top, const uint8_t *left, int stride,
+    void(*pred_planar)(uint8_t *src, const uint8_t *top, const uint8_t *left, ptrdiff_t stride,
                        int log2_size);
-    void(*pred_dc)(uint8_t *src, const uint8_t *top, const uint8_t *left, int stride,
+    void(*pred_dc)(uint8_t *src, const uint8_t *top, const uint8_t *left, ptrdiff_t stride,
                    int log2_size, int c_idx);
-    void(*pred_angular)(uint8_t *src, const uint8_t *top, const uint8_t *left, int stride,
+    void(*pred_angular)(uint8_t *src, const uint8_t *top, const uint8_t *left, ptrdiff_t stride,
                         int log2_size, int c_idx, int mode, int bit_depth);
 } HEVCPredContext;
 
