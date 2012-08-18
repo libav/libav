@@ -1434,5 +1434,5 @@ AVCodec ff_hevc_decoder = {
     .decode         = hevc_decode_frame,
     .capabilities   = 0,
     .flush          = hevc_decode_flush,
-    .long_name      = NULL_IF_CONFIG_SMALL("HEVC"),
+    .long_name      = NULL_IF_CONFIG_SMALL("HEVC (High Efficiency Video Coding)"),
 };
