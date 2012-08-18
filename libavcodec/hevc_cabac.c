@@ -199,7 +199,7 @@ static int decode_bin(HEVCContext *s, int bin_idx)
     mps = state[0];
     pstate = state[1];
 
-    lpsrange = lps_range[pstate][(cc->range >> 6) & 3];
+    lpsrange = ff_lps_range[pstate][(cc->range >> 6) & 3];
     bin_val = 0;
 
     av_log(s->avctx, AV_LOG_DEBUG,
@@ -214,13 +214,13 @@ static int decode_bin(HEVCContext *s, int bin_idx)
         cc->range = lpsrange;
 
         bin_val = 1 - mps;
-        state[1] = lps_state[pstate];
+        state[1] = ff_lps_state[pstate];
 
         if (pstate == 0)
             state[0] = !mps;
     } else {
         bin_val = mps;
-        state[1] = mps_state[pstate];
+        state[1] = ff_mps_state[pstate];
     }
 
     renormalization(s);
