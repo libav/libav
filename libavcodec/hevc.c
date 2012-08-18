@@ -990,7 +990,8 @@ static void intra_prediction_unit(HEVCContext *s, int x0, int y0, int log2_cb_si
 {
     int i, j;
     uint8_t prev_intra_luma_pred_flag[4];
-    int intra_chroma_pred_mode;
+    int chroma_mode;
+    static const uint8_t intra_chroma_table[4] = {0, 26, 10, 1};
 
     int split = s->cu.part_mode == PART_NxN;
     int pb_size = (1 << log2_cb_size) >> split;
@@ -1015,24 +1016,17 @@ static void intra_prediction_unit(HEVCContext *s, int x0, int y0, int log2_cb_si
         }
     }
 
-    intra_chroma_pred_mode = ff_hevc_intra_chroma_pred_mode_decode(s);
-    switch (intra_chroma_pred_mode) {
-    case 0:
-        s->pu.intra_pred_mode_c = (s->pu.intra_pred_mode[0] == 0) ? 34 : 0;
-        break;
-    case 1:
-        s->pu.intra_pred_mode_c = (s->pu.intra_pred_mode[0] == 26) ? 34 : 26;
-        break;
-    case 2:
-        s->pu.intra_pred_mode_c = (s->pu.intra_pred_mode[0] == 10) ? 34 : 10;
-        break;
-    case 3:
-        s->pu.intra_pred_mode_c = (s->pu.intra_pred_mode[0] == 1) ? 34 : 1;
-        break;
-    case 4:
+    chroma_mode = ff_hevc_intra_chroma_pred_mode_decode(s);
+    if (chroma_mode != 4) {
+        if (s->pu.intra_pred_mode[0] == intra_chroma_table[chroma_mode]) {
+            s->pu.intra_pred_mode_c = 34;
+        } else {
+            s->pu.intra_pred_mode_c = intra_chroma_table[chroma_mode];
+        }
+    } else {
         s->pu.intra_pred_mode_c = s->pu.intra_pred_mode[0];
-        break;
     }
+
     av_log(s->avctx, AV_LOG_DEBUG, "intra_pred_mode_c: %d\n",
            s->pu.intra_pred_mode_c);
 }
