@@ -89,17 +89,15 @@ static int hevc_parse_nal_unit(HEVCParserContext *hpc, uint8_t **poutbuf,
                 }
                 break;
             default:
-                if (*poutbuf == hpc->nal_buffer) {
+                if (*poutbuf == hpc->nal_buffer)
                     (*poutbuf)[i-skipped] = buf[i];
-                }
             }
         }
     }
 
     *poutbuf_size = buf_size - skipped;
-    if (buf_size == 0) {
+    if (buf_size == 0)
         return 0;
-    }
     return END_NOT_FOUND;
 }
 

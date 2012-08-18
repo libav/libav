@@ -40,7 +40,7 @@ static void dequant(int16_t *coeffs, int log2_size, int qp, int bit_depth)
     //TODO: scaling_list_enabled_flag support
     int m = 16;
     int shift = bit_depth + log2_size - 5;
-    int scale = level_scale[qp % 6] << (qp/6);
+    int scale = level_scale[qp % 6] << (qp / 6);
 
     for (y = 0; y < size; y++)
         for (x = 0; x < size; x++)

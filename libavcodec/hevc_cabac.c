@@ -28,99 +28,97 @@
 /**
  * Offset to ctxIdx 0 in init_values and states, indexed by SyntaxElement.
  */
-static const int elem_offset[] =
-{
-    0, //sao_merge_left_flag and sao_merge_up_flag
-    3, //sao_type_idx
-    -1, //sao_eo_class
-    -1, //sao_band_position
-    -1, //sao_offset_abs
-    -1, //sao_offset_sign
-    6, //alf_cu_flag
-    -1, //end_of_slice_flag
-    9, //split_coding_unit_flag
-    18, //cu_transquant_bypass_flag
-    21, //skip_flag
-    27, //cu_qp_delta
-    36, //pred_mode
-    36, //part_mode
-    -1, //pcm_flag
-    45, //prev_intra_luma_pred_mode
-    -1, //mpm_idx
-    -1, //rem_intra_luma_pred_mode
-    48, //intra_chroma_pred_mode
-    54, //merge_flag
-    56, //merge_idx
-    58, //inter_pred_idc
-    62, //ref_idx_l0
-    62, //ref_idx_l1
-    68, //abs_mvd_greater0_flag
-    68, //abs_mvd_greater1_flag
-    -1, //abs_mvd_minus2
-    -1, //mvd_sign_flag
-    72, //mvp_l0_flag
-    72, //mvp_l1_flag
-    74, //no_residual_data_flag
-    76, //split_transform_flag
-    85, //cbf_luma
-    91, //cbf_cb, cbf_cr
-    100, //transform_skip_flag[][][0]
-    100, //transform_skip_flag[][][1|2]
-    106, //last_significant_coeff_x_prefix
-    160, //last_significant_coeff_y_prefix
-    -1, //last_significant_coeff_x_suffix
-    -1, //last_significant_coeff_y_suffix
-    214, //significant_coeff_group_flag
-    226, //significant_coeff_flag
-    352, //coeff_abs_level_greater1_flag
-    424, //coeff_abs_level_greater2_flag
-    -1, //coeff_abs_level_remaining
-    -1, //coeff_sign_flag
+static const int elem_offset[] = {
+    0,   // sao_merge_left_flag and sao_merge_up_flag
+    3,   // sao_type_idx
+    -1,  // sao_eo_class
+    -1,  // sao_band_position
+    -1,  // sao_offset_abs
+    -1,  // sao_offset_sign
+    6,   // alf_cu_flag
+    -1,  // end_of_slice_flag
+    9,   // split_coding_unit_flag
+    18,  // cu_transquant_bypass_flag
+    21,  // skip_flag
+    27,  // cu_qp_delta
+    36,  // pred_mode
+    36,  // part_mode
+    -1,  // pcm_flag
+    45,  // prev_intra_luma_pred_mode
+    -1,  // mpm_idx
+    -1,  // rem_intra_luma_pred_mode
+    48,  // intra_chroma_pred_mode
+    54,  // merge_flag
+    56,  // merge_idx
+    58,  // inter_pred_idc
+    62,  // ref_idx_l0
+    62,  // ref_idx_l1
+    68,  // abs_mvd_greater0_flag
+    68,  // abs_mvd_greater1_flag
+    -1,  // abs_mvd_minus2
+    -1,  // mvd_sign_flag
+    72,  // mvp_l0_flag
+    72,  // mvp_l1_flag
+    74,  // no_residual_data_flag
+    76,  // split_transform_flag
+    85,  // cbf_luma
+    91,  // cbf_cb, cbf_cr
+    100, // transform_skip_flag[][][0]
+    100, // transform_skip_flag[][][1|2]
+    106, // last_significant_coeff_x_prefix
+    160, // last_significant_coeff_y_prefix
+    -1,  // last_significant_coeff_x_suffix
+    -1,  // last_significant_coeff_y_suffix
+    214, // significant_coeff_group_flag
+    226, // significant_coeff_flag
+    352, // coeff_abs_level_greater1_flag
+    424, // coeff_abs_level_greater2_flag
+    -1,  // coeff_abs_level_remaining
+    -1,  // coeff_sign_flag
 };
 
 /**
  * initValue from Tables 9-38 to 9-65, indexed by ctx_idx for each SyntaxElement
  * value.
  */
-static const uint8_t init_values[] =
-{
-    153, 153, 153, //sao_merge_left_flag and sao_merge_up_flag
-    160, 185, 200, //sao_type_idx
-    153, 153, 153, //alf_cu_flag
-    139, 141, 157, 107, 139, 126, 107, 139, 126, //split_coding_unit_flag
-    154, 154, 154, //cu_transquant_bypass_flag
-    197, 185, 201, 197, 185, 201, //skip_flag
-    154, 154, 154, 154, 154, 154, 154, 154, 154, //cu_qp_delta
-    149, 134, 184, 154, 139, 154, 154, 139, 154, //pred_mode, part_mode
-    184, 154, 183, //prev_intra_luma_pred_mode
-    63, 139, 152, 139, 152, 139, //intra_chroma_pred_mode
-    110, 154, //merge_flag
-    122, 137, //merge_idx
-    95, 79, 63, 31, //inter_pred_idc
-    153, 153, 139, 153, 153, 168, //ref_idx_l0, ref_idx_l1
-    140, 198, 169, 198, //abs_mvd_greater0_flag, abs_mvd_greater1_flag
-    168, 168, //mvp_l0_flag, mvp_l1_flag
-    79, 79, //no_residual_data_flag
-    224, 167, 122, 124, 138, 94, 153, 138, 138, //split_transform_flag
-    111, 141, 153, 111, 153, 111, //cbf_luma
-    94, 138, 182, 149, 107, 167, 149, 92, 167, //cbf_cb, cbf_cr
-    139, 139, 139, 139, 139, 139, //transform_skip_flag
+static const uint8_t init_values[] = {
+    153, 153, 153, // sao_merge_left_flag and sao_merge_up_flag
+    160, 185, 200, // sao_type_idx
+    153, 153, 153, // alf_cu_flag
+    139, 141, 157, 107, 139, 126, 107, 139, 126, // split_coding_unit_flag
+    154, 154, 154, // cu_transquant_bypass_flag
+    197, 185, 201, 197, 185, 201, // skip_flag
+    154, 154, 154, 154, 154, 154, 154, 154, 154, // cu_qp_delta
+    149, 134, 184, 154, 139, 154, 154, 139, 154, // pred_mode, part_mode
+    184, 154, 183, // prev_intra_luma_pred_mode
+    63, 139, 152, 139, 152, 139, // intra_chroma_pred_mode
+    110, 154, // merge_flag
+    122, 137, // merge_idx
+    95, 79, 63, 31, // inter_pred_idc
+    153, 153, 139, 153, 153, 168, // ref_idx_l0, ref_idx_l1
+    140, 198, 169, 198, // abs_mvd_greater0_flag, abs_mvd_greater1_flag
+    168, 168, // mvp_l0_flag, mvp_l1_flag
+    79, 79, // no_residual_data_flag
+    224, 167, 122, 124, 138, 94, 153, 138, 138, // split_transform_flag
+    111, 141, 153, 111, 153, 111, // cbf_luma
+    94, 138, 182, 149, 107, 167, 149, 92, 167, // cbf_cb, cbf_cr
+    139, 139, 139, 139, 139, 139, // transform_skip_flag
 
-    //last_significant_coeff_x_prefix
+    // last_significant_coeff_x_prefix
     110, 110, 124, 125, 140, 153, 125, 127, 140, 109, 111, 143, 127, 111,
     79,  108, 123,  63, 125, 110,  94, 110,  95,  79, 125, 111, 110,  78,
     110, 111, 111,  95,  94, 108, 123, 108, 125, 110, 124, 110,  95,  94,
     125, 111, 111,  79, 125, 126, 111, 111,  79, 108, 123,  93,
 
-    //last_significant_coeff_y_prefix
+    // last_significant_coeff_y_prefix
     110, 110, 124, 125, 140, 153, 125, 127, 140, 109, 111, 143, 127, 111,
     79,  108, 123,  63, 125, 110,  94, 110,  95,  79, 125, 111, 110,  78,
     110, 111, 111,  95,  94, 108, 123, 108, 125, 110, 124, 110,  95,  94,
     125, 111, 111,  79, 125, 126, 111, 111,  79, 108, 123,  93,
 
-    91, 171, 134, 141, 121, 140, 61, 154, 121, 140, 61, 154, //significant_coeff_group_flag
+    91, 171, 134, 141, 121, 140, 61, 154, 121, 140, 61, 154, // significant_coeff_group_flag
 
-    //significant_coeff_flag
+    // significant_coeff_flag
     111, 111, 125, 110, 110, 94, 124, 108, 124, 107, 125, 141, 179, 153, 125,
     107, 125, 141, 179, 153, 125, 107, 125, 141, 179, 153, 125, 140, 139, 182,
     182, 152, 136, 152, 136, 153, 136, 139, 111, 136, 139, 111, 155, 154, 139,
@@ -131,14 +129,14 @@ static const uint8_t init_values[] =
     166, 183, 140, 136, 153, 154, 170, 153, 138, 138, 122, 121, 122, 121, 167,
     151, 183, 140, 151, 183, 140,
 
-    //coeff_abs_level_greater1_flag
+    // coeff_abs_level_greater1_flag
     140, 92, 137, 138, 140, 152, 138, 139, 153, 74, 149, 92, 139, 107, 122, 152,
     140, 179, 166, 182, 140, 227, 122, 197, 154, 196, 196, 167, 154, 152, 167,
     182, 182, 134, 149, 136, 153, 121, 136, 137, 169, 194, 166, 167, 154, 167,
     137, 182, 154, 196, 167, 167, 154, 152, 167, 182, 182, 134, 149, 136, 153,
     121, 136, 122, 169, 208, 166, 167, 154, 152, 167, 182,
 
-    //coeff_abs_level_greater2_flag
+    // coeff_abs_level_greater2_flag
     138, 153, 136, 167, 152, 152, 107, 167, 91, 122, 107, 167, 107, 167, 91,
     107, 107, 167
 };
@@ -744,9 +742,9 @@ int ff_hevc_significant_coeff_flag_decode(HEVCContext *s, int c_idx, int x_c, in
             sig_ctx = 2;
         }
 
-        if (c_idx == 0 && (x_cg > 0 || y_cg > 0)) {
+        if (c_idx == 0 && (x_cg > 0 || y_cg > 0))
             sig_ctx += 3;
-        }
+
         if (log2_trafo_width == 3 && log2_trafo_height == 3) {
             sig_ctx += (scan_idx == SCAN_DIAG) ? 9 : 15;
         } else {
@@ -820,9 +818,8 @@ int ff_hevc_coeff_abs_level_greater2_flag_decode(HEVCContext *s, int c_idx,
     cc->state = states + elem_offset[cc->elem];
 
     ctx_idx_inc[0] = ctx_set;
-    if (c_idx > 0) {
+    if (c_idx > 0)
         ctx_idx_inc[0] += 4;
-    }
 
     cc->max_bin_idx_ctx = 0;
     cc->ctx_idx_offset = 6 * cc->init_type;

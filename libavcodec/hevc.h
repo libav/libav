@@ -447,9 +447,9 @@ typedef struct PredictionUnit {
 } PredictionUnit;
 
 typedef struct TransformTree {
-    uint8_t *(split_transform_flag[MAX_TRANSFORM_DEPTH]);
-    uint8_t *(cbf_cb[MAX_TRANSFORM_DEPTH]);
-    uint8_t *(cbf_cr[MAX_TRANSFORM_DEPTH]);
+    uint8_t *split_transform_flag[MAX_TRANSFORM_DEPTH];
+    uint8_t *cbf_cb[MAX_TRANSFORM_DEPTH];
+    uint8_t *cbf_cr[MAX_TRANSFORM_DEPTH];
     uint8_t cbf_luma;
 
     // Inferred parameters
@@ -492,8 +492,8 @@ typedef struct HEVCContext {
     AVCodecContext *avctx;
     AVFrame frame;
 
-    HEVCPredContext *(hpc[3]);
-    HEVCDSPContext *(hevcdsp[3]);
+    HEVCPredContext *hpc[3];
+    HEVCDSPContext *hevcdsp[3];
 
     GetBitContext gb;
     HEVCCabacContext cc;

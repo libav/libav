@@ -47,7 +47,7 @@ static void FUNC(transform_4x4_luma_add)(uint8_t *_dst, int16_t *coeffs, int _st
 
     int i;
     pixel *dst = (pixel*)_dst;
-    int stride = _stride/sizeof(pixel);
+    int stride = _stride / sizeof(pixel);
     int shift = 7;
     int16_t add = 1 << (shift - 1);
     int16_t *src = coeffs;
@@ -91,7 +91,7 @@ static void FUNC(transform_4x4_add)(uint8_t *_dst, int16_t *coeffs, int _stride,
 {
     int i;
     pixel *dst = (pixel*)_dst;
-    int stride = _stride/sizeof(pixel);
+    int stride = _stride / sizeof(pixel);
     int shift = 7;
     int16_t add = 1 << (shift - 1);
     int16_t *src = coeffs;
@@ -170,7 +170,7 @@ static void FUNC(transform_8x8_add)(uint8_t *_dst, int16_t *coeffs, int _stride,
 {
     int i;
     pixel *dst = (pixel*)_dst;
-    int stride = _stride/sizeof(pixel);
+    int stride = _stride / sizeof(pixel);
     int shift = 7;
     int16_t add = 1 << (shift - 1);
     int16_t *src = coeffs;
@@ -193,7 +193,7 @@ static void FUNC(transform_16x16_add)(uint8_t *_dst, int16_t *coeffs, int _strid
 {
     int i;
     pixel *dst = (pixel*)_dst;
-    int stride = _stride/sizeof(pixel);
+    int stride = _stride / sizeof(pixel);
     int shift = 7;
     int16_t add = 1 << (shift - 1);
     int16_t *src = coeffs;
@@ -216,7 +216,7 @@ static void FUNC(transform_32x32_add)(uint8_t *_dst, int16_t *coeffs, int _strid
 {
     int i;
     pixel *dst = (pixel*)_dst;
-    int stride = _stride/sizeof(pixel);
+    int stride = _stride / sizeof(pixel);
     int shift = 7;
     int16_t add = 1 << (shift - 1);
     int16_t *src = coeffs;

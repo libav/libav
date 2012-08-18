@@ -24,7 +24,7 @@
 #include "bit_depth_template.c"
 #include "hevcpred.h"
 
-#define POS(x,y) src[(x) + stride * (y)]
+#define POS(x, y) src[(x) + stride * (y)]
 
 static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int c_idx)
 {
@@ -52,7 +52,7 @@ static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int
     int y_tb = y0 >> s->sps->log2_min_transform_block_size;
     int cur_tb_addr = MIN_TB_ADDR_ZS(x_tb, y_tb);
 
-    int stride = s->frame.linesize[c_idx]/sizeof(pixel);
+    int stride = s->frame.linesize[c_idx] / sizeof(pixel);
     pixel *src = (pixel*)&s->frame.data[c_idx][x + y * stride];
 
     enum IntraPredMode mode = c_idx ? s->pu.intra_pred_mode_c :
@@ -91,7 +91,7 @@ static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int
     if (top_left_available)
         left[-1] = POS(-1, -1);
     if (top_available && top_right_available && top_right_size == size) {
-        top = &POS(0,-1);
+        top = &POS(0, -1);
     } else {
         if (top_available)
             memcpy(&top[0], &POS(0, -1), size * sizeof(pixel));
@@ -141,9 +141,8 @@ static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int
         EXTEND_RIGHT(&top[0], size-1);
         top_available = 1;
     }
-    if (!top_right_available) {
+    if (!top_right_available)
         EXTEND_RIGHT(&top[size-1], size);
-    }
 
     if (bottom_left_size < size)
         EXTEND_DOWN(&left[size + bottom_left_size - 1], size - bottom_left_size);
@@ -160,7 +159,7 @@ static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int
 
     if (c_idx == 0 && mode != INTRA_DC && size != 4) {
         int intra_hor_ver_dist_thresh[] = { 7, 1, 0 };
-        int min_dist_vert_hor = FFMIN(FFABS((int)mode-26),FFABS((int)mode-10));
+        int min_dist_vert_hor = FFMIN(FFABS((int)mode-26), FFABS((int)mode-10));
         if (min_dist_vert_hor > intra_hor_ver_dist_thresh[log2_size-3]) {
             filtered_left[2*size-1] = left[2*size-1];
             filtered_top[2*size-1]  = top[2*size-1];
@@ -200,9 +199,9 @@ static void FUNCC(pred_planar)(uint8_t *_src, const uint8_t *_top, const uint8_t
     const pixel *left = (const pixel*)_left;
     for (y = 0; y < size; y++)
         for (x = 0; x < size; x++)
-            POS(x,y) = ((size - 1 - x) * left[y]  + (x + 1) * top[size] +
-                        (size - 1 - y) * top[x] + (y + 1) * left[size] + size) >>
-                       (log2_size + 1);
+            POS(x, y) = ((size - 1 - x) * left[y]  + (x + 1) * top[size] +
+                         (size - 1 - y) * top[x] + (y + 1) * left[size] + size) >>
+                        (log2_size + 1);
 }
 
 static void FUNCC(pred_dc)(uint8_t *_src, const uint8_t *_top, const uint8_t *_left,
@@ -223,7 +222,7 @@ static void FUNCC(pred_dc)(uint8_t *_src, const uint8_t *_top, const uint8_t *_l
     a = PIXEL_SPLAT_X4(dc);
 
     for (i = 0; i < size; i++)
-        for (j = 0; j < size/sizeof(pixel4); j++)
+        for (j = 0; j < size / sizeof(pixel4); j++)
             AV_WN4PA(&POS(j * sizeof(pixel4), i), a);
 
     if (c_idx == 0) {
@@ -247,7 +246,7 @@ static void FUNCC(pred_angular)(uint8_t *_src, const uint8_t *_top, const uint8_
     const pixel *left = (const pixel*)_left;
 
     const int intra_pred_angle[] = {
-        32, 26, 21, 17, 13, 9, 5, 2, 0, -2, -5, -9, -13,-17, -21, -26, -32,
+        32, 26, 21, 17, 13, 9, 5, 2, 0, -2, -5, -9, -13, -17, -21, -26, -32,
         -26, -21, -17, -13, -9, -5, -2, 0, 2, 5, 9, 13, 17, 21, 26, 32
     };
     const int inv_angle[] = {

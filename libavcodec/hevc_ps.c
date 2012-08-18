@@ -31,7 +31,7 @@ int ff_hevc_decode_short_term_rps(HEVCContext *s, int idx, ShortTermRPS **prps)
     GetBitContext *gb = &s->gb;
 
     ShortTermRPS *rps = NULL;
-    *prps = av_malloc(sizeof(ShortTermRPS));
+    *prps = av_malloc(sizeof(**prps));
     if (!*prps)
         return -1;
 
@@ -58,7 +58,7 @@ int ff_hevc_decode_nal_vps(HEVCContext *s)
     int i;
     GetBitContext *gb = &s->gb;
     int vps_id = 0;
-    VPS *vps = av_mallocz(sizeof(VPS));
+    VPS *vps = av_mallocz(sizeof(*vps));
 
     av_log(s->avctx, AV_LOG_DEBUG, "Decoding VPS\n");
 
@@ -93,7 +93,7 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
 #if REFERENCE_ENCODER_QUIRKS
     int max_cu_depth = 0;
 #endif
-    SPS *sps = av_mallocz(sizeof(SPS));
+    SPS *sps = av_mallocz(sizeof(*sps));
     if (!sps)
         goto err;
 
@@ -140,7 +140,7 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
 
     sps->bit_depth[0] = get_ue_golomb(gb) + 8;
     sps->bit_depth[2] =
-        sps->bit_depth[1] = get_ue_golomb(gb) + 8;
+    sps->bit_depth[1] = get_ue_golomb(gb) + 8;
 
     sps->pcm_enabled_flag = get_bits1(gb);
     if (sps->pcm_enabled_flag) {
@@ -157,9 +157,8 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
     }
 
     sps->restricted_ref_pic_lists_flag = get_bits1(gb);
-    if (sps->restricted_ref_pic_lists_flag) {
+    if (sps->restricted_ref_pic_lists_flag)
         sps->lists_modification_present_flag = get_bits1(gb);
-    }
 
     sps->log2_min_coding_block_size             = get_ue_golomb(gb) + 3;
     sps->log2_diff_max_min_coding_block_size    = get_ue_golomb(gb);
@@ -250,7 +249,7 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
     int pps_id = 0;
     int log2_diff_ctb_min_tb_size;
 
-    PPS *pps = av_mallocz(sizeof(PPS));
+    PPS *pps = av_mallocz(sizeof(*pps));
     if (!pps)
         goto err;
 
@@ -313,8 +312,8 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
         pps->num_tile_columns     = get_ue_golomb(gb) + 1;
         pps->num_tile_rows        = get_ue_golomb(gb) + 1;
 
-        pps->column_width = av_malloc(pps->num_tile_columns * sizeof(int));
-        pps->row_height   = av_malloc(pps->num_tile_rows * sizeof(int));
+        pps->column_width = av_malloc(pps->num_tile_columns * sizeof(*pps->column_width));
+        pps->row_height   = av_malloc(pps->num_tile_rows * sizeof(*pps->row_height));
         if (!pps->column_width || !pps->row_height)
             goto err;
 
@@ -328,8 +327,7 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
             }
         }
         pps->loop_filter_across_tiles_enabled_flag = get_bits1(gb);
-    }
-    else if (pps->tiles_or_entropy_coding_sync_idc == 2) {
+    } else if (pps->tiles_or_entropy_coding_sync_idc == 2) {
         pps->cabac_independant_flag = get_bits1(gb);
     }
 
@@ -355,27 +353,25 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
     pps->slice_header_extension_present_flag = get_bits1(gb);
 
     // Inferred parameters
-    pps->col_bd = av_malloc((pps->num_tile_columns + 1) * sizeof(int));
-    pps->row_bd = av_malloc((pps->num_tile_rows + 1) * sizeof(int));
+    pps->col_bd = av_malloc((pps->num_tile_columns + 1) * sizeof(*pps->col_bd));
+    pps->row_bd = av_malloc((pps->num_tile_rows + 1) * sizeof(*pps->row_bd));
     if (!pps->col_bd || !pps->row_bd)
         goto err;
 
     if (pps->uniform_spacing_flag) {
-        pps->column_width = av_malloc(pps->num_tile_columns * sizeof(int));
-        pps->row_height   = av_malloc(pps->num_tile_rows * sizeof(int));
+        pps->column_width = av_malloc(pps->num_tile_columns * sizeof(*pps->column_width));
+        pps->row_height   = av_malloc(pps->num_tile_rows * sizeof(*pps->row_height));
         if (!pps->column_width || !pps->row_height)
             goto err;
 
         for (i = 0; i < pps->num_tile_columns; i++) {
-            pps->column_width[i] =
-                ((i + 1) * sps->pic_width_in_ctbs) / (pps->num_tile_columns) -
-                (i * sps->pic_width_in_ctbs) / (pps->num_tile_columns);
+            pps->column_width[i] = ((i + 1) * sps->pic_width_in_ctbs) / (pps->num_tile_columns) -
+                                   (i * sps->pic_width_in_ctbs) / (pps->num_tile_columns);
         }
 
         for (i = 0; i < pps->num_tile_rows; i++) {
-            pps->row_height[i] =
-                ((i + 1) * sps->pic_height_in_ctbs) / (pps->num_tile_rows) -
-                (i * sps->pic_height_in_ctbs) / (pps->num_tile_rows);
+            pps->row_height[i] = ((i + 1) * sps->pic_height_in_ctbs) / (pps->num_tile_rows) -
+                                 (i * sps->pic_height_in_ctbs) / (pps->num_tile_rows);
         }
     }
 
@@ -391,16 +387,16 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
      * 6.5
      */
     pps->ctb_addr_rs_to_ts = av_malloc(sps->pic_width_in_ctbs *
-                                       sps->pic_height_in_ctbs * sizeof(int));
+                                       sps->pic_height_in_ctbs * sizeof(*pps->ctb_addr_rs_to_ts));
     pps->ctb_addr_ts_to_rs = av_malloc(sps->pic_width_in_ctbs *
-                                       sps->pic_height_in_ctbs * sizeof(int));
+                                       sps->pic_height_in_ctbs * sizeof(*pps->ctb_addr_ts_to_rs));
     pps->tile_id = av_malloc(sps->pic_width_in_ctbs *
-                             sps->pic_height_in_ctbs * sizeof(int));
+                             sps->pic_height_in_ctbs * sizeof(*pps->tile_id));
     pps->min_cb_addr_zs = av_malloc(sps->pic_width_in_min_cbs *
-                                    sps->pic_height_in_min_cbs * sizeof(int));
+                                    sps->pic_height_in_min_cbs * sizeof(*pps->min_cb_addr_zs));
 
     pps->min_tb_addr_zs = av_malloc(sps->pic_width_in_min_tbs *
-                                    sps->pic_height_in_min_tbs * sizeof(int));
+                                    sps->pic_height_in_min_tbs * sizeof(*pps->min_tb_addr_zs));
     if (!pps->ctb_addr_rs_to_ts || !pps->ctb_addr_ts_to_rs ||
         !pps->tile_id || !pps->min_cb_addr_zs ||
         !pps->min_tb_addr_zs)
@@ -416,14 +412,14 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
         int val = 0;
 
         for (i = 0; i < pps->num_tile_columns; i++) {
-            if ( tb_x < pps->col_bd[i + 1] ) {
+            if (tb_x < pps->col_bd[i + 1]) {
                 tile_x = i;
                 break;
             }
         }
 
         for (i = 0; i < pps->num_tile_rows; i++) {
-            if( tb_y < pps->row_bd[i + 1] ) {
+            if (tb_y < pps->row_bd[i + 1]) {
                 tile_y = i;
                 break;
             }
@@ -445,8 +441,7 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
         for (i = 0; i < pps->num_tile_columns; i++, tile_id++)
             for (y = pps->row_bd[j]; y < pps->row_bd[j+1]; y++)
                 for (x = pps->col_bd[j]; x < pps->col_bd[j+1]; x++)
-                    pps->tile_id[pps->ctb_addr_rs_to_ts[y * sps->pic_width_in_ctbs + x]] =
-                        tile_id;
+                    pps->tile_id[pps->ctb_addr_rs_to_ts[y * sps->pic_width_in_ctbs + x]] = tile_id;
 
     for (y = 0; y < sps->pic_height_in_min_cbs; y++) {
         for (x = 0; x < sps->pic_width_in_min_cbs; x++) {
