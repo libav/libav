@@ -53,7 +53,7 @@ static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int
     int cur_tb_addr = MIN_TB_ADDR_ZS(x_tb, y_tb);
 
     ptrdiff_t stride = s->frame.linesize[c_idx] / sizeof(pixel);
-    pixel *src = (pixel*)&s->frame.data[c_idx][x + y * stride];
+    pixel *src = (pixel*)s->frame.data[c_idx] + x + y * stride;
 
     enum IntraPredMode mode = c_idx ? s->pu.intra_pred_mode_c :
                               s->tu.cur_intra_pred_mode;

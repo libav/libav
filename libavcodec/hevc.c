@@ -138,19 +138,44 @@ static int hls_slice_header(HEVCContext *s)
                    "s->sps->separate_colour_plane_flag\n");
             return -1;
         }
-        //TODO: take into account the luma and chroma bit depths
+
+        if (s->sps->bit_depth[0] != s->sps->bit_depth[1]) {
+            av_log_missing_feature(s->avctx,
+                                   "different bit_depth for luma and chroma is", 0);
+            return AVERROR_PATCHWELCOME;
+        }
+
         if (s->sps->chroma_format_idc == 1) {
-            s->avctx->pix_fmt = PIX_FMT_YUV420P;
-        } else if (s->sps->chroma_format_idc == 2) {
-            s->avctx->pix_fmt = PIX_FMT_YUV422P;
+            switch (s->sps->bit_depth[0]) {
+            case 8:
+                s->avctx->pix_fmt = PIX_FMT_YUV420P;
+                break;
+            case 9:
+                s->avctx->pix_fmt = PIX_FMT_YUV420P9;
+                break;
+            case 10:
+                s->avctx->pix_fmt = PIX_FMT_YUV420P10;
+                break;
+            case 16:
+                s->avctx->pix_fmt = PIX_FMT_YUV420P16;
+                break;
+            default:
+                av_log(s->avctx, AV_LOG_ERROR, "unsupported bit depth: %d\n", s->sps->bit_depth[0]);
+                return AVERROR_PATCHWELCOME;
+            }
         } else {
-            s->avctx->pix_fmt = PIX_FMT_YUV444P;
+            av_log(s->avctx, AV_LOG_ERROR, "non-4:2:0 support is currently unspecified.\n");
+            return -1;
         }
         s->sps->hshift[0] = s->sps->vshift[0] = 0;
         s->sps->hshift[2] =
         s->sps->hshift[1] = av_pix_fmt_descriptors[s->avctx->pix_fmt].log2_chroma_w;
         s->sps->vshift[2] =
         s->sps->vshift[1] = av_pix_fmt_descriptors[s->avctx->pix_fmt].log2_chroma_h;
+
+        s->sps->pixel_shift[0] = s->sps->bit_depth[0] > 8;
+        s->sps->pixel_shift[2] =
+        s->sps->pixel_shift[1] = s->sps->bit_depth[1] > 8;
 
         ff_hevc_pred_init(s->hpc[0], s->sps->bit_depth[0]);
         ff_hevc_pred_init(s->hpc[1], s->sps->bit_depth[1]);
@@ -368,6 +393,9 @@ static void hls_residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_w
     } while (0)
 
     int i;
+
+    HEVCDSPContext *hevcdsp = s->hevcdsp[c_idx];
+
     int transform_skip_flag = 0;
 
     int last_significant_coeff_x, last_significant_coeff_y;
@@ -381,7 +409,9 @@ static void hls_residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_w
     ptrdiff_t stride = s->frame.linesize[c_idx];
     int hshift = s->sps->hshift[c_idx];
     int vshift = s->sps->vshift[c_idx];
-    uint8_t *dst = &s->frame.data[c_idx][(y0 >> vshift) * stride + (x0 >> hshift)];
+    int bit_depth = s->sps->bit_depth[c_idx];
+    int pixel_shift = s->sps->pixel_shift[c_idx];
+    uint8_t *dst = &s->frame.data[c_idx][(y0 >> vshift) * stride + ((x0 >> hshift) << pixel_shift)];
 
     int16_t coeffs[MAX_TB_SIZE * MAX_TB_SIZE] = { 0 };
     int size = 1 << log2_trafo_width;
@@ -629,18 +659,15 @@ static void hls_residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_w
                        trans_coeff_level);
             }
 
-            if (s->cu.cu_transquant_bypass_flag) {
-                dst[y_c * stride + x_c] += trans_coeff_level;
-            } else {
-                coeffs[y_c * size + x_c] = trans_coeff_level;
-            }
+            coeffs[y_c * size + x_c] = trans_coeff_level;
         }
     }
 
-    if (!s->cu.cu_transquant_bypass_flag) {
-        HEVCDSPContext *hevcdsp = s->hevcdsp[c_idx];
+
+    if (s->cu.cu_transquant_bypass_flag) {
+        hevcdsp->transquant_bypass(dst, coeffs, stride, log2_trafo_width, bit_depth);
+    } else {
         int qp;
-        int bit_depth = s->sps->bit_depth[c_idx];
 
         //TODO: handle non-constant QP
         int qp_y_pred = s->sh.slice_qp;

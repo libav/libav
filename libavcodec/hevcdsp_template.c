@@ -28,7 +28,23 @@
 
 #define SET(dst, x) (dst) = (x)
 #define SCALE(dst, x) (dst) = av_clip_int16_c(((x) + add) >> shift)
-#define ADD_AND_SCALE(dst, x) (dst) = av_clip_pixel((dst) + av_clip_int16_c(((x) + add) >> shift))
+#define ADD_AND_SCALE(dst, x) (dst) = av_clip_uintp2((dst) + av_clip_int16_c(((x) + add) >> shift), bit_depth)
+
+static void FUNC(transquant_bypass)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stride, int log2_size, int bit_depth)
+{
+    int x, y;
+    pixel *dst = (pixel*)_dst;
+    ptrdiff_t stride = _stride / sizeof(pixel);
+    int size = 1 << log2_size;
+
+    for (y = 0; y < size; y++) {
+        for (x = 0; x < size; x++) {
+            dst[x] += *coeffs;
+            coeffs++;
+        }
+        dst += stride;
+    }
+}
 
 static void FUNC(transform_skip)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stride, int log2_size, int bit_depth)
 {
