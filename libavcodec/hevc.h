@@ -75,14 +75,35 @@ typedef struct ShortTermRPS {
 
 #define MAX_TB_SIZE 32
 
-typedef struct VPS {
-    int vps_max_temporal_layers; ///< vps_max_temporal_layers_minus1 + 1
-    int vps_max_layers; ///< vps_max_layers_minus1 + 1
+typedef struct PTL {
+    int general_profile_space;
+    uint8_t general_tier_flag;
+    int general_profile_idc;
+    int general_profile_compatibility_flag[32];
+    int general_level_idc;
 
+    uint8_t sub_layer_profile_present_flag[MAX_TEMPORAL_LAYERS];
+    uint8_t sub_layer_level_present_flag[MAX_TEMPORAL_LAYERS];
+
+    int sub_layer_profile_space[MAX_TEMPORAL_LAYERS];
+    uint8_t sub_layer_tier_flag[MAX_TEMPORAL_LAYERS];
+    int sub_layer_profile_idc[MAX_TEMPORAL_LAYERS];
+    uint8_t sub_layer_profile_compatibility_flags[MAX_TEMPORAL_LAYERS][32];
+    int sub_layer_level_idc[MAX_TEMPORAL_LAYERS];
+} PTL;
+
+typedef struct VPS {
     uint8_t vps_temporal_id_nesting_flag;
+
+    int vps_max_sub_layers; ///< vps_max_sub_layers_minus1 + 1
+
+    PTL *ptl;
+
     int vps_max_dec_pic_buffering[MAX_TEMPORAL_LAYERS];
     int vps_num_reorder_pics[MAX_TEMPORAL_LAYERS];
     int vps_max_latency_increase[MAX_TEMPORAL_LAYERS];
+
+    int vps_num_hrd_parameters;
 } VPS;
 
 typedef struct SPS {
