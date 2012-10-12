@@ -107,15 +107,14 @@ typedef struct VPS {
 } VPS;
 
 typedef struct SPS {
-    uint8_t profile_space;
-    uint8_t profile_idc;
-    uint8_t level_idc;
-
     int vps_id;
+
+    int sps_max_sub_layers; ///< sps_max_sub_layers_minus1 + 1
+
+    PTL *ptl;
+
     int chroma_format_idc;
     uint8_t separate_colour_plane_flag;
-
-    uint8_t max_temporal_layers; ///< max_temporal_layers_minus1 + 1
 
     int pic_width_in_luma_samples;
     int pic_height_in_luma_samples;

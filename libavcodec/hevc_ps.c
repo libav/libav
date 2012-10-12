@@ -144,6 +144,7 @@ int ff_hevc_decode_nal_vps(HEVCContext *s)
 int ff_hevc_decode_nal_sps(HEVCContext *s)
 {
     int i;
+    int ret;
     GetBitContext *gb = &s->gb;
 
     int sps_id = 0;
@@ -160,29 +161,29 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
 
     // Coded parameters
 
-    sps->profile_space = get_bits(gb, 3);
-    sps->profile_idc = get_bits(gb, 5);
-    skip_bits(gb, 16); // constraint_flags
-    sps->level_idc = get_bits(gb, 8);
-    skip_bits(gb, 32); // profile_compability_flag[i]
-
-    sps_id         = get_ue_golomb(gb);
-    if (sps_id >= MAX_SPS_COUNT) {
-        av_log(s->avctx, AV_LOG_ERROR, "SPS id out of range: %d\n", sps_id);
-        goto err;
-    }
-
-    sps->vps_id = get_ue_golomb(gb);
+    sps->vps_id = get_bits(gb, 4);
     if (sps->vps_id >= MAX_VPS_COUNT) {
         av_log(s->avctx, AV_LOG_ERROR, "VPS id out of range: %d\n", sps->vps_id);
         goto err;
     }
 
+    sps->sps_max_sub_layers = get_bits(gb, 3) + 1;
+    skip_bits(gb, 1); // sps_reserved_zero_bit
+
+    ret = decode_profile_tier_level(s, &sps->ptl, 1, sps->sps_max_sub_layers);
+    if (ret < 0)
+        return ret;
+
+    sps_id = get_ue_golomb(gb);
+    if (sps_id >= MAX_SPS_COUNT) {
+        av_log(s->avctx, AV_LOG_ERROR, "SPS id out of range: %d\n", sps_id);
+        goto err;
+    }
+
     sps->chroma_format_idc = get_ue_golomb(gb);
+
     if (sps->chroma_format_idc == 3)
         sps->separate_colour_plane_flag = get_bits1(gb);
-
-    sps->max_temporal_layers = get_bits(gb, 3) + 1;
 
     sps->pic_width_in_luma_samples  = get_ue_golomb(gb);
     sps->pic_height_in_luma_samples = get_ue_golomb(gb);
@@ -207,7 +208,7 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
 
     sps->log2_max_poc_lsb = get_ue_golomb(gb) + 4;
 
-    for (i = 0; i < sps->max_temporal_layers; i++) {
+    for (i = 0; i < sps->sps_max_sub_layers; i++) {
         sps->temporal_layer[i].max_dec_pic_buffering = get_ue_golomb(gb);
         sps->temporal_layer[i].num_reorder_pics      = get_ue_golomb(gb);
         sps->temporal_layer[i].max_latency_increase  = get_ue_golomb(gb);
