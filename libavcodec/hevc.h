@@ -97,7 +97,7 @@ typedef struct VPS {
 
     int vps_max_sub_layers; ///< vps_max_sub_layers_minus1 + 1
 
-    PTL *ptl;
+    PTL ptl;
 
     int vps_max_dec_pic_buffering[MAX_TEMPORAL_LAYERS];
     int vps_num_reorder_pics[MAX_TEMPORAL_LAYERS];
@@ -111,7 +111,7 @@ typedef struct SPS {
 
     int sps_max_sub_layers; ///< sps_max_sub_layers_minus1 + 1
 
-    PTL *ptl;
+    PTL ptl;
 
     int chroma_format_idc;
     uint8_t separate_colour_plane_flag;

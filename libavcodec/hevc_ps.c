@@ -53,18 +53,11 @@ int ff_hevc_decode_short_term_rps(HEVCContext *s, int idx, ShortTermRPS **prps)
     return 0;
 }
 
-static int decode_profile_tier_level(HEVCContext *s, PTL **pptl,
+static int decode_profile_tier_level(HEVCContext *s, PTL *ptl,
                                int profile_present_flag, int max_num_sub_layers)
 {
     int i, j;
     GetBitContext *gb = &s->gb;
-    PTL *ptl = NULL;
-
-    *pptl = av_mallocz(sizeof(**pptl));
-    if (!*pptl)
-        return -1;
-
-    ptl = *pptl;
 
     if (profile_present_flag) {
         ptl->general_profile_space = get_bits(gb, 2);
