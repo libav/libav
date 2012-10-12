@@ -256,6 +256,12 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
     sps->long_term_ref_pics_present_flag = get_bits1(gb);
     sps->sps_temporal_mvp_enabled_flag   = get_bits1(gb);
 
+    sps->vui_parameters_present_flag = get_bits1(gb);
+    if (sps->vui_parameters_present_flag) {
+        av_log(s->avctx, AV_LOG_ERROR, "TODO: vui_parameters_present_flag\n");
+        goto err;
+    }
+
 #if REFERENCE_ENCODER_QUIRKS
     max_cu_depth = sps->log2_diff_max_min_coding_block_size
                    + ((sps->log2_min_coding_block_size >
