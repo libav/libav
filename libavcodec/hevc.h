@@ -171,10 +171,6 @@ typedef struct SPS {
 
     uint8_t vui_parameters_present_flag;
 
-#if REFERENCE_ENCODER_QUIRKS
-    uint8_t amvp_mode_flag[4];
-#endif
-
     // Inferred parameters
     int log2_ctb_size; ///< Log2CtbSize
     int pic_width_in_ctbs; ///< PicWidthInCtbs

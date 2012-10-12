@@ -262,17 +262,6 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
         goto err;
     }
 
-#if REFERENCE_ENCODER_QUIRKS
-    max_cu_depth = sps->log2_diff_max_min_coding_block_size
-                   + ((sps->log2_min_coding_block_size >
-                       sps->log2_min_transform_block_size)
-                      ? (sps->log2_min_coding_block_size
-                         - sps->log2_min_transform_block_size)
-                      : 0);
-    for (i = 0; i < max_cu_depth; i++)
-        sps->amvp_mode_flag[i] = get_bits1(gb);
-#endif
-
     // Inferred parameters
 
     sps->log2_ctb_size = sps->log2_min_coding_block_size
