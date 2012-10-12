@@ -64,7 +64,7 @@ typedef struct ShortTermRPS {
 /**
  * 7.4.2.1
  */
-#define MAX_TEMPORAL_LAYERS 8
+#define MAX_SUB_LAYERS 7
 #define MAX_VPS_COUNT 16
 #define MAX_SPS_COUNT 32
 #define MAX_PPS_COUNT 256
@@ -82,14 +82,14 @@ typedef struct PTL {
     int general_profile_compatibility_flag[32];
     int general_level_idc;
 
-    uint8_t sub_layer_profile_present_flag[MAX_TEMPORAL_LAYERS];
-    uint8_t sub_layer_level_present_flag[MAX_TEMPORAL_LAYERS];
+    uint8_t sub_layer_profile_present_flag[MAX_SUB_LAYERS];
+    uint8_t sub_layer_level_present_flag[MAX_SUB_LAYERS];
 
-    int sub_layer_profile_space[MAX_TEMPORAL_LAYERS];
-    uint8_t sub_layer_tier_flag[MAX_TEMPORAL_LAYERS];
-    int sub_layer_profile_idc[MAX_TEMPORAL_LAYERS];
-    uint8_t sub_layer_profile_compatibility_flags[MAX_TEMPORAL_LAYERS][32];
-    int sub_layer_level_idc[MAX_TEMPORAL_LAYERS];
+    int sub_layer_profile_space[MAX_SUB_LAYERS];
+    uint8_t sub_layer_tier_flag[MAX_SUB_LAYERS];
+    int sub_layer_profile_idc[MAX_SUB_LAYERS];
+    uint8_t sub_layer_profile_compatibility_flags[MAX_SUB_LAYERS][32];
+    int sub_layer_level_idc[MAX_SUB_LAYERS];
 } PTL;
 
 typedef struct VPS {
@@ -99,9 +99,9 @@ typedef struct VPS {
 
     PTL ptl;
 
-    int vps_max_dec_pic_buffering[MAX_TEMPORAL_LAYERS];
-    int vps_num_reorder_pics[MAX_TEMPORAL_LAYERS];
-    int vps_max_latency_increase[MAX_TEMPORAL_LAYERS];
+    int vps_max_dec_pic_buffering[MAX_SUB_LAYERS];
+    int vps_num_reorder_pics[MAX_SUB_LAYERS];
+    int vps_max_latency_increase[MAX_SUB_LAYERS];
 
     int vps_num_hrd_parameters;
 } VPS;
@@ -149,7 +149,7 @@ typedef struct SPS {
         int max_dec_pic_buffering;
         int num_reorder_pics;
         int max_latency_increase;
-    } temporal_layer[MAX_TEMPORAL_LAYERS];
+    } temporal_layer[MAX_SUB_LAYERS];
 
     uint8_t restricted_ref_pic_lists_flag;
     uint8_t lists_modification_present_flag;
