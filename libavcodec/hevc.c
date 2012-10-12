@@ -1322,7 +1322,9 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     case NAL_SEI_NUT:
         ff_hevc_decode_nal_sei(s);
         break;
-    case NAL_TRAIL_R: {
+    case NAL_TRAIL_R:
+        // fall-through
+    case NAL_TRAIL_N: {
         int pic_height_in_min_pu = s->sps->pic_height_in_min_cbs * 4;
         int pic_width_in_min_pu = s->sps->pic_width_in_min_cbs * 4;
         memset(s->pu.left_ipm, INTRA_DC, pic_height_in_min_pu);
