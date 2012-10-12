@@ -216,16 +216,17 @@ typedef struct PPS {
     uint8_t weighted_pred_flag;
     uint8_t weighted_bipred_flag;
     uint8_t output_flag_present_flag;
-    uint8_t dependant_slices_enabled_flag;
     uint8_t transquant_bypass_enable_flag;
 
-    uint8_t tiles_or_entropy_coding_sync_idc;
+    uint8_t dependant_slices_enabled_flag;
+    uint8_t tiles_enabled_flag;
+    uint8_t entropy_coding_sync_enabled_flag;
+    uint8_t entropy_slice_enabled_flag;
+
     int num_tile_columns; ///< num_tile_columns_minus1 + 1
     int num_tile_rows; ///< num_tile_rows_minus1 + 1
     uint8_t uniform_spacing_flag;
     uint8_t loop_filter_across_tiles_enabled_flag;
-
-    uint8_t cabac_independant_flag;
 
     uint8_t seq_loop_filter_across_slices_enabled_flag;
 

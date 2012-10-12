@@ -1250,10 +1250,10 @@ static int hls_slice_data(HEVCContext *s)
         s->ctb_addr_ts++;
         s->ctb_addr_rs = s->pps->ctb_addr_ts_to_rs[s->ctb_addr_ts];
 
-        if (more_data && ((s->pps->tiles_or_entropy_coding_sync_idc == 1) &&
+        if (more_data && (s->pps->tiles_enabled_flag &&
                           s->pps->tile_id[s->ctb_addr_ts] !=
                           s->pps->tile_id[s->ctb_addr_ts - 1]) ||
-            (s->pps->tiles_or_entropy_coding_sync_idc == 2 &&
+            (s->pps->entropy_coding_sync_enabled_flag &&
              ((s->ctb_addr_ts % s->sps->pic_width_in_ctbs) == 0)))
             align_get_bits(&s->gb);
     }

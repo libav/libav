@@ -316,7 +316,6 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
     av_log(s->avctx, AV_LOG_DEBUG, "Decoding PPS\n");
 
     // Default values
-    pps->cabac_independant_flag = 0;
     pps->loop_filter_across_tiles_enabled_flag = 1;
     pps->num_tile_columns     = 1;
     pps->num_tile_rows        = 1;
@@ -359,16 +358,14 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
     pps->weighted_pred_flag            = get_bits1(gb);
     pps->weighted_bipred_flag          = get_bits1(gb);
     pps->output_flag_present_flag      = get_bits1(gb);
-#if REFERENCE_ENCODER_QUIRKS
-    pps->dependant_slices_enabled_flag = get_bits1(gb);
     pps->transquant_bypass_enable_flag = get_bits1(gb);
-#else
-    pps->transquant_bypass_enable_flag = get_bits1(gb);
-    pps->dependant_slices_enabled_flag = get_bits1(gb);
-#endif
 
-    pps->tiles_or_entropy_coding_sync_idc = get_bits(gb, 2);
-    if (pps->tiles_or_entropy_coding_sync_idc == 1) {
+    pps->dependant_slices_enabled_flag    = get_bits1(gb);
+    pps->tiles_enabled_flag               = get_bits1(gb);
+    pps->entropy_coding_sync_enabled_flag = get_bits1(gb);
+    pps->entropy_slice_enabled_flag       = get_bits1(gb);
+
+    if (pps->tiles_enabled_flag) {
         pps->num_tile_columns     = get_ue_golomb(gb) + 1;
         pps->num_tile_rows        = get_ue_golomb(gb) + 1;
 
@@ -387,8 +384,6 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
             }
         }
         pps->loop_filter_across_tiles_enabled_flag = get_bits1(gb);
-    } else if (pps->tiles_or_entropy_coding_sync_idc == 2) {
-        pps->cabac_independant_flag = get_bits1(gb);
     }
 
     pps->seq_loop_filter_across_slices_enabled_flag = get_bits1(gb);
