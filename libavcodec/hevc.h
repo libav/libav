@@ -38,21 +38,12 @@
  * Table 7-3: NAL unit type codes
  */
 enum NALUnitType {
-    NAL_SLICE = 1,
-    NAL_TFD_SLICE = 2,
-    NAL_TLA_SLICE = 3,
-    NAL_CRA_SLICE = 4,
-    NAL_CRA_SLICE_NO_TFD = 5,
-    NAL_BLA_SLICE = 6,
-    NAL_BLA_SLICE_NO_TFD = 7,
-    NAL_IDR_SLICE = 8,
-    NAL_VPS = 25,
-    NAL_SPS = 26,
-    NAL_PPS = 27,
-    NAL_APS = 28,
-    NAL_AUD = 29,
-    NAL_FILLER_DATA = 30,
-    NAL_SEI = 31,
+    NAL_TRAIL_R   = 1,
+    NAL_IDR_W_DLP = 10,
+    NAL_VPS_NUT   = 25,
+    NAL_SPS_NUT   = 26,
+    NAL_PPS_NUT   = 27,
+    NAL_SEI_NUT   = 32,
 };
 
 typedef struct ShortTermRPS {

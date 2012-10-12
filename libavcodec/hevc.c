@@ -111,7 +111,7 @@ static int hls_slice_header(HEVCContext *s)
     // Coded parameters
 
     sh->first_slice_in_pic_flag = get_bits1(gb);
-    if (s->nal_unit_type >= 4 && s->nal_unit_type <= 8)
+    if (s->nal_unit_type >= 7 && s->nal_unit_type <= 12)
         sh->no_output_of_prior_pics_flag = get_bits1(gb);
 
     sh->pps_id = get_ue_golomb(gb);
@@ -200,7 +200,7 @@ static int hls_slice_header(HEVCContext *s)
         if (s->sps->separate_colour_plane_flag == 1)
             sh->colour_plane_id = get_bits(gb, 2);
 
-        if (s->nal_unit_type != NAL_IDR_SLICE) {
+        if (s->nal_unit_type != NAL_IDR_W_DLP) {
             int short_term_ref_pic_set_sps_flag;
             sh->pic_order_cnt_lsb = get_bits(gb, s->sps->log2_max_poc_lsb);
             short_term_ref_pic_set_sps_flag = get_bits1(gb);
@@ -1306,26 +1306,26 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     }
 
     switch (s->nal_unit_type) {
-    case NAL_VPS:
+    case NAL_VPS_NUT:
         ff_hevc_decode_nal_vps(s);
         break;
-    case NAL_SPS:
+    case NAL_SPS_NUT:
         ff_hevc_decode_nal_sps(s);
         break;
-    case NAL_PPS:
+    case NAL_PPS_NUT:
         ff_hevc_decode_nal_pps(s);
         break;
-    case NAL_SEI:
+    case NAL_SEI_NUT:
         ff_hevc_decode_nal_sei(s);
         break;
-    case NAL_SLICE: {
+    case NAL_TRAIL_R: {
         int pic_height_in_min_pu = s->sps->pic_height_in_min_cbs * 4;
         int pic_width_in_min_pu = s->sps->pic_width_in_min_cbs * 4;
         memset(s->pu.left_ipm, INTRA_DC, pic_height_in_min_pu);
         memset(s->pu.top_ipm, INTRA_DC, pic_width_in_min_pu);
         // fall-through
     }
-    case NAL_IDR_SLICE:
+    case NAL_IDR_W_DLP:
         if (hls_slice_header(s) < 0)
             return -1;
 
