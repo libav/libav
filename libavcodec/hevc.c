@@ -263,7 +263,8 @@ static int hls_slice_header(HEVCContext *s)
             sh->max_num_merge_cand = 5 - get_ue_golomb(gb);
 
         if (s->pps->seq_loop_filter_across_slices_enabled_flag
-            && (sh->slice_sample_adaptive_offset_flag ||
+            && (sh->slice_sample_adaptive_offset_flag[0] ||
+                sh->slice_sample_adaptive_offset_flag[1] ||
                 !sh->disable_deblocking_filter_flag)) {
             sh->slice_loop_filter_across_slices_enabled_flag = get_bits1(gb);
         } else {
