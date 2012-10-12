@@ -53,8 +53,8 @@ int ff_hevc_decode_short_term_rps(HEVCContext *s, int idx, ShortTermRPS **prps)
     return 0;
 }
 
-static int decode_profile_tier_level(HEVCContext *s, PTL *ptl,
-                               int profile_present_flag, int max_num_sub_layers)
+static void decode_profile_tier_level(HEVCContext *s, PTL *ptl,
+                                      int profile_present_flag, int max_num_sub_layers)
 {
     int i, j;
     GetBitContext *gb = &s->gb;
@@ -83,8 +83,6 @@ static int decode_profile_tier_level(HEVCContext *s, PTL *ptl,
         if (ptl->sub_layer_level_present_flag[i])
             ptl->sub_layer_level_idc[i] = get_bits(gb, 8);
     }
-
-    return 0;
 }
 
 int ff_hevc_decode_nal_vps(HEVCContext *s)
@@ -102,18 +100,20 @@ int ff_hevc_decode_nal_vps(HEVCContext *s)
     vps_id = get_bits(gb, 4);
     if (vps_id >= MAX_VPS_COUNT) {
         av_log(s->avctx, AV_LOG_ERROR, "VPS id out of range: %d\n", vps_id);
-        av_free(vps);
-        return -1;
+        goto err;
     }
 
     vps->vps_temporal_id_nesting_flag = get_bits1(gb);
 
     skip_bits(gb, 2 + 6); // vps_reserved_zero_2bits + vps_reserved_zero_6bits
     vps->vps_max_sub_layers = get_bits(gb, 3) + 1;
+    if (vps->vps_max_sub_layers > MAX_SUB_LAYERS) {
+        av_log(s->avctx, AV_LOG_ERROR, "vps_max_sub_layers out of range: %d\n",
+               vps->vps_max_sub_layers);
+        goto err;
+    }
 
-    ret = decode_profile_tier_level(s, &vps->ptl, 1, vps->vps_max_sub_layers);
-    if (ret < 0)
-        return ret;
+    decode_profile_tier_level(s, &vps->ptl, 1, vps->vps_max_sub_layers);
 
     skip_bits(gb, 12); // vps_reserved_zero_12bits
 
@@ -126,12 +126,17 @@ int ff_hevc_decode_nal_vps(HEVCContext *s)
     vps->vps_num_hrd_parameters = get_ue_golomb(gb);
     if (vps->vps_num_hrd_parameters != 0) {
         av_log_missing_feature(s->avctx, "support for vps_num_hrd_parameters != 0", 0);
+        av_free(vps);
         return AVERROR_PATCHWELCOME;
     }
 
     av_free(s->vps_list[vps_id]);
     s->vps_list[vps_id] = vps;
     return 0;
+
+err:
+    av_free(vps);
+    return -1;
 }
 
 int ff_hevc_decode_nal_sps(HEVCContext *s)
@@ -161,11 +166,15 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
     }
 
     sps->sps_max_sub_layers = get_bits(gb, 3) + 1;
+    if (sps->sps_max_sub_layers > MAX_SUB_LAYERS) {
+        av_log(s->avctx, AV_LOG_ERROR, "vps_max_sub_layers out of range: %d\n",
+               sps->sps_max_sub_layers);
+        goto err;
+    }
+
     skip_bits(gb, 1); // sps_reserved_zero_bit
 
-    ret = decode_profile_tier_level(s, &sps->ptl, 1, sps->sps_max_sub_layers);
-    if (ret < 0)
-        return ret;
+    decode_profile_tier_level(s, &sps->ptl, 1, sps->sps_max_sub_layers);
 
     sps_id = get_ue_golomb(gb);
     if (sps_id >= MAX_SPS_COUNT) {
