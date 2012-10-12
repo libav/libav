@@ -189,11 +189,13 @@ static int hls_slice_header(HEVCContext *s)
         sh->slice_address = get_bits(gb, slice_address_length);
     }
 
-    sh->slice_type = get_ue_golomb(gb);
-
-    sh->dependent_slice_flag = get_bits1(gb);
+    if (s->pps->dependant_slices_enabled_flag && !sh->first_slice_in_pic_flag) {
+        sh->dependent_slice_flag = get_bits1(gb);
+    }
 
     if (!sh->dependent_slice_flag) {
+        sh->slice_type = get_ue_golomb(gb);
+
         if (s->pps->output_flag_present_flag)
             sh->pic_output_flag = get_bits1(gb);
 
@@ -240,6 +242,11 @@ static int hls_slice_header(HEVCContext *s)
         if (s->pps->cabac_init_present_flag && sh->slice_type != I_SLICE)
             sh->cabac_init_flag = get_bits1(gb);
 
+#if !REFERENCE_ENCODER_QUIRKS
+        if (sh->slice_type != I_SLICE)
+#endif
+            sh->max_num_merge_cand = 5 - get_ue_golomb(gb);
+
         sh->slice_qp_delta = get_se_golomb(gb);
         if (s->pps->pic_slice_level_chroma_qp_offsets_present_flag) {
             sh->slice_cb_qp_offset = get_se_golomb(gb);
@@ -257,10 +264,6 @@ static int hls_slice_header(HEVCContext *s)
                 }
             }
         }
-#if !REFERENCE_ENCODER_QUIRKS
-        if (sh->slice_type != I_SLICE)
-#endif
-            sh->max_num_merge_cand = 5 - get_ue_golomb(gb);
 
         if (s->pps->seq_loop_filter_across_slices_enabled_flag
             && (sh->slice_sample_adaptive_offset_flag[0] ||
