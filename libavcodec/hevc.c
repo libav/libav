@@ -428,6 +428,8 @@ static void hls_residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_w
     trafo_width = 1 << log2_trafo_width;
     trafo_height = 1 << log2_trafo_height;
 
+    memset(coeffs, 0, trafo_width * trafo_height);
+
     if (s->pps->transform_skip_enabled_flag && !s->cu.cu_transquant_bypass_flag &&
         (log2_trafo_width == 2) && (log2_trafo_height == 2)) {
         transform_skip_flag = ff_hevc_transform_skip_flag_decode(s, c_idx);
@@ -537,6 +539,7 @@ static void hls_residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_w
         int sum_abs;
         int x_cg, y_cg, x_c, y_c;
         int implicit_non_zero_coeff = 0;
+        int trans_coeff_level;
 
         int offset = i << 4;
 
@@ -636,10 +639,9 @@ static void hls_residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_w
         sum_abs = 0;
         first_elem = 1;
         for (n = 15; n >= 0; n--) {
-            int trans_coeff_level = 0;
-            GET_COORD(offset, n);
 
             if (significant_coeff_flag[n]) {
+                GET_COORD(offset, n);
                 trans_coeff_level = 1 + coeff_abs_level_greater1_flag[n] +
                                     coeff_abs_level_greater2_flag[n];
                 if (trans_coeff_level == ((num_sig_coeff < 8) ?
@@ -657,9 +659,51 @@ static void hls_residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_w
                 num_sig_coeff++;
                 av_log(s->avctx, AV_LOG_DEBUG, "trans_coeff_level: %d\n",
                        trans_coeff_level);
-            }
+                if (s->cu.cu_transquant_bypass_flag) {
+                    coeffs[y_c * size + x_c] = trans_coeff_level;
 
-            coeffs[y_c * size + x_c] = trans_coeff_level;
+                } else {
+                    int qp;
+                    
+                    //TODO: handle non-constant QP
+                    int qp_y_pred = s->sh.slice_qp;
+                    int qp_y = ((qp_y_pred + s->tu.cu_qp_delta + 52 + 2 * s->sps->qp_bd_offset_luma) %
+                                (52 + s->sps->qp_bd_offset_luma)) - s->sps->qp_bd_offset_luma;
+                    static int qp_c[] = { 29, 30, 31, 32, 33, 33, 34, 34, 35, 35, 36, 36, 37, 37 };
+                    
+                    if (c_idx == 0) {
+                        qp = qp_y + s->sps->qp_bd_offset_luma;
+                    } else {
+                        int qp_i, offset;
+                        
+                        if (c_idx == 1) {
+                            offset = s->pps->cb_qp_offset + s->sh.slice_cb_qp_offset;
+                        } else {
+                            offset = s->pps->cr_qp_offset + s->sh.slice_cr_qp_offset;
+                        }
+                        qp_i = av_clip_c(qp_y + offset, - s->sps->qp_bd_offset_luma, 57);
+                        if (qp_i < 30) {
+                            qp = qp_i;
+                        } else if (qp_i > 43) {
+                            qp = qp_i - 6;
+                        } else {
+                            qp = qp_c[qp_i - 30];
+                        }
+                        
+                        qp += s->sps->qp_bd_offset_chroma;
+                    }
+                    {
+                        const uint8_t level_scale[] = { 40, 45, 51, 57, 64, 72 };
+                    
+                        //TODO: scaling_list_enabled_flag support
+                        int m = 16;
+                        int shift = bit_depth + log2_trafo_width - 5;
+                        int scale = level_scale[qp % 6] << (qp / 6);
+                        coeffs[y_c * size + x_c] = av_clip_int16_c(((trans_coeff_level * m * scale) +
+                                         (1 << (shift - 1))) >> shift);
+                    }
+                }
+            }
         }
     }
 
@@ -667,38 +711,6 @@ static void hls_residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_w
     if (s->cu.cu_transquant_bypass_flag) {
         hevcdsp->transquant_bypass(dst, coeffs, stride, log2_trafo_width, bit_depth);
     } else {
-        int qp;
-
-        //TODO: handle non-constant QP
-        int qp_y_pred = s->sh.slice_qp;
-        int qp_y = ((qp_y_pred + s->tu.cu_qp_delta + 52 + 2 * s->sps->qp_bd_offset_luma) %
-                    (52 + s->sps->qp_bd_offset_luma))
-                   - s->sps->qp_bd_offset_luma;
-        static int qp_c[] = { 29, 30, 31, 32, 33, 33, 34, 34, 35, 35, 36, 36, 37, 37 };
-
-        if (c_idx == 0) {
-            qp = qp_y + s->sps->qp_bd_offset_luma;
-        } else {
-            int qp_i, offset;
-
-            if (c_idx == 1) {
-                offset = s->pps->cb_qp_offset + s->sh.slice_cb_qp_offset;
-            } else {
-                offset = s->pps->cr_qp_offset + s->sh.slice_cr_qp_offset;
-            }
-            qp_i = av_clip_c(qp_y + offset, - s->sps->qp_bd_offset_luma, 57);
-            if (qp_i < 30) {
-                qp = qp_i;
-            } else if (qp_i > 43) {
-                qp = qp_i - 6;
-            } else {
-                qp = qp_c[qp_i - 30];
-            }
-
-            qp += s->sps->qp_bd_offset_chroma;
-        }
-        hevcdsp->dequant(coeffs, log2_trafo_width, qp, bit_depth);
-
         if (transform_skip_flag) {
             hevcdsp->transform_skip(dst, coeffs, stride, log2_trafo_width, bit_depth);
         } else if (s->cu.pred_mode == MODE_INTRA && c_idx == 0 && log2_trafo_width == 2) {
@@ -1293,6 +1305,7 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 {
     HEVCContext *s = avctx->priv_data;
     GetBitContext *gb = &s->gb;
+    
 
     *data_size = 0;
 
