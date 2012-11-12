@@ -56,6 +56,7 @@ static const AVClass *ffio_url_child_class_next(const AVClass *prev)
 #define OFFSET(x) offsetof(AVIOContext, x)
 #define D AV_OPT_FLAG_DECODING_PARAM
 static const AVOption ffio_url_options[] = {
+    { "in_packet_size", "set max input packet size", OFFSET(max_packet_size), AV_OPT_TYPE_INT, {.i64 = 0 }, 0, INT_MAX, D },
     { "throttle", "set max input rate in Kib/s", OFFSET(throttle), AV_OPT_TYPE_INT, {.i64 = 0 }, 0, INT_MAX, D },
     { NULL },
 };
