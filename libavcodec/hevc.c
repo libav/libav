@@ -1473,10 +1473,6 @@ static av_cold int hevc_decode_free(AVCodecContext *avctx)
         s->avctx->release_buffer(s->avctx, &s->frame);
 
     for (i = 0; i < MAX_SPS_COUNT; i++) {
-        if (s->sps_list[i]) {
-            for (j = 0; j < MAX_SHORT_TERM_RPS_COUNT; j++)
-                av_freep(&s->sps_list[i]->short_term_rps_list[j]);
-        }
         av_freep(&s->sps_list[i]);
     }
 
