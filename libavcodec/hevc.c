@@ -1310,7 +1310,7 @@ static int hls_coding_tree(HEVCContext *s, int x0, int y0, int log2_cb_size, int
 static int hls_slice_data(HEVCContext *s)
 {
     int ctb_size = 1 << s->sps->log2_ctb_size;
-    int pic_size = s->sps->pic_width_in_luma_samples * s->sps->pic_height_in_luma_samples;;
+    int pic_size = s->sps->pic_width_in_luma_samples * s->sps->pic_height_in_luma_samples;
     int more_data = 1;
     int x_ctb, y_ctb;
 
