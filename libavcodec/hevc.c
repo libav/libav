@@ -1310,7 +1310,7 @@ static int hls_coding_tree(HEVCContext *s, int x0, int y0, int log2_cb_size, int
 static int hls_slice_data(HEVCContext *s)
 {
     int ctb_size = 1 << s->sps->log2_ctb_size;
-    int pic_size = s->sps->pic_width_in_luma_samples * s->sps->pic_height_in_luma_samples;;
+    int pic_size = s->sps->pic_width_in_luma_samples * s->sps->pic_height_in_luma_samples;
     int more_data = 1;
     int x_ctb, y_ctb;
 
@@ -1473,10 +1473,6 @@ static av_cold int hevc_decode_free(AVCodecContext *avctx)
         s->avctx->release_buffer(s->avctx, &s->frame);
 
     for (i = 0; i < MAX_SPS_COUNT; i++) {
-        if (s->sps_list[i]) {
-            for (j = 0; j < MAX_SHORT_TERM_RPS_COUNT; j++)
-                av_freep(&s->sps_list[i]->short_term_rps_list[j]);
-        }
         av_freep(&s->sps_list[i]);
     }
 

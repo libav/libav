@@ -349,6 +349,7 @@ int ff_hevc_sao_merge_up_flag_decode(HEVCContext *s)
 {
     HEVCCabacContext *cc = &s->cc;
     const int8_t ctx_idx_inc[1] = { 0 };
+    int ret;
 
     cc->elem = SAO_MERGE_LEFT_FLAG; //SAO_MERGE_UP_FLAG;
     cc->state = states + elem_offset[cc->elem];
@@ -357,7 +358,7 @@ int ff_hevc_sao_merge_up_flag_decode(HEVCContext *s)
     cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
     cc->ctx_idx_inc = ctx_idx_inc;
 
-    int ret = fl_binarization(s, 1);
+    ret = fl_binarization(s, 1);
     return ret;
 }
 int ff_hevc_sao_type_idx_decode(HEVCContext *s)

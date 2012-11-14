@@ -177,7 +177,7 @@ typedef struct SPS {
     uint8_t temporal_id_nesting_flag;
 
     int num_short_term_ref_pic_sets;
-    ShortTermRPS *short_term_rps_list[MAX_SHORT_TERM_RPS_COUNT];
+    ShortTermRPS short_term_rps_list[MAX_SHORT_TERM_RPS_COUNT];
 
     uint8_t long_term_ref_pics_present_flag;
     uint8_t sps_temporal_mvp_enabled_flag;

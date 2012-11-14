@@ -326,9 +326,6 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
     return 0;
 
 err:
-    for (i = 0; i < MAX_SHORT_TERM_RPS_COUNT; i++)
-        av_free(sps->short_term_rps_list[i]);
-
     av_free(sps);
     return -1;
 }
