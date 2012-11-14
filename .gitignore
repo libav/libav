@@ -12,6 +12,7 @@
 *.ver
 *-example
 *-test
+/.project
 /.config
 /.version
 /avconv
