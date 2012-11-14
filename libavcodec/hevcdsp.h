@@ -34,6 +34,13 @@ typedef struct HEVCDSPContext {
 
     void (*transform_add[4])(uint8_t *dst, int16_t *coeffs, ptrdiff_t _stride, int bit_depth);
 
+    void (*sao_band_filter)(uint8_t *dst, uint8_t *src, int stride, int *sao_offset_val,
+                            int sao_left_class, int width, int height, int bit_depth);
+
+    void (*sao_edge_filter)(uint8_t *dst, uint8_t *src, int stride, int *sao_offset_val,
+                            int sao_eo_class, int at_top_border, int at_bottom_border,
+                            int at_left_border, int at_right_border,
+                            int width, int height, int bit_depth);
 } HEVCDSPContext;
 
 void ff_hevc_dsp_init(HEVCDSPContext *hpc, int bit_depth);

@@ -66,6 +66,7 @@ typedef struct ShortTermRPS {
 #define MAX_TRANSFORM_DEPTH 3
 
 #define MAX_TB_SIZE 32
+#define MAX_CTB_SIZE 64
 
 typedef struct PTL {
     int general_profile_space;
@@ -487,6 +488,13 @@ enum SAOType {
     SAO_EDGE
 };
 
+enum SAOEOClass {
+    SAO_EO_HORIZ = 0,
+    SAO_EO_VERT,
+    SAO_EO_135D,
+    SAO_EO_45D
+};
+
 typedef struct SAOParams {
     uint8_t type_idx[3]; ///< sao_type_idx
 
@@ -504,6 +512,7 @@ typedef struct SAOParams {
 typedef struct HEVCContext {
     AVCodecContext *avctx;
     AVFrame frame;
+    AVFrame sao_frame;
 
     HEVCPredContext *hpc[3];
     HEVCDSPContext *hevcdsp[3];

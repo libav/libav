@@ -282,6 +282,96 @@ static void FUNC(transform_32x32_add)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t 
     }
 }
 
+static void FUNC(sao_band_filter)(uint8_t * _dst, uint8_t *_src, int _stride, int *sao_offset_val,
+                                  int sao_left_class, int width, int height, int bit_depth)
+{
+    pixel *dst = (pixel*)_dst;
+    pixel *src = (pixel*)_src;
+    int stride = _stride/sizeof(pixel);
+    int band_table[32] = { 0 };
+    int shift = bit_depth - 5;
+
+    for (int k = 0; k < 4; k++)
+        band_table[(k + sao_left_class) & 31] = k + 1;
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++)
+            dst[x] = av_clip_pixel(src[x] + sao_offset_val[band_table[src[x] >> shift]]);
+        dst += stride;
+        src += stride;
+    }
+}
+
+static void FUNC(sao_edge_filter)(uint8_t *_dst, uint8_t *_src, int _stride, int *sao_offset_val,
+                                  int sao_eo_class, int at_top_border, int at_bottom_border,
+                                  int at_left_border, int at_right_border,
+                                  int width, int height, int bit_depth)
+{
+    int x, y;
+    pixel *dst = (pixel*)_dst;
+    pixel *src = (pixel*)_src;
+    int stride = _stride/sizeof(pixel);
+
+    const int8_t pos[4][2][2] = {
+        { { -1,  0 }, {  1, 0 } }, // horizontal
+        { {  0, -1 }, {  0, 1 } }, // vertical
+        { { -1, -1 }, {  1, 1 } }, // 45 degree
+        { {  1, -1 }, { -1, 1 } }, // 135 degree
+    };
+
+    int init_x = 0, init_y = 0;
+    int border_edge_idx = 0;
+
+#define DST(x, y) dst[(x) + stride * (y)]
+#define SRC(x, y) src[(x) + stride * (y)]
+
+#define FILTER(x, y, edge_idx)                                      \
+    DST(x, y) = av_clip_pixel(SRC(x, y) + sao_offset_val[edge_idx])
+
+#define EDGE_IDX(a) ((a) < 3) ? (((a) + 1) % 3) : (a)
+#define DIFF(x, y, k) SIGN(SRC(x, y) - SRC((x) + pos[sao_eo_class][(k)][0],     \
+                                           (y) + pos[sao_eo_class][(k)][1]))
+#define SIGN(a) ((a) > 0 ? 1 : ((a) == 0 ? 0 : -1))
+
+    if (sao_eo_class != SAO_EO_VERT) {
+        if (at_left_border) {
+            for (y = 0; y < height; y++) {
+                FILTER(0, y, border_edge_idx);
+            }
+            init_x = 1;
+        }
+        if (at_right_border) {
+            for (x = 0; x < height; x++)
+                FILTER(width - 1, x, border_edge_idx);
+            width--;
+        }
+    }
+    if (sao_eo_class != SAO_EO_HORIZ) {
+        if (at_top_border) {
+            for (x = init_x; x < width; x++)
+                FILTER(x, 0, border_edge_idx);
+            init_y = 1;
+        }
+        if (at_bottom_border) {
+            for (x = init_x; x < width; x++)
+                FILTER(x, height - 1, border_edge_idx);
+            height--;
+        }
+    }
+
+    for (y = init_y; y < height; y++) {
+        for (x = init_x; x < width; x++) {
+            int edge_idx = EDGE_IDX(2 + DIFF(x, y, 0) + DIFF(x, y, 1));
+            FILTER(x, y, edge_idx);
+        }
+    }
+#undef DST
+#undef SRC
+#undef FILTER
+#undef EDGE_IDX
+#undef DIFF
+#undef SIGN
+}
+
 #undef SET
 #undef SCALE
 #undef ADD_AND_SCALE

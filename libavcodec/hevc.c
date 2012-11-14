@@ -370,7 +370,7 @@ static int hls_sao_param(HEVCContext *s, int rx, int ry)
             if (sao->type_idx[c_idx] == SAO_EDGE) {
                 if (i > 1)
                     sao->offset_val[c_idx][i+1] = -sao->offset_val[c_idx][i+1];
-            } else if (sao->offset_sign[c_idx][i+1]) {
+            } else if (sao->offset_sign[c_idx][i]) {
                 sao->offset_val[c_idx][i+1] = -sao->offset_val[c_idx][i+1];
             }
         }
@@ -378,8 +378,52 @@ static int hls_sao_param(HEVCContext *s, int rx, int ry)
     return 0;
 }
 
-#undef CTB
 #undef set_sao
+
+static void sao_filter(HEVCContext *s)
+{
+    //TODO: This should be easily parallelizable
+    //TODO: skip CBs when (cu_transquant_bypass_flag || (pcm_loop_filter_disable_flag && pcm_flag))
+    for (int c_idx = 0; c_idx < 3; c_idx++) {
+        int stride = s->frame.linesize[c_idx];
+        int ctb_size = (1 << (s->sps->log2_ctb_size)) >> s->sps->hshift[c_idx];
+        for (int y_ctb = 0; y_ctb < s->sps->pic_height_in_ctbs; y_ctb++) {
+            for (int x_ctb = 0; x_ctb < s->sps->pic_width_in_ctbs; x_ctb++) {
+                struct SAOParams *sao = &CTB(s->sao, x_ctb, y_ctb);
+                int x = x_ctb * ctb_size;
+                int y = y_ctb * ctb_size;
+                int width = FFMIN(ctb_size,
+                                  (s->sps->pic_width_in_luma_samples >> s->sps->hshift[c_idx]) - x);
+                int height = FFMIN(ctb_size,
+                                   (s->sps->pic_height_in_luma_samples >> s->sps->vshift[c_idx]) - y);
+                uint8_t *src = &s->frame.data[c_idx][y * stride + x];
+                uint8_t *dst = &s->sao_frame.data[c_idx][y * stride + x];
+                switch (sao->type_idx[c_idx]) {
+                case SAO_BAND:
+                    s->hevcdsp[c_idx]
+                        ->sao_band_filter(dst, src, stride, sao->offset_val[c_idx],
+                                          sao->band_position[c_idx], width, height,
+                                          s->sps->bit_depth[c_idx]);
+                    break;
+                case SAO_EDGE: {
+                    int top    = y_ctb == 0;
+                    int bottom = y_ctb == (s->sps->pic_height_in_ctbs - 1);
+                    int left   = x_ctb == 0;
+                    int right  = x_ctb == (s->sps->pic_width_in_ctbs - 1);
+                    s->hevcdsp[c_idx]
+                        ->sao_edge_filter(dst, src, stride, sao->offset_val[c_idx],
+                                          sao->eo_class[c_idx],
+                                          top, bottom, left, right,
+                                          width, height, s->sps->bit_depth[c_idx]);
+                    break;
+                }
+                }
+            }
+        }
+    }
+}
+
+#undef CTB
 
 
 static av_always_inline int min_cb_addr_zs(HEVCContext *s, int x, int y)
@@ -1346,9 +1390,20 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         if (hls_slice_data(s) < 0)
             return -1;
 
+        if (s->sao_frame.data[0])
+            s->avctx->release_buffer(s->avctx, &s->sao_frame);
+        if (s->avctx->get_buffer(s->avctx, &s->sao_frame) < 0) {
+            av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
+            return -1;
+        }
+        av_picture_copy((AVPicture*)&s->sao_frame, (AVPicture*)&s->frame,
+                        s->avctx->pix_fmt, s->avctx->width, s->avctx->height);
+
+        sao_filter(s);
+
         s->frame.pict_type = AV_PICTURE_TYPE_I;
         s->frame.key_frame = 1;
-        *(AVFrame*)data = s->frame;
+        *(AVFrame*)data = s->sao_frame;
         *data_size = sizeof(AVFrame);
         break;
     default:
@@ -1387,6 +1442,8 @@ static av_cold int hevc_decode_free(AVCodecContext *avctx)
 
     if (s->frame.data[0])
         s->avctx->release_buffer(s->avctx, &s->frame);
+    if (s->sao_frame.data[0])
+        s->avctx->release_buffer(s->avctx, &s->sao_frame);
 
     for (i = 0; i < MAX_SPS_COUNT; i++) {
         if (s->sps_list[i]) {
