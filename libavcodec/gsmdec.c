@@ -74,7 +74,7 @@ static int gsm_decode_frame(AVCodecContext *avctx, void *data,
 
     /* get output buffer */
     s->frame.nb_samples = avctx->frame_size;
-    if ((res = ff_get_buffer(avctx, &s->frame)) < 0) {
+    if ((res = ff_get_buffer(avctx, &s->frame, 0)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return res;
     }

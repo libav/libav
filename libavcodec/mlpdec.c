@@ -921,7 +921,7 @@ static int output_data(MLPDecodeContext *m, unsigned int substr,
 
     /* get output buffer */
     m->frame.nb_samples = s->blockpos;
-    if ((ret = ff_get_buffer(avctx, &m->frame)) < 0) {
+    if ((ret = ff_get_buffer(avctx, &m->frame, 0)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }

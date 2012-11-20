@@ -777,11 +777,11 @@ decode_intra_mb:
         }
 
         // In deblocking, the quantizer is 0
-        s->current_picture.f.qscale_table[mb_xy] = 0;
+        s->current_picture.qscale_table[mb_xy] = 0;
         // All coeffs are present
         memset(h->non_zero_count[mb_xy], 16, 48);
 
-        s->current_picture.f.mb_type[mb_xy] = mb_type;
+        s->current_picture.mb_type[mb_xy] = mb_type;
         return 0;
     }
 
@@ -1076,7 +1076,7 @@ decode_intra_mb:
     }
     h->cbp=
     h->cbp_table[mb_xy]= cbp;
-    s->current_picture.f.mb_type[mb_xy] = mb_type;
+    s->current_picture.mb_type[mb_xy] = mb_type;
 
     if(cbp || IS_INTRA16x16(mb_type)){
         int i4x4, i8x8, chroma_idx;
@@ -1176,7 +1176,7 @@ decode_intra_mb:
         fill_rectangle(&h->non_zero_count_cache[scan8[16]], 4, 4, 8, 0, 1);
         fill_rectangle(&h->non_zero_count_cache[scan8[32]], 4, 4, 8, 0, 1);
     }
-    s->current_picture.f.qscale_table[mb_xy] = s->qscale;
+    s->current_picture.qscale_table[mb_xy] = s->qscale;
     write_back_non_zero_count(h);
 
     return 0;

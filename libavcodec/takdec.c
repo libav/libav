@@ -741,7 +741,7 @@ static int tak_decode_frame(AVCodecContext *avctx, void *data,
                                              : s->ti.frame_samples;
 
     s->frame.nb_samples = s->nb_samples;
-    if ((ret = ff_get_buffer(avctx, &s->frame)) < 0)
+    if ((ret = ff_get_buffer(avctx, &s->frame, 0)) < 0)
         return ret;
 
     if (avctx->bits_per_coded_sample <= 16) {

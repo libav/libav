@@ -69,7 +69,7 @@ static void MCFUNC(hl_motion)(H264Context *h, uint8_t *dest_y,
 {
     MpegEncContext *const s = &h->s;
     const int mb_xy   = h->mb_xy;
-    const int mb_type = s->current_picture.f.mb_type[mb_xy];
+    const int mb_type = s->current_picture.mb_type[mb_xy];
 
     assert(IS_INTER(mb_type));
 

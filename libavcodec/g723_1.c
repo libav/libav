@@ -1221,7 +1221,7 @@ static int g723_1_decode_frame(AVCodecContext *avctx, void *data,
     }
 
     p->frame.nb_samples = FRAME_LEN;
-    if ((ret = ff_get_buffer(avctx, &p->frame)) < 0) {
+    if ((ret = ff_get_buffer(avctx, &p->frame, 0)) < 0) {
          av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
          return ret;
     }

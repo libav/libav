@@ -281,8 +281,6 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
     /* if different size, realloc/alloc picture */
     /* XXX: also check h_count and v_count */
     if (width != s->width || height != s->height) {
-        av_freep(&s->qscale_table);
-
         s->width      = width;
         s->height     = height;
         s->interlaced = 0;
@@ -300,7 +298,6 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
 
         avcodec_set_dimensions(s->avctx, width, height);
 
-        s->qscale_table  = av_mallocz((s->width + 15) / 16);
         s->first_picture = 0;
     }
 
@@ -351,10 +348,8 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
             s->avctx->pix_fmt = AV_PIX_FMT_GRAY16;
     }
 
-    if (s->picture_ptr->data[0])
-        s->avctx->release_buffer(s->avctx, s->picture_ptr);
-
-    if (ff_get_buffer(s->avctx, s->picture_ptr) < 0) {
+    av_frame_unref(s->picture_ptr);
+    if (ff_get_buffer(s->avctx, s->picture_ptr, AV_GET_BUFFER_FLAG_REF) < 0) {
         av_log(s->avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return -1;
     }
@@ -1451,7 +1446,6 @@ int ff_mjpeg_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
     int unescaped_buf_size;
     int start_code;
     int ret = 0;
-    AVFrame *picture = data;
 
     s->got_picture = 0; // picture from previous image can not be reused
     buf_ptr = buf;
@@ -1547,29 +1541,24 @@ eoi_parser:
                     av_log(avctx, AV_LOG_WARNING,
                            "Found EOI before any SOF, ignoring\n");
                     break;
-                    }
+                }
                 if (s->interlaced) {
                     s->bottom_field ^= 1;
                     /* if not bottom field, do not output image yet */
                     if (s->bottom_field == !s->interlace_polarity)
                         goto not_the_end;
-                    }
-                    *picture   = *s->picture_ptr;
-                    *got_frame = 1;
+                }
+                if ((ret = av_frame_ref(data, s->picture_ptr)) < 0)
+                    return ret;
+                *got_frame = 1;
 
-                    if (!s->lossless) {
-                        picture->quality      = FFMAX3(s->qscale[0],
-                                                       s->qscale[1],
-                                                       s->qscale[2]);
-                        picture->qstride      = 0;
-                        picture->qscale_table = s->qscale_table;
-                        memset(picture->qscale_table, picture->quality,
-                               (s->width + 15) / 16);
-                        if (avctx->debug & FF_DEBUG_QP)
-                            av_log(avctx, AV_LOG_DEBUG,
-                                   "QP: %d\n", picture->quality);
-                        picture->quality *= FF_QP2LAMBDA;
-                    }
+                if (!s->lossless &&
+                    avctx->debug & FF_DEBUG_QP) {
+                    av_log(avctx, AV_LOG_DEBUG,
+                           "QP: %d\n", FFMAX3(s->qscale[0],
+                                              s->qscale[1],
+                                              s->qscale[2]));
+                }
 
                 goto the_end;
             case SOS:
@@ -1630,11 +1619,10 @@ av_cold int ff_mjpeg_decode_end(AVCodecContext *avctx)
     MJpegDecodeContext *s = avctx->priv_data;
     int i, j;
 
-    if (s->picture_ptr && s->picture_ptr->data[0])
-        avctx->release_buffer(avctx, s->picture_ptr);
+    if (s->picture_ptr)
+        av_frame_unref(s->picture_ptr);
 
     av_free(s->buffer);
-    av_free(s->qscale_table);
     av_freep(&s->ljpeg_buffer);
     s->ljpeg_buffer_size = 0;
 

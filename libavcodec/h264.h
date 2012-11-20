@@ -834,7 +834,7 @@ static av_always_inline void write_back_motion_list(H264Context *h,
                                                     int b_xy, int b8_xy,
                                                     int mb_type, int list)
 {
-    int16_t(*mv_dst)[2] = &s->current_picture.f.motion_val[list][b_xy];
+    int16_t(*mv_dst)[2] = &s->current_picture.motion_val[list][b_xy];
     int16_t(*mv_src)[2] = &h->mv_cache[list][scan8[0]];
     AV_COPY128(mv_dst + 0 * b_stride, mv_src + 8 * 0);
     AV_COPY128(mv_dst + 1 * b_stride, mv_src + 8 * 1);
@@ -855,7 +855,7 @@ static av_always_inline void write_back_motion_list(H264Context *h,
     }
 
     {
-        int8_t *ref_index = &s->current_picture.f.ref_index[list][b8_xy];
+        int8_t *ref_index = &s->current_picture.ref_index[list][b8_xy];
         int8_t *ref_cache = h->ref_cache[list];
         ref_index[0 + 0 * 2] = ref_cache[scan8[0]];
         ref_index[1 + 0 * 2] = ref_cache[scan8[4]];
@@ -874,7 +874,7 @@ static av_always_inline void write_back_motion(H264Context *h, int mb_type)
     if (USES_LIST(mb_type, 0)) {
         write_back_motion_list(h, s, b_stride, b_xy, b8_xy, mb_type, 0);
     } else {
-        fill_rectangle(&s->current_picture.f.ref_index[0][b8_xy],
+        fill_rectangle(&s->current_picture.ref_index[0][b8_xy],
                        2, 2, 2, (uint8_t)LIST_NOT_USED, 1);
     }
     if (USES_LIST(mb_type, 1))

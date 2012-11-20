@@ -79,6 +79,9 @@
 #ifndef FF_API_CPU_FLAG_MMX2
 #define FF_API_CPU_FLAG_MMX2            (LIBAVUTIL_VERSION_MAJOR < 53)
 #endif
+#ifndef FF_API_AVFRAME_LAVC
+#define FF_API_AVFRAME_LAVC             (LIBAVUTIL_VERSION_MAJOR < 53)
+#endif
 
 /**
  * @}

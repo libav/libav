@@ -107,7 +107,7 @@ void ff_vdpau_h264_set_reference_frames(MpegEncContext *s)
 
         for (i = 0; i < ls; ++i) {
             pic = lp[i];
-            if (!pic || !pic->f.reference)
+            if (!pic || !pic->reference)
                 continue;
             pic_frame_idx = pic->long_ref ? pic->pic_id : pic->frame_num;
 
@@ -125,8 +125,8 @@ void ff_vdpau_h264_set_reference_frames(MpegEncContext *s)
                 ++rf2;
             }
             if (rf2 != rf) {
-                rf2->top_is_reference    |= (pic->f.reference & PICT_TOP_FIELD)    ? VDP_TRUE : VDP_FALSE;
-                rf2->bottom_is_reference |= (pic->f.reference & PICT_BOTTOM_FIELD) ? VDP_TRUE : VDP_FALSE;
+                rf2->top_is_reference    |= (pic->reference & PICT_TOP_FIELD)    ? VDP_TRUE : VDP_FALSE;
+                rf2->bottom_is_reference |= (pic->reference & PICT_BOTTOM_FIELD) ? VDP_TRUE : VDP_FALSE;
                 continue;
             }
 
@@ -135,8 +135,8 @@ void ff_vdpau_h264_set_reference_frames(MpegEncContext *s)
 
             rf->surface             = render_ref->surface;
             rf->is_long_term        = pic->long_ref;
-            rf->top_is_reference    = (pic->f.reference & PICT_TOP_FIELD)    ? VDP_TRUE : VDP_FALSE;
-            rf->bottom_is_reference = (pic->f.reference & PICT_BOTTOM_FIELD) ? VDP_TRUE : VDP_FALSE;
+            rf->top_is_reference    = (pic->reference & PICT_TOP_FIELD)    ? VDP_TRUE : VDP_FALSE;
+            rf->bottom_is_reference = (pic->reference & PICT_BOTTOM_FIELD) ? VDP_TRUE : VDP_FALSE;
             rf->field_order_cnt[0]  = pic->field_poc[0];
             rf->field_order_cnt[1]  = pic->field_poc[1];
             rf->frame_idx           = pic_frame_idx;
@@ -207,7 +207,7 @@ void ff_vdpau_h264_picture_complete(MpegEncContext *s)
     if (render->info.h264.slice_count < 1)
         return;
 
-    render->info.h264.is_reference                           = (s->current_picture_ptr->f.reference & 3) ? VDP_TRUE : VDP_FALSE;
+    render->info.h264.is_reference                           = (s->current_picture_ptr->reference & 3) ? VDP_TRUE : VDP_FALSE;
     render->info.h264.field_pic_flag                         = s->picture_structure != PICT_FRAME;
     render->info.h264.bottom_field_flag                      = s->picture_structure == PICT_BOTTOM_FIELD;
     render->info.h264.num_ref_frames                         = h->sps.ref_frame_count;
