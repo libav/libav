@@ -1064,6 +1064,7 @@ THREADS_LIST='
 '
 
 ARCH_LIST='
+    aarch64
     alpha
     arm
     avr32
@@ -2113,6 +2114,24 @@ EOF
     die "Sanity test failed."
 fi
 
+ccc_flags(){
+    for flag; do
+        case $flag in
+            -std=c99)           echo -c99                       ;;
+            -mcpu=*)            echo -arch ${flag#*=}           ;;
+            -mieee)             echo -ieee                      ;;
+            -O*|-fast)          echo $flag                      ;;
+            -fno-math-errno)    echo -assume nomath_errno       ;;
+            -g)                 echo -g3                        ;;
+            -Wall)              echo -msg_enable level2         ;;
+            -Wno-pointer-sign)  echo -msg_disable ptrmismatch1  ;;
+            -Wl,*)              echo $flag                      ;;
+            -f*|-W*)                                            ;;
+            *)                  echo $flag                      ;;
+        esac
+   done
+}
+
 msvc_flags(){
     for flag; do
         case $flag in
@@ -2253,10 +2272,9 @@ probe_cc(){
         _type=ccc
         _ident=$($_cc -V | head -n1 | cut -d' ' -f1-3)
         _DEPFLAGS='-M'
-        debuglevel=3
-        _ldflags='-Wl,-z,now' # calls to libots crash without this
         _cflags_speed='-fast'
         _cflags_size='-O1'
+        _flags_filter=ccc_flags
     elif $_cc --vsn 2>/dev/null | grep -q "ARM C/C++ Compiler"; then
         test -d "$sysroot" || die "No valid sysroot specified."
         _type=armcc
@@ -2460,6 +2478,9 @@ fi
 
 # Deal with common $arch aliases
 case "$arch" in
+    aarch64|arm64)
+        arch="aarch64"
+    ;;
     arm*)
         arch="arm"
     ;;
@@ -2495,6 +2516,71 @@ enable $arch
 # Add processor-specific flags
 if test "$cpu" = generic; then
     : do nothing
+
+elif enabled aarch64; then
+
+    case $cpu in
+        armv*)
+            cpuflags="-march=$cpu"
+        ;;
+        *)
+            cpuflags="-mcpu=$cpu"
+        ;;
+    esac
+
+elif enabled alpha; then
+
+    cpuflags="-mcpu=$cpu"
+
+elif enabled arm; then
+
+    case $cpu in
+        armv*)
+            cpuflags="-march=$cpu"
+            subarch=$(echo $cpu | sed 's/[^a-z0-9]//g')
+        ;;
+        *)
+            cpuflags="-mcpu=$cpu"
+            case $cpu in
+                cortex-a*)                               subarch=armv7a  ;;
+                cortex-r*)                               subarch=armv7r  ;;
+                cortex-m*)                 enable thumb; subarch=armv7m  ;;
+                arm11*)                                  subarch=armv6   ;;
+                arm[79]*e*|arm9[24]6*|arm96*|arm102[26]) subarch=armv5te ;;
+                armv4*|arm7*|arm9[24]*)                  subarch=armv4   ;;
+            esac
+        ;;
+    esac
+
+elif enabled avr32; then
+
+    case $cpu in
+        ap7[02]0[0-2])
+            subarch="avr32_ap"
+            cpuflags="-mpart=$cpu"
+        ;;
+        ap)
+            subarch="avr32_ap"
+            cpuflags="-march=$cpu"
+        ;;
+        uc3[ab]*)
+            subarch="avr32_uc"
+            cpuflags="-mcpu=$cpu"
+        ;;
+        uc)
+            subarch="avr32_uc"
+            cpuflags="-march=$cpu"
+        ;;
+    esac
+
+elif enabled bfin; then
+
+    cpuflags="-mcpu=$cpu"
+
+elif enabled mips; then
+
+    cpuflags="-march=$cpu"
+
 elif enabled ppc; then
 
     case $(tolower $cpu) in
@@ -2544,6 +2630,18 @@ elif enabled ppc; then
         ;;
     esac
 
+elif enabled sparc; then
+
+    case $cpu in
+        cypress|f93[04]|tsc701|sparcl*|supersparc|hypersparc|niagara|v[789])
+            cpuflags="-mcpu=$cpu"
+            disable vis
+        ;;
+        ultrasparc*|niagara[234])
+            cpuflags="-mcpu=$cpu"
+        ;;
+    esac
+
 elif enabled x86; then
 
     case $cpu in
@@ -2567,71 +2665,6 @@ elif enabled x86; then
             cpuflags="-march=$cpu"
             enable cmov
             disable fast_cmov
-        ;;
-    esac
-
-elif enabled sparc; then
-
-    case $cpu in
-        cypress|f93[04]|tsc701|sparcl*|supersparc|hypersparc|niagara|v[789])
-            cpuflags="-mcpu=$cpu"
-            disable vis
-        ;;
-        ultrasparc*|niagara[234])
-            cpuflags="-mcpu=$cpu"
-        ;;
-    esac
-
-elif enabled arm; then
-
-    case $cpu in
-        armv*)
-            cpuflags="-march=$cpu"
-            subarch=$(echo $cpu | sed 's/[^a-z0-9]//g')
-        ;;
-        *)
-            cpuflags="-mcpu=$cpu"
-            case $cpu in
-                cortex-a*)                               subarch=armv7a  ;;
-                cortex-r*)                               subarch=armv7r  ;;
-                cortex-m*)                 enable thumb; subarch=armv7m  ;;
-                arm11*)                                  subarch=armv6   ;;
-                arm[79]*e*|arm9[24]6*|arm96*|arm102[26]) subarch=armv5te ;;
-                armv4*|arm7*|arm9[24]*)                  subarch=armv4   ;;
-            esac
-        ;;
-    esac
-
-elif enabled alpha; then
-
-    enabled ccc && cpuflags="-arch $cpu" || cpuflags="-mcpu=$cpu"
-
-elif enabled bfin; then
-
-    cpuflags="-mcpu=$cpu"
-
-elif enabled mips; then
-
-    cpuflags="-march=$cpu"
-
-elif enabled avr32; then
-
-    case $cpu in
-        ap7[02]0[0-2])
-            subarch="avr32_ap"
-            cpuflags="-mpart=$cpu"
-        ;;
-        ap)
-            subarch="avr32_ap"
-            cpuflags="-march=$cpu"
-        ;;
-        uc3[ab]*)
-            subarch="avr32_uc"
-            cpuflags="-mcpu=$cpu"
-        ;;
-        uc)
-            subarch="avr32_uc"
-            cpuflags="-march=$cpu"
         ;;
     esac
 
@@ -2832,7 +2865,6 @@ case $target_os in
         SHFLAGS='-shared -Wl,--out-implib,$(SUBDIR)lib$(FULLNAME).dll.a'
         objformat="win32"
         enable dos_paths
-        add_cppflags -U__STRICT_ANSI__
         ;;
     *-dos|freedos|opendos)
         network_extralibs="-lsocket"
@@ -2841,7 +2873,6 @@ case $target_os in
         add_cppflags -U__STRICT_ANSI__
         ;;
     linux)
-        add_cppflags -D_POSIX_C_SOURCE=200112 -D_XOPEN_SOURCE=600
         enable dv1394
         ;;
     irix*)
@@ -2872,10 +2903,9 @@ case $target_os in
         enable dos_paths
         ;;
     gnu/kfreebsd)
-        add_cppflags -D_POSIX_C_SOURCE=200112 -D_XOPEN_SOURCE=600 -D_BSD_SOURCE
+        add_cppflags -D_BSD_SOURCE
         ;;
     gnu)
-        add_cppflags -D_POSIX_C_SOURCE=200112 -D_XOPEN_SOURCE=600
         ;;
     qnx)
         add_cppflags -D_QNX_SOURCE
@@ -2923,8 +2953,10 @@ esac
 
 if check_cpp_condition features.h "defined __UCLIBC__"; then
     libc_type=uclibc
+    add_cppflags -D_POSIX_C_SOURCE=200112 -D_XOPEN_SOURCE=600
 elif check_cpp_condition features.h "defined __GLIBC__"; then
     libc_type=glibc
+    add_cppflags -D_POSIX_C_SOURCE=200112 -D_XOPEN_SOURCE=600
 elif check_header _mingw.h; then
     libc_type=mingw
     check_cpp_condition _mingw.h \
@@ -2933,6 +2965,7 @@ elif check_header _mingw.h; then
         die "ERROR: MinGW runtime version must be >= 3.15."
 elif check_cpp_condition newlib.h "defined _NEWLIB_VERSION"; then
     libc_type=newlib
+    add_cppflags -U__STRICT_ANSI__
 elif check_func_headers stdlib.h _get_doserrno; then
     libc_type=msvcrt
     add_compat strtod.o strtod=avpriv_strtod
@@ -2953,6 +2986,10 @@ if enabled_all tms470 glibc; then
     add_cppflags -D__builtin_memset=memset
     add_cppflags -D__gnuc_va_list=va_list -D_VA_LIST_DEFINED
     add_cflags   -pds=48    # incompatible redefinition of macro
+fi
+
+if enabled_all ccc glibc; then
+    add_ldflags -Wl,-z,now  # calls to libots crash without this
 fi
 
 esc(){
@@ -3076,6 +3113,14 @@ EOF
 elif enabled mips; then
 
     check_inline_asm loongson '"dmult.g $1, $2, $3"'
+
+elif enabled parisc; then
+
+    if enabled gcc; then
+        case $($cc -dumpversion) in
+            4.[3-8].*) check_cflags -fno-optimize-sibling-calls ;;
+        esac
+    fi
 
 elif enabled ppc; then
 
@@ -3532,12 +3577,10 @@ if enabled icc; then
     fi
 elif enabled ccc; then
     # disable some annoying warnings
-    add_cflags -msg_disable cvtu32to64
-    add_cflags -msg_disable embedcomment
-    add_cflags -msg_disable needconstext
-    add_cflags -msg_disable nomainieee
-    add_cflags -msg_disable ptrmismatch1
-    add_cflags -msg_disable unreachcode
+    add_cflags -msg_disable bitnotint
+    add_cflags -msg_disable mixfuncvoid
+    add_cflags -msg_disable nonstandcast
+    add_cflags -msg_disable unsupieee
 elif enabled gcc; then
     check_optflags -fno-tree-vectorize
     check_cflags -Werror=implicit-function-declaration
@@ -3568,6 +3611,9 @@ elif enabled msvc; then
 fi
 
 case $target_os in
+    osf1)
+        enabled ccc && add_ldflags '-Wl,-expect_unresolved,*'
+    ;;
     plan9)
         add_cppflags -Dmain=plan9_main
     ;;
@@ -3733,6 +3779,7 @@ ASFLAGS=$ASFLAGS
 AS_C=$AS_C
 AS_O=$AS_O
 CC_C=$CC_C
+CC_E=$CC_E
 CC_O=$CC_O
 LD_O=$LD_O
 LD_LIB=$LD_LIB
