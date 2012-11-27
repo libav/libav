@@ -323,8 +323,7 @@ typedef struct SliceHeader {
 } SliceHeader;
 
 enum SyntaxElement {
-    SAO_MERGE_LEFT_FLAG = 0,
-    SAO_MERGE_UP_FLAG,
+    SAO_MERGE_FLAG = 0,
     SAO_TYPE_IDX,
     SAO_EO_CLASS,
     SAO_BAND_POSITION,
@@ -580,8 +579,7 @@ int ff_hevc_decode_nal_pps(HEVCContext *s);
 int ff_hevc_decode_nal_sei(HEVCContext *s);
 
 void ff_hevc_cabac_init(HEVCContext *s);
-int ff_hevc_sao_merge_left_flag_decode(HEVCContext *s);
-int ff_hevc_sao_merge_up_flag_decode(HEVCContext *s);
+int ff_hevc_sao_merge_flag_decode(HEVCContext *s);
 int ff_hevc_sao_type_idx_decode(HEVCContext *s);
 int ff_hevc_sao_band_position_decode(HEVCContext *s);
 int ff_hevc_sao_offset_abs_decode(HEVCContext *s, int bit_depth);
@@ -600,7 +598,7 @@ int ff_hevc_rem_intra_luma_pred_mode_decode(HEVCContext *s);
 int ff_hevc_intra_chroma_pred_mode_decode(HEVCContext *s);
 int ff_hevc_merge_idx_decode(HEVCContext *s);
 int ff_hevc_merge_flag_decode(HEVCContext *s);
-int ff_hevc_inter_pred_idc_decode(HEVCContext *s, int x0, int y0);
+int ff_hevc_inter_pred_idc_decode(HEVCContext *s, int max);
 int ff_hevc_ref_idx_lx_decode(HEVCContext *s, int c_max);
 int ff_hevc_mvp_lx_flag_decode(HEVCContext *s);
 int ff_hevc_no_residual_syntax_flag_decode(HEVCContext *s);

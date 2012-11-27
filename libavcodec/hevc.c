@@ -298,8 +298,6 @@ static int hls_slice_header(HEVCContext *s)
             skip_bits(gb, 8); // slice_header_extension_data_byte
     }
 
-    align_get_bits(gb);
-
     // Inferred parameters
     sh->slice_qp = 26 + s->pps->pic_init_qp_minus26 + sh->slice_qp_delta;
     sh->slice_ctb_addr_rs = sh->slice_address;
@@ -335,7 +333,7 @@ static int hls_sao_param(HEVCContext *s, int rx, int ry)
         int left_ctb_in_tile = s->pps->tile_id[s->ctb_addr_ts] ==
                                s->pps->tile_id[s->pps->ctb_addr_rs_to_ts[s->ctb_addr_rs - 1]];
         if (left_ctb_in_slice && left_ctb_in_tile)
-            sao_merge_left_flag = ff_hevc_sao_merge_left_flag_decode(s);
+            sao_merge_left_flag = ff_hevc_sao_merge_flag_decode(s);
     }
     if (ry > 0 && !sao_merge_left_flag) {
         int up_ctb_in_slice = (s->ctb_addr_ts - s->pps->ctb_addr_rs_to_ts[s->ctb_addr_rs - s->sps->pic_width_in_ctbs]) <=
@@ -343,7 +341,7 @@ static int hls_sao_param(HEVCContext *s, int rx, int ry)
         int up_ctb_in_tile = (s->pps->tile_id[s->ctb_addr_ts] ==
                               s->pps->tile_id[s->pps->ctb_addr_rs_to_ts[s->ctb_addr_rs - s->sps->pic_width_in_ctbs]]);
         if (up_ctb_in_slice && up_ctb_in_tile)
-            sao_merge_up_flag = ff_hevc_sao_merge_up_flag_decode(s);
+            sao_merge_up_flag = ff_hevc_sao_merge_flag_decode(s);
     }
     for (c_idx = 0; c_idx < 3; c_idx++) {
         int bit_depth = s->sps->bit_depth[c_idx];
@@ -436,14 +434,12 @@ static void hls_residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_s
 
     av_log(s->avctx, AV_LOG_DEBUG, "scan_idx: %d, c_idx: %d\n",
            scan_idx, c_idx);
-
     memset(s->rc.significant_coeff_group_flag, 0, 8*8);
 
     if (log2_trafo_size == 1) {
         log2_trafo_size = 2;
     }
 
-    memset(coeffs, 0, trafo_size * trafo_size);
 
     if (s->pps->transform_skip_enabled_flag && !s->cu.cu_transquant_bypass_flag &&
         (log2_trafo_size == 2)) {
@@ -652,50 +648,8 @@ static void hls_residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_s
                 num_sig_coeff++;
                 av_log(s->avctx, AV_LOG_DEBUG, "trans_coeff_level: %d\n",
                        trans_coeff_level);
-                if (s->cu.cu_transquant_bypass_flag) {
-                    coeffs[y_c * trafo_size + x_c] = trans_coeff_level;
+                coeffs[y_c * trafo_size + x_c] = trans_coeff_level;
 
-                } else {
-                    int qp;
-                    
-                    //TODO: handle non-constant QP
-                    int qp_y_pred = s->sh.slice_qp;
-                    int qp_y = ((qp_y_pred + s->tu.cu_qp_delta + 52 + 2 * s->sps->qp_bd_offset_luma) %
-                                (52 + s->sps->qp_bd_offset_luma)) - s->sps->qp_bd_offset_luma;
-                    static int qp_c[] = { 29, 30, 31, 32, 33, 33, 34, 34, 35, 35, 36, 36, 37, 37 };
-                    
-                    if (c_idx == 0) {
-                        qp = qp_y + s->sps->qp_bd_offset_luma;
-                    } else {
-                        int qp_i, offset;
-                        
-                        if (c_idx == 1) {
-                            offset = s->pps->cb_qp_offset + s->sh.slice_cb_qp_offset;
-                        } else {
-                            offset = s->pps->cr_qp_offset + s->sh.slice_cr_qp_offset;
-                        }
-                        qp_i = av_clip_c(qp_y + offset, - s->sps->qp_bd_offset_luma, 57);
-                        if (qp_i < 30) {
-                            qp = qp_i;
-                        } else if (qp_i > 43) {
-                            qp = qp_i - 6;
-                        } else {
-                            qp = qp_c[qp_i - 30];
-                        }
-                        
-                        qp += s->sps->qp_bd_offset_chroma;
-                    }
-                    {
-                        const uint8_t level_scale[] = { 40, 45, 51, 57, 64, 72 };
-                    
-                        //TODO: scaling_list_enabled_flag support
-                        int m = 16;
-                        int shift = bit_depth + log2_trafo_size - 5;
-                        int scale = level_scale[qp % 6] << (qp / 6);
-                        coeffs[y_c * trafo_size + x_c] = av_clip_int16_c(((trans_coeff_level * m * scale) +
-                                         (1 << (shift - 1))) >> shift);
-                    }
-                }
             }
         }
     }
@@ -704,6 +658,36 @@ static void hls_residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_s
     if (s->cu.cu_transquant_bypass_flag) {
         hevcdsp->transquant_bypass(dst, coeffs, stride, log2_trafo_size, bit_depth);
     } else {
+        int qp;
+        //TODO: handle non-constant QP
+        int qp_y_pred = s->sh.slice_qp;
+        int qp_y = ((qp_y_pred + s->tu.cu_qp_delta + 52 + 2 * s->sps->qp_bd_offset_luma) %
+                    (52 + s->sps->qp_bd_offset_luma)) - s->sps->qp_bd_offset_luma;
+        static int qp_c[] = { 29, 30, 31, 32, 33, 33, 34, 34, 35, 35, 36, 36, 37, 37 };
+        if (c_idx == 0) {
+            qp = qp_y + s->sps->qp_bd_offset_luma;
+        } else {
+            int qp_i, offset;
+
+            if (c_idx == 1) {
+                offset = s->pps->cb_qp_offset + s->sh.slice_cb_qp_offset;
+            } else {
+                offset = s->pps->cr_qp_offset + s->sh.slice_cr_qp_offset;
+            }
+            qp_i = av_clip_c(qp_y + offset, - s->sps->qp_bd_offset_luma, 57);
+            if (qp_i < 30) {
+                qp = qp_i;
+            } else if (qp_i > 43) {
+                qp = qp_i - 6;
+            } else {
+                qp = qp_c[qp_i - 30];
+            }
+            
+            qp += s->sps->qp_bd_offset_chroma;
+
+        }
+        
+        hevcdsp->dequant(coeffs, log2_trafo_size, qp, bit_depth);
         if (transform_skip_flag) {
             hevcdsp->transform_skip(dst, coeffs, stride, log2_trafo_size, bit_depth);
         } else if (s->cu.pred_mode == MODE_INTRA && c_idx == 0 && log2_trafo_size == 2) {
@@ -930,7 +914,7 @@ static void hls_prediction_unit(HEVCContext *s, int x0, int y0, int log2_cb_size
 			}
 		} else {
 			if( s->sh.slice_type == B_SLICE ) {
-				inter_pred_idc = ff_hevc_inter_pred_idc_decode(s, x0, y0);
+				inter_pred_idc = ff_hevc_inter_pred_idc_decode(s, 1<<log2_cb_size);
 			}
 			if( inter_pred_idc != Pred_L1 ) {
 				if( s->sh.num_ref_idx_l0_active > 1 ) {
@@ -1466,7 +1450,7 @@ static av_cold int hevc_decode_init(AVCodecContext *avctx)
 
 static av_cold int hevc_decode_free(AVCodecContext *avctx)
 {
-    int i, j;
+    int i;
     HEVCContext *s = avctx->priv_data;
 
     if (s->frame.data[0])

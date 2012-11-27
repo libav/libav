@@ -326,6 +326,7 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
     return 0;
 
 err:
+
     av_free(sps);
     return -1;
 }
