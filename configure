@@ -1252,6 +1252,7 @@ HAVE_LIST="
     malloc_h
     MapViewOfFile
     memalign
+    MemoryBarrier
     mkstemp
     mm_empty
     mmap
@@ -1286,6 +1287,7 @@ HAVE_LIST="
     struct_v4l2_frmivalenum_discrete
     symver_asm_label
     symver_gnu_asm
+    sync_synchronize
     sysconf
     sysctl
     sys_mman_h
@@ -3379,6 +3381,7 @@ check_func  inet_aton $network_extralibs
 check_func  isatty
 check_func  localtime_r
 check_func  ${malloc_prefix}memalign            && enable memalign
+check_func  MemoryBarrier
 check_func  mkstemp
 check_func  mmap
 check_func  mprotect
@@ -3389,6 +3392,8 @@ check_func  strerror_r
 check_func  strptime
 check_func  strtok_r
 check_func  sched_getaffinity
+# cannot use check_func, because this is a builtin
+check_code  cc "" "__sync_synchronize()" && enable sync_synchronize
 check_func  sysconf
 check_func  sysctl
 check_func  usleep
