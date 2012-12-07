@@ -925,9 +925,9 @@ int ff_hevc_significant_coeff_flag_decode(HEVCContext *s, int c_idx, int x_c, in
         int x_off = x_c - (x_cg << 2);
         int y_off = y_c - (y_cg << 2);
 
-        if (x_cg < ((1 << log2_trafo_size) - 1)>>2)
+        if (x_cg < ((1 << log2_trafo_size) - 1) >> 2)
             prev_sig += s->rc.significant_coeff_group_flag[x_cg + 1][y_cg];
-        if (y_cg < ((1 << log2_trafo_size) - 1)>>2)
+        if (y_cg < ((1 << log2_trafo_size) - 1) >> 2)
             prev_sig += (s->rc.significant_coeff_group_flag[x_cg][y_cg + 1] << 1);
         av_log(s->avctx, AV_LOG_DEBUG, "prev_sig: %d\n", prev_sig);
 

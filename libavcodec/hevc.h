@@ -480,7 +480,6 @@ typedef struct PredictionUnit {
 
     uint8_t *top_ipm;
     uint8_t *left_ipm;
-    uint8_t *tab_ipm;
 } PredictionUnit;
 
 typedef struct TransformTree {
