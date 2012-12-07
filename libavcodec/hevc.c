@@ -45,7 +45,7 @@ static int pic_arrays_init(HEVCContext *s)
     int pic_width_in_min_pu  = s->sps->pic_width_in_min_cbs * 4;
     int pic_height_in_min_pu = s->sps->pic_height_in_min_cbs * 4;
 
-    s->sao = av_malloc(ctb_count * sizeof(*s->sao));
+    s->sao = av_mallocz(ctb_count * sizeof(*s->sao));
 
     s->split_coding_unit_flag = av_malloc(pic_size);
     s->cu.skip_flag = av_malloc(pic_size);
@@ -1451,7 +1451,8 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         av_picture_copy((AVPicture*)&s->sao_frame, (AVPicture*)&s->frame,
                         s->avctx->pix_fmt, s->avctx->width, s->avctx->height);
 
-        sao_filter(s);
+        if (s->sps->sample_adaptive_offset_enabled_flag)
+            sao_filter(s);
 
         s->frame.pict_type = AV_PICTURE_TYPE_I;
         s->frame.key_frame = 1;
