@@ -34,11 +34,11 @@ static void dequant(int16_t *coeffs, int log2_size, int qp, int bit_depth)
 {
     int x, y;
     int size = 1 << log2_size;
-    
+
     const uint8_t level_scale[] = { 40, 45, 51, 57, 64, 72 };
-   
+
     //TODO: scaling_list_enabled_flag support
-    
+
     int m = 16;
     int shift = bit_depth + log2_size - 5;
     int scale = level_scale[qp % 6] << (qp / 6);

@@ -84,10 +84,10 @@ typedef struct PTL {
     int general_profile_idc;
     int general_profile_compatibility_flag[32];
     int general_level_idc;
-    
+
     uint8_t sub_layer_profile_present_flag[MAX_SUB_LAYERS];
     uint8_t sub_layer_level_present_flag[MAX_SUB_LAYERS];
-    
+
     int sub_layer_profile_space[MAX_SUB_LAYERS];
     uint8_t sub_layer_tier_flag[MAX_SUB_LAYERS];
     int sub_layer_profile_idc[MAX_SUB_LAYERS];
@@ -99,24 +99,23 @@ typedef struct VPS {
 
     uint8_t vps_temporal_id_nesting_flag;
     int vps_max_sub_layers; ///< vps_max_temporal_layers_minus1 + 1
-    
+
     PTL ptl;
-    
+
     int vps_max_dec_pic_buffering[MAX_SUB_LAYERS];
     int vps_num_reorder_pics[MAX_SUB_LAYERS];
     int vps_max_latency_increase[MAX_SUB_LAYERS];
-    
+
     int vps_num_hrd_parameters;
 } VPS;
 
 typedef struct SPS {
-
     int vps_id;
 
     int sps_max_sub_layers; ///< sps_max_sub_layers_minus1 + 1
-    
+
     PTL ptl;
-    
+
     int chroma_format_idc;
     uint8_t separate_colour_plane_flag;
 
@@ -403,9 +402,9 @@ enum PredMode {
 };
 
 enum InterPredIdc {
-	Pred_L0 = 0,
-	Pred_L1,
-	Pred_BI
+    PRED_L0 = 0,
+    PRED_L1,
+    PRED_BI
 };
 
 typedef struct CodingTree {
@@ -478,8 +477,8 @@ typedef struct PredictionUnit {
     uint8_t intra_pred_mode[4];
     uint8_t intra_pred_mode_c;
 
-    uint8_t *top_ipm;
     uint8_t *left_ipm;
+    uint8_t *top_ipm;
 } PredictionUnit;
 
 typedef struct TransformTree {
