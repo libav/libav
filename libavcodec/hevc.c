@@ -23,7 +23,6 @@
 #include "libavutil/attributes.h"
 #include "libavutil/common.h"
 #include "libavutil/pixdesc.h"
-#include "libavutil/internal.h"
 #include "golomb.h"
 #include "hevcdata.h"
 #include "hevc.h"
@@ -948,7 +947,6 @@ static int luma_intra_pred_mode(HEVCContext *s, int x0, int y0, int pu_size,
     int y_pu = y0 >> s->sps->log2_min_pu_size;
     int size_in_pus = pu_size >> s->sps->log2_min_pu_size;
 
-    int pic_width_in_min_pu = s->sps->pic_width_in_min_cbs * 4;
     int cand_up = s->pu.top_ipm[x_pu];
     int cand_left = s->pu.left_ipm[y_pu];
 
@@ -1069,7 +1067,6 @@ static void intra_prediction_unit_default_value(HEVCContext *s, int x0, int y0, 
 {
     int i, j;
     int split = s->cu.part_mode == PART_NxN;
-    int pb_size = (1 << log2_cb_size) >> split;
     int side = split + 1;
     for (i = 0; i < side; i++) {
         for (j = 0; j < side; j++) {
