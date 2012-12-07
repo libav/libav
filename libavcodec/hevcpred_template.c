@@ -242,7 +242,7 @@ static void FUNCC(pred_dc)(uint8_t *_src, const uint8_t *_top, const uint8_t *_l
         for (j = 0; j < size / sizeof(pixel4); j++)
             AV_WN4PA(&POS(j * sizeof(pixel4), i), a);
 
-    if (c_idx == 0) {
+    if (c_idx == 0 && size < 32) {
         POS(0, 0) = (left[0] + 2 * dc  + top[0] + 2) >> 2;
         for (x = 1; x < size; x++)
             POS(x, 0) = (top[x] + 3 * dc + 2) >> 2;
@@ -293,7 +293,7 @@ static void FUNCC(pred_angular)(uint8_t *_src, const uint8_t *_top, const uint8_
                 POS(x, y) = ((32 - fact) * ref[x + idx + 1] + fact * ref[x + idx + 2] + 16) >> 5;
             }
         }
-        if (mode == 26 && c_idx == 0) {
+        if (mode == 26 && c_idx == 0 && size < 32) {
             for (y = 0; y < size; y++)
                 POS(0, y) = CLIP_1(top[0] + ((left[y] - left[-1]) >> 1));
         }
@@ -314,7 +314,7 @@ static void FUNCC(pred_angular)(uint8_t *_src, const uint8_t *_top, const uint8_
                 POS(x, y) = ((32 - fact) * ref[y + idx + 1] + fact * ref[y + idx + 2] + 16) >> 5;
             }
         }
-        if (mode == 10 && c_idx == 0) {
+        if (mode == 10 && c_idx == 0 && size < 32) {
             for (x = 0; x < size; x++)
                 POS(x, 0) = CLIP_1(left[0] + ((top[x] - top[-1]) >> 1));
         }
