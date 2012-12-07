@@ -26,98 +26,103 @@
 #include "hevc.h"
 
 /**
- * Offset to ctxIdx 0 in init_values and states, indexed by SyntaxElement.
+ * number of bin by SyntaxElement.
  */
-static const int elem_offset[] = {
-    0,   // sao_merge_left_flag and sao_merge_up_flag
-    3,   // sao_type_idx
-    -1,  // sao_eo_class
-    -1,  // sao_band_position
-    -1,  // sao_offset_abs
-    -1,  // sao_offset_sign
-    6,   // alf_cu_flag
-    -1,  // end_of_slice_flag
-    9,   // split_coding_unit_flag
-    18,  // cu_transquant_bypass_flag
-    21,  // skip_flag
-    27,  // cu_qp_delta
-    36,  // pred_mode
-    36,  // part_mode
-    -1,  // pcm_flag
-    45,  // prev_intra_luma_pred_mode
-    -1,  // mpm_idx
-    -1,  // rem_intra_luma_pred_mode
-    48,  // intra_chroma_pred_mode
-    54,  // merge_flag
-    56,  // merge_idx
-    58,  // inter_pred_idc
-    62,  // ref_idx_l0
-    62,  // ref_idx_l1
-    68,  // abs_mvd_greater0_flag
-    68,  // abs_mvd_greater1_flag
-    -1,  // abs_mvd_minus2
-    -1,  // mvd_sign_flag
-    72,  // mvp_l0_flag
-    72,  // mvp_l1_flag
-    74,  // no_residual_data_flag
-    76,  // split_transform_flag
-    85,  // cbf_luma
-    91,  // cbf_cb, cbf_cr
-    100, // transform_skip_flag[][][0]
-    100, // transform_skip_flag[][][1|2]
-    106, // last_significant_coeff_x_prefix
-    160, // last_significant_coeff_y_prefix
-    -1,  // last_significant_coeff_x_suffix
-    -1,  // last_significant_coeff_y_suffix
-    214, // significant_coeff_group_flag
-    226, // significant_coeff_flag
-    352, // coeff_abs_level_greater1_flag
-    424, // coeff_abs_level_greater2_flag
-    -1,  // coeff_abs_level_remaining
-    -1,  // coeff_sign_flag
+static const int8_t num_bins_in_se[] = {
+     1,  // sao_merge_flag
+     1,  // sao_type_idx
+     0,  // sao_eo_class
+     0,  // sao_band_position
+     0,  // sao_offset_abs
+     0,  // sao_offset_sign
+     0,  // end_of_slice_flag
+     3,  // split_coding_unit_flag
+     1,  // cu_transquant_bypass_flag
+     3,  // skip_flag
+     3,  // cu_qp_delta
+     1,  // pred_mode
+     3,  // part_mode
+     0,  // pcm_flag
+     1,  // prev_intra_luma_pred_mode
+     0,  // mpm_idx
+     0,  // rem_intra_luma_pred_mode
+     2,  // intra_chroma_pred_mode
+     1,  // merge_flag
+     1,  // merge_idx
+     5,  // inter_pred_idc
+     2,  // ref_idx_l0
+     2,  // ref_idx_l1
+     2,  // abs_mvd_greater0_flag
+     2,  // abs_mvd_greater1_flag
+     0,  // abs_mvd_minus2
+     0,  // mvd_sign_flag
+     2,  // mvp_lx_flag
+     1,  // no_residual_data_flag
+     3,  // split_transform_flag
+     2,  // cbf_luma
+     3,  // cbf_cb, cbf_cr
+     2,  // transform_skip_flag[][]
+    30,  // last_significant_coeff_x_prefix
+    30,  // last_significant_coeff_y_prefix
+     0,  // last_significant_coeff_x_suffix
+     0,  // last_significant_coeff_y_suffix
+     4,  // significant_coeff_group_flag
+    42,  // significant_coeff_flag
+    24,  // coeff_abs_level_greater1_flag
+     6,  // coeff_abs_level_greater2_flag
+     0,  // coeff_abs_level_remaining
+     0,  // coeff_sign_flag
 };
 
+/**
+ * Offset to ctxIdx 0 in init_values and states, indexed by SyntaxElement.
+ */
+static int elem_offset[sizeof(num_bins_in_se)];
 /**
  * initValue from Tables 9-38 to 9-65, indexed by ctx_idx for each SyntaxElement
  * value.
  */
+#define CNU 154
 static const uint8_t init_values[] = {
-    153, 153, 153, // sao_merge_left_flag and sao_merge_up_flag
+    153, 153, 153, // sao_merge_flag
     160, 185, 200, // sao_type_idx
-    153, 153, 153, // alf_cu_flag
     139, 141, 157, 107, 139, 126, 107, 139, 126, // split_coding_unit_flag
     154, 154, 154, // cu_transquant_bypass_flag
-    197, 185, 201, 197, 185, 201, // skip_flag
+    CNU, CNU, CNU, 197, 185, 201, 197, 185, 201, // skip_flag
     154, 154, 154, 154, 154, 154, 154, 154, 154, // cu_qp_delta
-    149, 134, 184, 154, 139, 154, 154, 139, 154, // pred_mode, part_mode
+    CNU, 149, 134, // pred_mode
+    184, 134, 149, 154, 139, 154, 154, 139, 154, // part_mode
     184, 154, 183, // prev_intra_luma_pred_mode
-    63, 139, 152, 139, 152, 139, // intra_chroma_pred_mode
-    110, 154, // merge_flag
-    122, 137, // merge_idx
-    95, 79, 63, 31, // inter_pred_idc
-    153, 153, 139, 153, 153, 168, // ref_idx_l0, ref_idx_l1
-    140, 198, 169, 198, // abs_mvd_greater0_flag, abs_mvd_greater1_flag
-    168, 168, // mvp_l0_flag, mvp_l1_flag
-    79, 79, // no_residual_data_flag
-    224, 167, 122, 124, 138, 94, 153, 138, 138, // split_transform_flag
+     63, 139, 152, 139, 152, 139, // intra_chroma_pred_mode
+    CNU, 110, 154, // merge_flag
+    CNU, 122, 137, // merge_idx
+    CNU, CNU, CNU, CNU, CNU,  95,  79,  63,  31,  31,  95,  79,  63,  31,  31,// inter_pred_idc
+    CNU, CNU, 153, 153, 153, 153, // ref_idx_l0
+    CNU, CNU, 153, 153, 153, 153, // ref_idx_l1
+    CNU, CNU, 140, 198, 169, 198, // abs_mvd_greater1_flag
+    CNU, CNU, 140, 198, 169, 198, // abs_mvd_greater1_flag
+    CNU, CNU, 168, CNU, 168, CNU, // mvp_lx_flag
+    CNU,  79,  79, // no_residual_data_flag
+    224, 167, 122, 124, 138,  94, 153, 138, 138, // split_transform_flag
     111, 141, 153, 111, 153, 111, // cbf_luma
-    94, 138, 182, 149, 107, 167, 149, 92, 167, // cbf_cb, cbf_cr
+     94, 138, 182, 149, 107, 167, 149,  92, 167, // cbf_cb, cbf_cr
     139, 139, 139, 139, 139, 139, // transform_skip_flag
-
     // last_significant_coeff_x_prefix
-    110, 110, 124, 125, 140, 153, 125, 127, 140, 109, 111, 143, 127, 111,
-    79,  108, 123,  63, 125, 110,  94, 110,  95,  79, 125, 111, 110,  78,
-    110, 111, 111,  95,  94, 108, 123, 108, 125, 110, 124, 110,  95,  94,
-    125, 111, 111,  79, 125, 126, 111, 111,  79, 108, 123,  93,
-
+    110, 110, 124, 125, 140, 153, 125, 127, 140, 109, 111, 143, 127, 111, 79,
+    108, 123, 63, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU,
+    125, 110, 94, 110, 95, 79, 125, 111, 110, 78, 110, 111, 111, 95, 94, 108,
+    123, 108, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU, 125,
+    110, 124, 110, 95, 94, 125, 111, 111, 79, 125, 126, 111, 111, 79, 108, 123,
+    93, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU,
     // last_significant_coeff_y_prefix
-    110, 110, 124, 125, 140, 153, 125, 127, 140, 109, 111, 143, 127, 111,
-    79,  108, 123,  63, 125, 110,  94, 110,  95,  79, 125, 111, 110,  78,
-    110, 111, 111,  95,  94, 108, 123, 108, 125, 110, 124, 110,  95,  94,
-    125, 111, 111,  79, 125, 126, 111, 111,  79, 108, 123,  93,
-
-    91, 171, 134, 141, 121, 140, 61, 154, 121, 140, 61, 154, // significant_coeff_group_flag
-
+    110, 110, 124, 125, 140, 153, 125, 127, 140, 109, 111, 143, 127, 111, 79,
+    108, 123, 63, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU,
+    125, 110, 94, 110, 95, 79, 125, 111, 110, 78, 110, 111, 111, 95, 94, 108,
+    123, 108, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU, 125,
+    110, 124, 110, 95, 94, 125, 111, 111, 79, 125, 126, 111, 111, 79, 108, 123,
+    93, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU, CNU,
+    // significant_coeff_group_flag
+    91, 171, 134, 141, 121, 140,  61, 154, 121, 140,  61, 154,
     // significant_coeff_flag
     111, 111, 125, 110, 110, 94, 124, 108, 124, 107, 125, 141, 179, 153, 125,
     107, 125, 141, 179, 153, 125, 107, 125, 141, 179, 153, 125, 140, 139, 182,
@@ -128,19 +133,17 @@ static const uint8_t init_values[] = {
     123, 63, 124, 166, 183, 140, 136, 153, 154, 166, 183, 140, 136, 153, 154,
     166, 183, 140, 136, 153, 154, 170, 153, 138, 138, 122, 121, 122, 121, 167,
     151, 183, 140, 151, 183, 140,
-
     // coeff_abs_level_greater1_flag
     140, 92, 137, 138, 140, 152, 138, 139, 153, 74, 149, 92, 139, 107, 122, 152,
     140, 179, 166, 182, 140, 227, 122, 197, 154, 196, 196, 167, 154, 152, 167,
     182, 182, 134, 149, 136, 153, 121, 136, 137, 169, 194, 166, 167, 154, 167,
     137, 182, 154, 196, 167, 167, 154, 152, 167, 182, 182, 134, 149, 136, 153,
     121, 136, 122, 169, 208, 166, 167, 154, 152, 167, 182,
-
     // coeff_abs_level_greater2_flag
-    138, 153, 136, 167, 152, 152, 107, 167, 91, 122, 107, 167, 107, 167, 91,
-    107, 107, 167
+    138, 153, 136, 167, 152, 152,
+    107, 167,  91, 122, 107, 167,
+    107, 167,  91, 107, 107, 167
 };
-
 /**
  * mps and pstate, indexed by ctx_idx
  */
@@ -258,6 +261,7 @@ static int u_binarization(HEVCContext *s)
 
 static int eg_binarization(HEVCContext *s, int k)
 {
+#if 0
     int j;
     int suffix = 0;
     int log = 0;
@@ -270,6 +274,23 @@ static int eg_binarization(HEVCContext *s, int k)
         suffix = (suffix << 1) | decode_bin(s, i++);
 
     return (1 << (k + log)) - (1 << k) + suffix;
+#else
+    int i   = 0;
+    int j, log = k;
+    int bit = 1;
+    int ret = 0;
+    int suffix = 0;
+    while (bit == 1) {
+        bit = decode_bin(s, i++);
+        ret +=  bit << log;
+        log++;
+    }
+    log--;
+    for (j = 0; j < log; j++) {
+        suffix = (suffix<<1)+ decode_bin(s, i++) ;
+    }
+    return ret + suffix;
+#endif
 }
 
 static int fl_binarization(HEVCContext *s, int c_max)
@@ -299,6 +320,9 @@ void ff_hevc_cabac_init(HEVCContext *s)
     HEVCCabacContext *cc = &s->cc;
     GetBitContext *gb = &s->gb;
 
+    skip_bits(gb, 1);
+    align_get_bits(gb);
+
     cc->range = 510;
     cc->offset = get_bits(gb, 9);
     av_log(s->avctx, AV_LOG_DEBUG, "cc->offset: %d\n", cc->offset);
@@ -307,6 +331,10 @@ void ff_hevc_cabac_init(HEVCContext *s)
     if (s->sh.cabac_init_flag && s->sh.slice_type != I_SLICE)
         cc->init_type ^= 3;
 
+    elem_offset[0] = 0;
+    for (i = 1; i < sizeof(num_bins_in_se); i++) {
+        elem_offset[i] = elem_offset[i-1] + 3*num_bins_in_se[i-1];
+    }
     for (i = 0; i < sizeof(init_values); i++) {
         int init_value = init_values[i];
         int m = (init_value >> 4)*5 - 45;
@@ -318,21 +346,20 @@ void ff_hevc_cabac_init(HEVCContext *s)
     }
 }
 
-int ff_hevc_sao_merge_left_up_flag_decode(HEVCContext *s)
+int ff_hevc_sao_merge_flag_decode(HEVCContext *s)
 {
     HEVCCabacContext *cc = &s->cc;
     const int8_t ctx_idx_inc[1] = { 0 };
 
-    cc->elem = SAO_MERGE_LEFT_UP_FLAG;
+    cc->elem = SAO_MERGE_FLAG;
     cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 0;
-    cc->ctx_idx_offset = cc->init_type;
+    cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
     cc->ctx_idx_inc = ctx_idx_inc;
 
     return fl_binarization(s, 1);
 }
-
 int ff_hevc_sao_type_idx_decode(HEVCContext *s)
 {
     HEVCCabacContext *cc = &s->cc;
@@ -343,7 +370,7 @@ int ff_hevc_sao_type_idx_decode(HEVCContext *s)
     cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 0;
-    cc->ctx_idx_offset = cc->init_type;
+    cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
     cc->ctx_idx_inc = ctx_idx_inc;
 
     if (decode_bin(s, i++) == 0)
@@ -413,12 +440,43 @@ int ff_hevc_cu_transquant_bypass_flag_decode(HEVCContext *s)
     cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 0;
-    cc->ctx_idx_offset = cc->init_type;
+    cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
     cc->ctx_idx_inc = ctx_idx_inc;
 
     return fl_binarization(s, 1);
 }
 
+int ff_hevc_skip_flag_decode(HEVCContext *s, int x_cb, int y_cb)
+{
+    HEVCCabacContext *cc = &s->cc;
+    const int8_t ctx_idx_inc[1] = {
+        (x_cb > 0 ? SAMPLE(s->cu.skip_flag, x_cb-1, y_cb) : 0) +
+        (y_cb > 0 ? SAMPLE(s->cu.skip_flag, x_cb, y_cb-1) : 0)
+    };
+
+    cc->elem = SKIP_FLAG;
+    cc->state = states + elem_offset[cc->elem];
+
+    cc->max_bin_idx_ctx = 0;
+    cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
+    cc->ctx_idx_inc = ctx_idx_inc;
+
+    return fl_binarization(s, 1);
+}
+int ff_hevc_pred_mode_decode(HEVCContext *s)
+{
+    HEVCCabacContext *cc = &s->cc;
+    const int8_t ctx_idx_inc[1] = { 0 };
+
+    cc->elem = PRED_MODE_FLAG;
+    cc->state = states + elem_offset[cc->elem];
+
+    cc->max_bin_idx_ctx = 0;
+    cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
+    cc->ctx_idx_inc = ctx_idx_inc;
+
+    return fl_binarization(s, 1);
+}
 int ff_hevc_split_coding_unit_flag_decode(HEVCContext *s, int ct_depth, int x0, int y0)
 {
     HEVCCabacContext *cc = &s->cc;
@@ -442,7 +500,7 @@ int ff_hevc_split_coding_unit_flag_decode(HEVCContext *s, int ct_depth, int x0, 
     ctx_idx_inc[0] += (depth_top > ct_depth);
 
     cc->max_bin_idx_ctx = 0;
-    cc->ctx_idx_offset = 3 * cc->init_type;
+    cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
     cc->ctx_idx_inc = ctx_idx_inc;
 
     return fl_binarization(s, 1);
@@ -458,7 +516,7 @@ int ff_hevc_part_mode_decode(HEVCContext *s, int log2_cb_size)
     cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = cc->init_type ? 3 : 0;
-    cc->ctx_idx_offset = 2 + 2 * cc->init_type;
+    cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
     cc->ctx_idx_inc = ctx_idx_inc;
 
     if (decode_bin(s, i++) == 1) // 1
@@ -477,6 +535,7 @@ int ff_hevc_part_mode_decode(HEVCContext *s, int log2_cb_size)
     if (decode_bin(s, i++) == 1) { // 01X, 01XX
         if (decode_bin(s, i++) == 1) // 011
             return PART_2NxN;
+        cc->ctx_idx_offset = -1;
         if (decode_bin(s, i++) == 1) // 0101
             return PART_2NxnD;
         return PART_2NxnU; // 0100
@@ -505,7 +564,7 @@ int ff_hevc_prev_intra_luma_pred_flag_decode(HEVCContext *s)
     cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 0;
-    cc->ctx_idx_offset = cc->init_type;
+    cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
     cc->ctx_idx_inc = ctx_idx_inc;
 
     return fl_binarization(s, 1);
@@ -545,7 +604,7 @@ int ff_hevc_intra_chroma_pred_mode_decode(HEVCContext *s)
     cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 1;
-    cc->ctx_idx_offset = 2 * cc->init_type;
+    cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
     cc->ctx_idx_inc = ctx_idx_inc;
 
     if (decode_bin(s, i++) == 0)
@@ -558,6 +617,168 @@ int ff_hevc_intra_chroma_pred_mode_decode(HEVCContext *s)
     return ret;
 }
 
+int ff_hevc_merge_idx_decode(HEVCContext *s)
+{
+    HEVCCabacContext *cc = &s->cc;
+    const int8_t ctx_idx_inc[1] = {0};
+
+    int i = 0;
+
+    cc->elem = MERGE_IDX;
+    cc->state = states + elem_offset[cc->elem];
+
+    cc->max_bin_idx_ctx = 0;
+    cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
+    cc->ctx_idx_inc = ctx_idx_inc;
+
+    for (i = 0; i < s->sh.max_num_merge_cand-1 && decode_bin(s, i); i++)
+        cc->ctx_idx_offset = -1;
+
+    return i;
+}
+
+int ff_hevc_merge_flag_decode(HEVCContext *s)
+{
+    HEVCCabacContext *cc = &s->cc;
+    const int8_t ctx_idx_inc[1] = { 0 };
+
+    cc->elem = MERGE_FLAG;
+    cc->state = states + elem_offset[cc->elem];
+
+    cc->max_bin_idx_ctx = 0;
+    cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
+    cc->ctx_idx_inc = ctx_idx_inc;
+
+    return fl_binarization(s, 1);
+}
+
+int ff_hevc_inter_pred_idc_decode(HEVCContext *s, int max)
+{
+    HEVCCabacContext *cc = &s->cc;
+    const int8_t ctx_idx_inc[2] = { s->ct.depth , 4 };
+
+    int ret = 0;
+    cc->elem = INTER_PRED_IDC;
+    cc->state = states + elem_offset[cc->elem];
+
+    cc->max_bin_idx_ctx = 1;
+    cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
+    cc->ctx_idx_inc = ctx_idx_inc;
+
+    if (s->cu.part_mode == PART_2Nx2N || max != 8) {
+        ret = decode_bin(s, 0) + PRED_L0;
+    }
+    if (ret == 0) {
+        ret = decode_bin(s, 1) + PRED_L0;
+    } else {
+        ret = PRED_BI;
+    }
+
+    return ret;
+}
+int ff_hevc_ref_idx_lx_decode(HEVCContext *s, int c_max)
+{
+    HEVCCabacContext *cc = &s->cc;
+    const int8_t ctx_idx_inc[2] = {0, 1};
+
+    int i = 0;
+
+    cc->elem = REF_IDX_L0;
+    cc->state = states + elem_offset[cc->elem];
+
+    cc->max_bin_idx_ctx = 1;
+    cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
+    cc->ctx_idx_inc = ctx_idx_inc;
+
+    for (i = 0; i < c_max - 1 && decode_bin(s, i); i++)
+        if (i > 0)
+            cc->ctx_idx_offset = -1;
+    return i;
+}
+
+int ff_hevc_mvp_lx_flag_decode(HEVCContext *s)
+{
+    HEVCCabacContext *cc = &s->cc;
+    const int8_t ctx_idx_inc[1] = { 0 };
+
+    cc->elem = MVP_LX_FLAG;
+    cc->state = states + elem_offset[cc->elem];
+
+    cc->max_bin_idx_ctx = 0;
+    cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
+    cc->ctx_idx_inc = ctx_idx_inc;
+
+    return fl_binarization(s, 1);
+}
+
+int ff_hevc_no_residual_syntax_flag_decode(HEVCContext *s)
+{
+    HEVCCabacContext *cc = &s->cc;
+    const int8_t ctx_idx_inc[1] = { 0 };
+
+    cc->elem = NO_RESIDUAL_DATA_FLAG;
+    cc->state = states + elem_offset[cc->elem];
+
+    cc->max_bin_idx_ctx = 0;
+    cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
+    cc->ctx_idx_inc = ctx_idx_inc;
+
+    return fl_binarization(s, 1);
+}
+
+int ff_hevc_abs_mvd_greater0_flag_decode(HEVCContext *s)
+{
+    HEVCCabacContext *cc = &s->cc;
+    const int8_t ctx_idx_inc[1] = { 0 };
+
+    cc->elem = ABS_MVD_GREATER0_FLAG;
+    cc->state = states + elem_offset[cc->elem];
+
+    cc->max_bin_idx_ctx = 0;
+    cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
+    cc->ctx_idx_inc = ctx_idx_inc;
+
+    return fl_binarization(s, 1);
+}
+
+int ff_hevc_abs_mvd_greater1_flag_decode(HEVCContext *s)
+{
+    HEVCCabacContext *cc = &s->cc;
+    const int8_t ctx_idx_inc[1] = { 1 };
+
+    cc->elem = ABS_MVD_GREATER1_FLAG;
+    cc->state = states + elem_offset[cc->elem];
+
+    cc->max_bin_idx_ctx = 0;
+    cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
+    cc->ctx_idx_inc = ctx_idx_inc;
+
+    return fl_binarization(s, 1);
+}
+
+int ff_hevc_abs_mvd_minus2_decode(HEVCContext *s)
+{
+    HEVCCabacContext *cc = &s->cc;
+
+    cc->elem = ABS_MVD_MINUS2;
+
+    cc->ctx_idx_offset = -1;
+
+    return eg_binarization(s, 1);
+}
+
+int ff_hevc_mvd_sign_flag_decode(HEVCContext *s)
+{
+    HEVCCabacContext *cc = &s->cc;
+
+    cc->elem = MVD_SIGN_FLAG;
+
+    cc->ctx_idx_offset = -1;
+
+    return fl_binarization(s, 1);
+}
+
+
 int ff_hevc_split_transform_flag_decode(HEVCContext *s, int log2_trafo_size)
 {
     HEVCCabacContext *cc = &s->cc;
@@ -567,7 +788,7 @@ int ff_hevc_split_transform_flag_decode(HEVCContext *s, int log2_trafo_size)
     cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 0;
-    cc->ctx_idx_offset = 3 * cc->init_type;
+    cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
     cc->ctx_idx_inc = ctx_idx_inc;
 
     return fl_binarization(s, 1);
@@ -582,7 +803,7 @@ int ff_hevc_cbf_cb_cr_decode(HEVCContext *s, int trafo_depth)
     cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 0;
-    cc->ctx_idx_offset = 4 * cc->init_type;
+    cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
     cc->ctx_idx_inc = ctx_idx_inc;
 
     return fl_binarization(s, 1);
@@ -597,7 +818,7 @@ int ff_hevc_cbf_luma_decode(HEVCContext *s, int trafo_depth)
     cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 0;
-    cc->ctx_idx_offset = 2 * cc->init_type;
+    cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
     cc->ctx_idx_inc = ctx_idx_inc;
 
     return fl_binarization(s, 1);
@@ -606,13 +827,13 @@ int ff_hevc_cbf_luma_decode(HEVCContext *s, int trafo_depth)
 int ff_hevc_transform_skip_flag_decode(HEVCContext *s, int c_idx)
 {
     HEVCCabacContext *cc = &s->cc;
-    const int8_t ctx_idx_inc[1] = { 0 };
+    const int8_t ctx_idx_inc[1] = { c_idx ? 1 : 0 };
 
-    cc->elem = c_idx ? TRANSFORM_SKIP_FLAG_1_2 : TRANSFORM_SKIP_FLAG_0;
+    cc->elem = TRANSFORM_SKIP_FLAG;
     cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 0;
-    cc->ctx_idx_offset = cc->init_type + ((c_idx != 0) ? 3 : 0);
+    cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
     cc->ctx_idx_inc = ctx_idx_inc;
 
     return fl_binarization(s, 1);
@@ -641,7 +862,7 @@ int ff_hevc_last_significant_coeff_prefix_decode(HEVCContext *s, int c_idx,
         ctx_idx_inc[i] = (i >> ctx_shift) + ctx_offset;
 
     cc->max_bin_idx_ctx = 8;
-    cc->ctx_idx_offset = 18 * cc->init_type;
+    cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
     cc->ctx_idx_inc = ctx_idx_inc;
 
     return tu_binarization(s, (log2_size << 1 ) - 1);
@@ -673,8 +894,7 @@ int ff_hevc_last_significant_coeff_suffix_decode(HEVCContext *s,
 }
 
 int ff_hevc_significant_coeff_group_flag_decode(HEVCContext *s, int c_idx, int x_cg,
-                                                int y_cg, int log2_trafo_width,
-                                                int log2_trafo_height, int scan_idx)
+                                                int y_cg, int log2_trafo_size, int scan_idx)
 {
     HEVCCabacContext *cc = &s->cc;
     int8_t ctx_idx_inc[1];
@@ -683,23 +903,22 @@ int ff_hevc_significant_coeff_group_flag_decode(HEVCContext *s, int c_idx, int x
     cc->elem = SIGNIFICANT_COEFF_GROUP_FLAG;
     cc->state = states + elem_offset[cc->elem];
 
-    if (x_cg < (1 << (log2_trafo_width - 2)) - 1)
+    if (x_cg < (1 << (log2_trafo_size - 2)) - 1)
         ctx_cg += s->rc.significant_coeff_group_flag[x_cg + 1][y_cg];
-    if (y_cg < (1 << (log2_trafo_height - 2)) - 1)
+    if (y_cg < (1 << (log2_trafo_size - 2)) - 1)
         ctx_cg += s->rc.significant_coeff_group_flag[x_cg][y_cg + 1];
 
-    ctx_idx_inc[0] = FFMIN(ctx_cg, 1) + (c_idx ? 2 : 0);
+    ctx_idx_inc[0] = FFMIN(ctx_cg, 1) + (c_idx>0 ? 2 : 0);
 
     cc->max_bin_idx_ctx = 0;
-    cc->ctx_idx_offset = 4 * cc->init_type;
+    cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
     cc->ctx_idx_inc = ctx_idx_inc;
 
     return fl_binarization(s, 1);
 }
 
 int ff_hevc_significant_coeff_flag_decode(HEVCContext *s, int c_idx, int x_c, int y_c,
-                                          int log2_trafo_width, int log2_trafo_height,
-                                          int scan_idx)
+                                          int log2_trafo_size, int scan_idx)
 {
     HEVCCabacContext *cc = &s->cc;
     int8_t ctx_idx_inc[1];
@@ -715,16 +934,16 @@ int ff_hevc_significant_coeff_flag_decode(HEVCContext *s, int c_idx, int x_c, in
 
     if (x_c + y_c == 0) {
         sig_ctx = 0;
-    } else if (log2_trafo_width == 2 && log2_trafo_height == 2) {
+    } else if (log2_trafo_size == 2) {
         sig_ctx = ctx_idx_map[(y_c << 2) + x_c];
     } else {
         int prev_sig = 0;
         int x_off = x_c - (x_cg << 2);
         int y_off = y_c - (y_cg << 2);
 
-        if (x_c < (1 << log2_trafo_width) - 1)
+        if (x_cg < ((1 << log2_trafo_size) - 1) >> 2)
             prev_sig += s->rc.significant_coeff_group_flag[x_cg + 1][y_cg];
-        if (y_c < (1 << log2_trafo_height) - 1)
+        if (y_cg < ((1 << log2_trafo_size) - 1) >> 2)
             prev_sig += (s->rc.significant_coeff_group_flag[x_cg][y_cg + 1] << 1);
         av_log(s->avctx, AV_LOG_DEBUG, "prev_sig: %d\n", prev_sig);
 
@@ -745,7 +964,7 @@ int ff_hevc_significant_coeff_flag_decode(HEVCContext *s, int c_idx, int x_c, in
         if (c_idx == 0 && (x_cg > 0 || y_cg > 0))
             sig_ctx += 3;
 
-        if (log2_trafo_width == 3 && log2_trafo_height == 3) {
+        if (log2_trafo_size == 3) {
             sig_ctx += (scan_idx == SCAN_DIAG) ? 9 : 15;
         } else {
             sig_ctx += c_idx ? 12 : 21;
@@ -759,7 +978,7 @@ int ff_hevc_significant_coeff_flag_decode(HEVCContext *s, int c_idx, int x_c, in
     }
 
     cc->max_bin_idx_ctx = 0;
-    cc->ctx_idx_offset = 48 * cc->init_type;
+    cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
     cc->ctx_idx_inc = ctx_idx_inc;
 
     return fl_binarization(s, 1);
@@ -794,7 +1013,7 @@ int ff_hevc_coeff_abs_level_greater1_flag_decode(HEVCContext *s, int c_idx,
         ctx_idx_inc[0] += 16;
 
     cc->max_bin_idx_ctx = 0;
-    cc->ctx_idx_offset = 24 * cc->init_type;
+    cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
     cc->ctx_idx_inc = ctx_idx_inc;
 
     last_coeff_abs_level_greater1_flag = fl_binarization(s, 1);
@@ -822,7 +1041,7 @@ int ff_hevc_coeff_abs_level_greater2_flag_decode(HEVCContext *s, int c_idx,
         ctx_idx_inc[0] += 4;
 
     cc->max_bin_idx_ctx = 0;
-    cc->ctx_idx_offset = 6 * cc->init_type;
+    cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
     cc->ctx_idx_inc = ctx_idx_inc;
 
     return fl_binarization(s, 1);

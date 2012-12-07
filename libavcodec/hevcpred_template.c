@@ -157,21 +157,38 @@ static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int
 #undef EXTEND_DOWN
 #undef MIN_TB_ADDR_ZS
 
+    // Filtering process
     if (c_idx == 0 && mode != INTRA_DC && size != 4) {
         int intra_hor_ver_dist_thresh[] = { 7, 1, 0 };
         int min_dist_vert_hor = FFMIN(FFABS((int)mode-26), FFABS((int)mode-10));
         if (min_dist_vert_hor > intra_hor_ver_dist_thresh[log2_size-3]) {
-            filtered_left[2*size-1] = left[2*size-1];
-            filtered_top[2*size-1]  = top[2*size-1];
-            for (i = 2*size-2; i >= 0; i--) {
-                filtered_left[i] = (left[i+1] + 2*left[i] + left[i-1] + 2) >> 2;
+            int thresold = 1 << (s->sps->bit_depth[0] - 5);
+            if (s->sps->sps_strong_intra_smoothing_enable_flag && log2_size == 5 &&
+                FFABS(top[-1] + top[63] - 2 * top[31]) < thresold &&
+                FFABS(left[-1] + left[63] - 2 * left[31]) < thresold) {
+                // We can't just overwrite values in top because it could be a pointer into src
+                filtered_top[-1] = top[-1];
+                filtered_top[63] = top[63];
+                for (i = 0; i < 63; i++) {
+                    filtered_top[i] = ((64 - (i + 1))*top[-1] + (i + 1) * top[63] + 32) >> 6;
+                }
+                for (i = 0; i < 63; i++) {
+                    left[i] = ((64 - (i + 1))*left[-1] + (i + 1) * left[63] + 32) >> 6;
+                }
+                top = filtered_top;
+            } else {
+                filtered_left[2*size-1] = left[2*size-1];
+                filtered_top[2*size-1]  = top[2*size-1];
+                for (i = 2*size-2; i >= 0; i--) {
+                    filtered_left[i] = (left[i+1] + 2*left[i] + left[i-1] + 2) >> 2;
+                }
+                filtered_top[-1] = filtered_left[-1] = (left[0] + 2*left[-1] + top[0] + 2) >> 2;
+                for (i = 2*size-2; i >= 0; i--) {
+                    filtered_top[i] = (top[i+1] + 2*top[i] + top[i-1] + 2) >> 2;
+                }
+                left = filtered_left;
+                top = filtered_top;
             }
-            filtered_top[-1] = filtered_left[-1] = (left[0] + 2*left[-1] + top[0] + 2) >> 2;
-            for (i = 2*size-2; i >= 0; i--) {
-                filtered_top[i] = (top[i+1] + 2*top[i] + top[i-1] + 2) >> 2;
-            }
-            left = filtered_left;
-            top = filtered_top;
         }
     }
 
@@ -225,7 +242,7 @@ static void FUNCC(pred_dc)(uint8_t *_src, const uint8_t *_top, const uint8_t *_l
         for (j = 0; j < size / sizeof(pixel4); j++)
             AV_WN4PA(&POS(j * sizeof(pixel4), i), a);
 
-    if (c_idx == 0) {
+    if (c_idx == 0 && size < 32) {
         POS(0, 0) = (left[0] + 2 * dc  + top[0] + 2) >> 2;
         for (x = 1; x < size; x++)
             POS(x, 0) = (top[x] + 3 * dc + 2) >> 2;
@@ -276,7 +293,7 @@ static void FUNCC(pred_angular)(uint8_t *_src, const uint8_t *_top, const uint8_
                 POS(x, y) = ((32 - fact) * ref[x + idx + 1] + fact * ref[x + idx + 2] + 16) >> 5;
             }
         }
-        if (mode == 26 && c_idx == 0) {
+        if (mode == 26 && c_idx == 0 && size < 32) {
             for (y = 0; y < size; y++)
                 POS(0, y) = CLIP_1(top[0] + ((left[y] - left[-1]) >> 1));
         }
@@ -297,7 +314,7 @@ static void FUNCC(pred_angular)(uint8_t *_src, const uint8_t *_top, const uint8_
                 POS(x, y) = ((32 - fact) * ref[y + idx + 1] + fact * ref[y + idx + 2] + 16) >> 5;
             }
         }
-        if (mode == 10 && c_idx == 0) {
+        if (mode == 10 && c_idx == 0 && size < 32) {
             for (x = 0; x < size; x++)
                 POS(x, 0) = CLIP_1(left[0] + ((top[x] - top[-1]) >> 1));
         }
