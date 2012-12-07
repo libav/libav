@@ -166,12 +166,16 @@ static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int
             if (s->sps->sps_strong_intra_smoothing_enable_flag && log2_size == 5 &&
                 FFABS(top[-1] + top[63] - 2 * top[31]) < thresold &&
                 FFABS(left[-1] + left[63] - 2 * left[31]) < thresold) {
+                // We can't just overwrite values in top because it could be a pointer into src
+                filtered_top[-1] = top[-1];
+                filtered_top[63] = top[63];
                 for (i = 0; i < 63; i++) {
-                    top[i] = top[-1] + (i + 1) * ((top[63] - top[-1] + 32) >> 6);
+                    filtered_top[i] = top[-1] + (i + 1) * ((top[63] - top[-1] + 32) >> 6);
                 }
                 for (i = 0; i < 63; i++) {
                     left[i] = left[-1] + (i + 1) * ((left[63] - left[-1] + 32) >> 6);
                 }
+                top = filtered_top;
             } else {
                 filtered_left[2*size-1] = left[2*size-1];
                 filtered_top[2*size-1]  = top[2*size-1];
