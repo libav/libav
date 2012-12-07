@@ -170,10 +170,10 @@ static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int
                 filtered_top[-1] = top[-1];
                 filtered_top[63] = top[63];
                 for (i = 0; i < 63; i++) {
-                    filtered_top[i] = top[-1] + (i + 1) * ((top[63] - top[-1] + 32) >> 6);
+                    filtered_top[i] = ((64 - (i + 1))*top[-1] + (i + 1) * top[63] + 32) >> 6;
                 }
                 for (i = 0; i < 63; i++) {
-                    left[i] = left[-1] + (i + 1) * ((left[63] - left[-1] + 32) >> 6);
+                    left[i] = ((64 - (i + 1))*left[-1] + (i + 1) * left[63] + 32) >> 6;
                 }
                 top = filtered_top;
             } else {
