@@ -38,6 +38,7 @@
  * Value of the luma sample at position (x, y) in the 2D array tab.
  */
 #define SAMPLE(tab, x, y) ((tab)[(y) * s->sps->pic_width_in_luma_samples + (x)])
+#define SAMPLE_CBF(tab, x, y) ((tab)[((y) & ((1<<log2_trafo_size)-1)) * MAX_CU_SIZE + ((x) & ((1<<log2_trafo_size)-1))])
 
 /**
  * Table 7-3: NAL unit type codes
@@ -72,6 +73,7 @@ typedef struct ShortTermRPS {
 #define MAX_SPS_COUNT 32
 #define MAX_PPS_COUNT 256
 #define MAX_SHORT_TERM_RPS_COUNT 64
+#define MAX_CU_SIZE 128
 
 //TODO: check if this is really the maximum
 #define MAX_TRANSFORM_DEPTH 3
@@ -469,6 +471,21 @@ enum IntraPredMode {
     INTRA_ANGULAR_34
 };
 
+typedef struct Mv {
+    int16_t m_iHor;     ///< horizontal component of motion vector
+    int16_t m_iVer;     ///< vertical component of motion vector
+} Mv;
+
+typedef struct MvField {
+      Mv   acMv;
+      int  RefIdx;
+      int predFlag;
+      int isIntra;
+} MvField;
+
+// MERGE
+#define MRG_MAX_NUM_CANDS     5
+
 typedef struct PredictionUnit {
     uint8_t merge_flag;
 
@@ -481,10 +498,11 @@ typedef struct PredictionUnit {
     uint8_t *top_ipm;
     uint8_t *left_ipm;
     uint8_t *tab_ipm;
+
+    MvField *tab_mvf;
 } PredictionUnit;
 
 typedef struct TransformTree {
-    uint8_t *split_transform_flag[MAX_TRANSFORM_DEPTH];
     uint8_t *cbf_cb[MAX_TRANSFORM_DEPTH];
     uint8_t *cbf_cr[MAX_TRANSFORM_DEPTH];
     uint8_t cbf_luma;
@@ -564,6 +582,7 @@ typedef struct HEVCContext {
     TransformTree tt;
     TransformUnit tu;
     ResidualCoding rc;
+    int poc;
 } HEVCContext;
 
 enum ScanType {
@@ -626,6 +645,51 @@ int ff_hevc_coeff_abs_level_greater1_flag_decode(HEVCContext *s, int c_idx,
 int ff_hevc_coeff_abs_level_greater2_flag_decode(HEVCContext *s, int c_idx,
                                                  int i, int n);
 int ff_hevc_coeff_abs_level_remaining(HEVCContext *s, int n, int base_level);
-int ff_hevc_coeff_sign_flag(HEVCContext *s);
+int ff_hevc_coeff_sign_flag(HEVCContext *s, uint8_t nb);
 
+static const char* SyntaxElementName[] = {
+	"SAO_MERGE_FLAG",
+    "SAO_TYPE_IDX",
+    "SAO_EO",//"SAO_EO_CLASS",
+    "SAO_BAND_POSITION",
+    "SAO_OFFSET_ABS",
+    "SAO_OFFSET_SIGN",
+    "END_OF_SLICE_FLAG",
+    "SPLIT_CODING_UNIT_FLAG",
+    "CU_TRANSQUANT_BYPASS_FLAG",
+    "SKIP_FLAG",
+    "CU_QP_DELTA",
+    "PRED_MODE_FLAG",
+    "PART_MODE",
+    "PCM_FLAG",
+    "PREV_INTRA_LUMA_PRED_FLAG",
+    "MPM_IDX",
+    "REM_INTRA_LUMA_PRED_MODE",
+    "INTRA_CHROMA_PRED_MODE",
+    "MERGE_FLAG",
+    "MERGE_IDX",
+    "INTER_PRED_IDC",
+    "REF_IDX_L0",
+    "REF_IDX_L1",
+    "ABS_MVD_GREATER0_FLAG",
+    "ABS_MVD_GREATER1_FLAG",
+    "ABS_MVD_MINUS2",
+    "MVD_SIGN_FLAG",
+    "MVP_LX_FLAG",
+    "NO_RESIDUAL_SYNTAX_FLAG", //"NO_RESIDUAL_DATA_FLAG",
+    "SPLIT_TRANSFORM_FLAG",
+    "CBF_LUMA",
+    "CBF_CB_CR",
+    "TRANSFORM_SKIP_FLAG",
+    "LAST_SIGNIFICANT_COEFF_X_PREFIX",
+    "LAST_SIGNIFICANT_COEFF_Y_PREFIX",
+    "LAST_SIGNIFICANT_COEFF_XY_SUFFIX", //"LAST_SIGNIFICANT_COEFF_X_SUFFIX",
+    "LAST_SIGNIFICANT_COEFF_XY_SUFFIX", //"LAST_SIGNIFICANT_COEFF_Y_SUFFIX",
+    "CODED_SUB_BLOCK_FLAG", //"SIGNIFICANT_COEFF_GROUP_FLAG",
+    "SIGNIFICANT_COEFF_FLAG",
+    "COEFF_ABS_LEVEL_GREATER1_FLAG",
+    "COEFF_ABS_LEVEL_GREATER2_FLAG",
+    "COEFF_ABS_LEVEL", //"COEFF_ABS_LEVEL_REMAINING",
+    "COEFF_SIGN_FLAG"
+};
 #endif // AVCODEC_HEVC_H

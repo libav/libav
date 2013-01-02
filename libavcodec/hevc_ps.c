@@ -224,7 +224,9 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
     }
 
     sps->chroma_format_idc = get_ue_golomb(gb);
-    
+    if (sps->chroma_format_idc != 1) {
+    	av_log(s->avctx, AV_LOG_ERROR, " chroma_format_idc != 1 : error SEI\n");
+    }
     if (sps->chroma_format_idc == 3) {
         sps->separate_colour_plane_flag = get_bits1(gb);
     }
@@ -304,10 +306,8 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
 
     sps->log2_ctb_size = sps->log2_min_coding_block_size
                          + sps->log2_diff_max_min_coding_block_size;
-    sps->pic_width_in_ctbs = ROUNDED_DIV(sps->pic_width_in_luma_samples,
-                                         (1 << sps->log2_ctb_size));
-    sps->pic_height_in_ctbs = ROUNDED_DIV(sps->pic_height_in_luma_samples,
-                                          (1 << sps->log2_ctb_size));
+    sps->pic_width_in_ctbs  = ( sps->pic_width_in_luma_samples  + (1 << sps->log2_ctb_size)-1 ) >> sps->log2_ctb_size;
+    sps->pic_height_in_ctbs = ( sps->pic_height_in_luma_samples + (1 << sps->log2_ctb_size)-1 ) >> sps->log2_ctb_size;
     sps->pic_width_in_min_cbs = sps->pic_width_in_luma_samples >>
                                 sps->log2_min_coding_block_size;
     sps->pic_height_in_min_cbs = sps->pic_height_in_luma_samples >>
@@ -578,6 +578,27 @@ err:
     return -1;
 }
 
+static void decode_nal_sei_decoded_picture_hash(HEVCContext *s, int payload_size)
+{
+	int cIdx, i;
+	int hash_type;
+	int picture_md5;
+	int picture_crc;
+	int picture_checksum;
+	GetBitContext *gb = &s->gb;
+	hash_type = get_bits(gb, 8);
+	for( cIdx = 0; cIdx < 3/*((s->sps->chroma_format_idc == 0) ? 1 : 3)*/; cIdx++ ) {
+		if ( hash_type == 0 ) {
+			for( i = 0; i < 16; i++) {
+				picture_md5 = get_bits(gb, 8);
+			}
+		} else if( hash_type == 1 ) {
+			picture_crc = get_bits(gb, 16);
+		} else if( hash_type == 2 ) {
+			picture_checksum = get_bits(gb, 32);
+		}
+	}
+}
 static int decode_nal_sei_message(HEVCContext *s)
 {
     GetBitContext *gb = &s->gb;
@@ -587,13 +608,18 @@ static int decode_nal_sei_message(HEVCContext *s)
     int byte = 0xFF;
     av_log(s->avctx, AV_LOG_DEBUG, "Decoding SEI\n");
 
-    while (byte == 0xFF)
-        payload_type += (byte = get_bits(gb, 8));
-
+    while (byte == 0xFF) {
+    	byte = get_bits(gb, 8);
+        payload_type += byte;
+    }
     byte = 0xFF;
-    while (byte == 0xFF)
-        payload_size += (byte = get_bits(gb, 8));
-
+    while (byte == 0xFF) {
+       	byte = get_bits(gb, 8);
+        payload_size += byte;
+    }
+    if (payload_type == 256)
+    	decode_nal_sei_decoded_picture_hash(s, payload_size);
+    else
     skip_bits(gb, 8*payload_size);
     return 0;
 }
