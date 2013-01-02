@@ -166,7 +166,7 @@ static int decode_bin(HEVCContext *s, int bin_idx)
     int ctx_idx, mps, pstate, lpsrange, bin_val;
     uint8_t *state;
 
-    av_dlog(s->avctx, AV_LOG_DEBUG, "cc->elem: %d, ", cc->elem);
+    av_dlog(s->avctx, "cc->elem: %d, ", cc->elem);
 
     // Bypass decoding
     if (cc->ctx_idx_offset == -1) {
@@ -178,7 +178,7 @@ static int decode_bin(HEVCContext *s, int bin_idx)
         } else {
             bin_val = 0;
         }
-        av_dlog(s->avctx, AV_LOG_DEBUG, "bypass bin_val: %d\n", bin_val);
+        av_dlog(s->avctx, "bypass bin_val: %d\n", bin_val);
         return bin_val;
     }
 
@@ -191,10 +191,10 @@ static int decode_bin(HEVCContext *s, int bin_idx)
     lpsrange = ff_lps_range[pstate][(cc->range >> 6) & 3];
     bin_val = 0;
 
-    av_dlog(s->avctx, AV_LOG_DEBUG,
+    av_dlog(s->avctx,
            "ctx_idx: %d, %d#pstate: %d, mps: %d\n", ctx_idx, cnt++, pstate, mps);
 
-    av_dlog(s->avctx, AV_LOG_DEBUG,
+    av_dlog(s->avctx,
            "old cc->range: %d, cc->offset: %d, lpsrange: %d\n", cc->range, cc->offset, lpsrange);
 
     cc->range -= lpsrange;
@@ -214,7 +214,7 @@ static int decode_bin(HEVCContext *s, int bin_idx)
 
     renormalization(s);
 
-    av_dlog(s->avctx, AV_LOG_DEBUG, "cc->range: %d, cc->offset: %d, bin_val: %d\n",
+    av_dlog(s->avctx, "cc->range: %d, cc->offset: %d, bin_val: %d\n",
            cc->range, cc->offset, bin_val);
     return bin_val;
 }
@@ -231,7 +231,7 @@ static int bypass_decode_bin(HEVCContext *s)
         bin_val = 0;
         renormalization(s);
     }
-    av_dlog(s->avctx, AV_LOG_DEBUG, "cc->range: %d, cc->offset: %d, bin_val: %d\n",
+    av_dlog(s->avctx, "cc->range: %d, cc->offset: %d, bin_val: %d\n",
            cc->range, cc->offset, bin_val);
     return bin_val;
 }
@@ -310,7 +310,7 @@ void ff_hevc_cabac_init(HEVCContext *s)
 
     cc->range = 510;
     cc->offset = get_bits(gb, 9);
-    av_dlog(s->avctx, AV_LOG_DEBUG, "cc->offset: %d\n", cc->offset);
+    av_dlog(s->avctx, "cc->offset: %d\n", cc->offset);
 
     cc->init_type = 2 - s->sh.slice_type;
     if (s->sh.cabac_init_flag && s->sh.slice_type != I_SLICE)
@@ -476,7 +476,7 @@ int ff_hevc_split_coding_unit_flag_decode(HEVCContext *s, int ct_depth, int x0, 
     cc->elem = SPLIT_CODING_UNIT_FLAG;
     cc->state = states + elem_offset[cc->elem];
 
-    av_dlog(s->avctx, AV_LOG_DEBUG, "depth cur: %d, left: %d, top: %d\n",
+    av_dlog(s->avctx, "depth cur: %d, left: %d, top: %d\n",
            ct_depth, depth_left, depth_top);
 
     ctx_idx_inc[0] += (depth_left > ct_depth);
@@ -928,7 +928,7 @@ int ff_hevc_significant_coeff_flag_decode(HEVCContext *s, int c_idx, int x_c, in
             prev_sig += s->rc.significant_coeff_group_flag[x_cg + 1][y_cg];
         if (y_cg < ((1 << log2_trafo_size) - 1)>>2)
             prev_sig += (s->rc.significant_coeff_group_flag[x_cg][y_cg + 1] << 1);
-        av_dlog(s->avctx, AV_LOG_DEBUG, "prev_sig: %d\n", prev_sig);
+        av_dlog(s->avctx, "prev_sig: %d\n", prev_sig);
 
         switch (prev_sig) {
         case 0:
@@ -1045,7 +1045,7 @@ int ff_hevc_coeff_abs_level_remaining(HEVCContext *s, int first_elem, int base_l
     if (first_elem) {
         c_rice_param = 0;
         last_coeff_abs_level_remaining = 0;
-        av_dlog(s->avctx, AV_LOG_DEBUG,
+        av_dlog(s->avctx,
                "c_rice_param reset to 0\n");
     }
 
@@ -1061,21 +1061,21 @@ int ff_hevc_coeff_abs_level_remaining(HEVCContext *s, int first_elem, int base_l
                                           << c_rice_param) + suffix;
     }
 
-    av_dlog(s->avctx, AV_LOG_DEBUG,
+    av_dlog(s->avctx,
            "coeff_abs_level_remaining c_rice_param: %d\n", c_rice_param);
-    av_dlog(s->avctx, AV_LOG_DEBUG,
+    av_dlog(s->avctx,
            "coeff_abs_level_remaining base_level: %d, prefix: %d, suffix: %d\n",
            base_level, prefix, suffix);
-    av_dlog(s->avctx, AV_LOG_DEBUG,
+    av_dlog(s->avctx,
            "coeff_abs_level_remaining: %d\n",
            last_coeff_abs_level_remaining);
 
-    av_dlog(s->avctx, AV_LOG_DEBUG, "last_coeff_(%d) > %d\n", base_level + last_coeff_abs_level_remaining, 3*(1<<(c_rice_param)));
+    av_dlog(s->avctx, "last_coeff_(%d) > %d\n", base_level + last_coeff_abs_level_remaining, 3*(1<<(c_rice_param)));
 
     c_rice_param = FFMIN(c_rice_param +
                          ((base_level + last_coeff_abs_level_remaining) >
                           (3 * (1 << c_rice_param))), 4);
-    av_dlog(s->avctx, AV_LOG_DEBUG,
+    av_dlog(s->avctx,
            "new c_rice_param: %d\n", c_rice_param);
 
     return last_coeff_abs_level_remaining;
