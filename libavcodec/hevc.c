@@ -1012,64 +1012,92 @@ static void derive_spatial_merge_candidates(HEVCContext *s, int x0, int y0, int 
     int y_pu = y0 >> s->sps->log2_min_pu_size;
     int pic_width_in_min_pu  = s->sps->pic_width_in_min_cbs * 4;
     int pic_height_in_min_pu = s->sps->pic_height_in_min_cbs * 4;
+
+    int check_B1;
+    int xB1, yB1;
+    int isAvailableB1;
+
+    int check_B0;
+    int xB0, yB0;
+    int isAvailableB0;
+
+    int check_A0;
+    int xA0, yA0;
+    int isAvailableA0;
+    
+    int check_B2;
+    int xB2, yB2;
+    int isAvailableB2;
+
+    int  availableFlagCol = 0;
+    struct MvField temporal_cand;
+    int mergearray_index = 0;
+
+    struct MvField zerovector;
+    int numRefIdx;
+    int zeroIdx = 0;
+    
+    int numMergeCand, numOrigMergeCand, numInputMergeCand, sumcandidates;
+
+    
     // struct MvField A1 = s->pu.tab_mvf[(x_pu-1)*pic_width_in_min_pu + y_pu]
     int check = (x_pu > 0)?s->pu.tab_mvf[(x_pu-1)*pic_width_in_min_pu + y_pu].isIntra:0;
     if((x_pu > 0) && !(s->pu.tab_mvf[(x_pu-1)*pic_width_in_min_pu + y_pu].isIntra) && check_A1) {
-        isAvailableA1 =1;
+        isAvailableA1 = 1;
+    } else {
+        isAvailableA1 = 0;
     }
-    else {
-        isAvailableA1 =0;
-    }
+    
     if((singleMCLFlag == 0) &&  (partIdx ==1) && !(isDiffMER(s,xA1,yA1, x0, y0)) && ((s->cu.part_mode == PART_Nx2N) || (s->cu.part_mode == PART_nLx2N) || (s->cu.part_mode == PART_nRx2N))) {
-        isAvailableA1 =0;
+        isAvailableA1 = 0;
     }
+    
     if (isAvailableA1) {
-        availableA1Flag =1;
+        availableA1Flag = 1;
         spatialCMVS[0] = s->pu.tab_mvf[(x_pu-1)*pic_width_in_min_pu + y_pu];
-    }
-    else {
+    } else {
         availableA1Flag = 0;
         spatialCMVS[0].RefIdx = -1;
         spatialCMVS[0].acMv.m_iHor = 0;
         spatialCMVS[0].acMv.m_iVer = 0;
-        spatialCMVS[0].predFlag =0;
-        spatialCMVS[0].isIntra =0;
+        spatialCMVS[0].predFlag = 0;
+        spatialCMVS[0].isIntra = 0;
     }
 
     // above spatial merge candidate
 
-    int xB1 = x0+nPbW-1;
-    int yB1 = y0-1;
-    int isAvailableB1 =0;
-    int check_B1 = check_prediction_block_available (s,log2_cb_size, x0, y0, nPbW, nPbH, xB1, yB1, partIdx);
+    xB1 = x0+nPbW-1;
+    yB1 = y0-1;
+    isAvailableB1 =0;
+    check_B1 = check_prediction_block_available (s,log2_cb_size, x0, y0, nPbW, nPbH, xB1, yB1, partIdx);
 
     if((y_pu > 0) && !(s->pu.tab_mvf[x_pu*pic_width_in_min_pu + y_pu-1].isIntra) && check_B1) {
-        isAvailableB1 =1;
+        isAvailableB1 = 1;
+    } else {
+        isAvailableB1 = 0;
     }
-    else {
-        isAvailableB1 =0;
-    }
+    
     if((singleMCLFlag == 0) &&  (partIdx ==1) && !(isDiffMER(s,xB1,yB1, x0, y0)) && ((s->cu.part_mode == PART_2NxN) || (s->cu.part_mode == PART_2NxnU) || (s->cu.part_mode == PART_2NxnD))) {
         isAvailableB1 =0;
     }
+    
     if (isAvailableB1 && !(compareMVrefidx(s->pu.tab_mvf[x_pu*pic_width_in_min_pu + y_pu-1], spatialCMVS[0]))) {
-        availableB1Flag =1;
+        availableB1Flag = 1;
         spatialCMVS[1] = s->pu.tab_mvf[x_pu*pic_width_in_min_pu + y_pu-1];
-    }
-    else {
+    } else {
         availableB1Flag = 0;
         spatialCMVS[1].RefIdx = -1;
         spatialCMVS[1].acMv.m_iHor = 0;
         spatialCMVS[1].acMv.m_iVer = 0;
-        spatialCMVS[1].predFlag =0;
-        spatialCMVS[1].isIntra =0;
+        spatialCMVS[1].predFlag = 0;
+        spatialCMVS[1].isIntra = 0;
     }
 
     // above right spatial merge candidate
-    int xB0 = x0+nPbW;
-    int yB0 = y0-1;
-    int isAvailableB0 =0;
-    int check_B0 = check_prediction_block_available (s,log2_cb_size, x0, y0, nPbW, nPbH, xB0, yB0, partIdx);
+    xB0 = x0+nPbW;
+    yB0 = y0-1;
+    isAvailableB0 = 0;
+    check_B0 = check_prediction_block_available (s,log2_cb_size, x0, y0, nPbW, nPbH, xB0, yB0, partIdx);
 
     if((y_pu > 0) && !(s->pu.tab_mvf[(x_pu+1)*pic_width_in_min_pu + y_pu-1].isIntra) && check_B0) {
         isAvailableB0 =1;
@@ -1094,11 +1122,10 @@ static void derive_spatial_merge_candidates(HEVCContext *s, int x0, int y0, int 
     }
 
     // left bottom spatial merge candidate
-
-    int xA0 = x0-1;
-    int yA0 = y0+nPbH;
-    int isAvailableA0 =0;
-    int check_A0 = check_prediction_block_available (s,log2_cb_size, x0, y0, nPbW, nPbH, xA0, yA0, partIdx);
+    xA0 = x0-1;
+    yA0 = y0+nPbH;
+    isAvailableA0 = 0;
+    check_A0 = check_prediction_block_available (s,log2_cb_size, x0, y0, nPbW, nPbH, xA0, yA0, partIdx);
 
     if((x_pu > 0) && !(s->pu.tab_mvf[(x_pu-1)*pic_width_in_min_pu + y_pu+1].isIntra) && check_A0) {
         isAvailableA0 =1;
@@ -1110,7 +1137,7 @@ static void derive_spatial_merge_candidates(HEVCContext *s, int x0, int y0, int 
         isAvailableA0 =0;
     }
     if (isAvailableA0 && !(compareMVrefidx(s->pu.tab_mvf[(x_pu-1)*pic_width_in_min_pu + y_pu+1], spatialCMVS[0]))) {
-        availableA0Flag =1;
+        availableA0Flag = 1;
         spatialCMVS[3] = s->pu.tab_mvf[(x_pu-1)*pic_width_in_min_pu + y_pu+1];
     }
     else {
@@ -1118,15 +1145,15 @@ static void derive_spatial_merge_candidates(HEVCContext *s, int x0, int y0, int 
         spatialCMVS[3].RefIdx = -1;
         spatialCMVS[3].acMv.m_iHor = 0;
         spatialCMVS[3].acMv.m_iVer = 0;
-        spatialCMVS[3].predFlag =0;
-        spatialCMVS[3].isIntra =0;
+        spatialCMVS[3].predFlag = 0;
+        spatialCMVS[3].isIntra = 0;
     }
 
     // above left spatial merge candidate
-    int xB2 = x0-1;
-    int yB2 = y0-1;
-    int isAvailableB2 =0;
-    int check_B2 = check_prediction_block_available (s,log2_cb_size, x0, y0, nPbW, nPbH, xB2, yB2, partIdx);
+    xB2 = x0-1;
+    yB2 = y0-1;
+    isAvailableB2 = 0;
+    check_B2 = check_prediction_block_available (s,log2_cb_size, x0, y0, nPbW, nPbH, xB2, yB2, partIdx);
 
     if((x_pu > 0) && (y_pu > 0) && !(s->pu.tab_mvf[(x_pu-1)*pic_width_in_min_pu + y_pu-1].isIntra) && check_B2) {
         isAvailableB2 =1;
@@ -1137,7 +1164,8 @@ static void derive_spatial_merge_candidates(HEVCContext *s, int x0, int y0, int 
     if(!(isDiffMER(s,xB2,yB2, x0, y0))) {
         isAvailableB2 =0;
     }
-    int sumcandidates = availableA1Flag + availableB1Flag + availableB0Flag + availableA0Flag;
+    
+    sumcandidates = availableA1Flag + availableB1Flag + availableB0Flag + availableA0Flag;
     if (isAvailableB2 && !(compareMVrefidx(s->pu.tab_mvf[(x_pu-1)*pic_width_in_min_pu + y_pu-1], spatialCMVS[0])) &&
             !(compareMVrefidx(s->pu.tab_mvf[(x_pu-1)*pic_width_in_min_pu + y_pu-1], spatialCMVS[1])) && sumcandidates!=4) {
         availableB2Flag =1;
@@ -1152,11 +1180,7 @@ static void derive_spatial_merge_candidates(HEVCContext *s, int x0, int y0, int 
         spatialCMVS[4].isIntra =0;
     }
 
-    /*TODO temporal motion vector candidate */
-    int  availableFlagCol =0;
-    struct MvField temporal_cand;
-    int mergearray_index=0;
-
+    //TODO : temporal motion vector candidate
     if(availableA1Flag) {
         mergecandlist[mergearray_index] = spatialCMVS[0];
         mergearray_index++;
@@ -1180,28 +1204,24 @@ static void derive_spatial_merge_candidates(HEVCContext *s, int x0, int y0, int 
     if(availableFlagCol) {
         mergecandlist[mergearray_index] = temporal_cand;
         mergearray_index++;
-}
+    }
+    numMergeCand = mergearray_index;
+    numOrigMergeCand = mergearray_index;
 
-    int numMergeCand = mergearray_index;
-    int numOrigMergeCand = mergearray_index;
-
-    /*TODO derive combined bi-predictive merge candidates  (applies for B slices) */
+    // TODO: derive combined bi-predictive merge candidates  (applies for B slices)
 
 
 
     /*
      * append Zero motion vector candidates
      */
-    struct MvField zerovector;
-    int numRefIdx;
     if(s->sh.slice_type == P_SLICE) {
         numRefIdx = s->sh.num_ref_idx_l0_active;
     }
     else if(s->sh.slice_type == B_SLICE) {
         numRefIdx = s->sh.num_ref_idx_l0_active > s->sh.num_ref_idx_l1_active ? s->sh.num_ref_idx_l1_active : s->sh.num_ref_idx_l0_active;
     }
-    int zeroIdx =0;
-    int numInputMergeCand = numMergeCand;
+    numInputMergeCand = numMergeCand;
     while(numMergeCand != MRG_MAX_NUM_CANDS) {
         if(s->sh.slice_type == P_SLICE) {
             zerovector.RefIdx = (zeroIdx < numRefIdx)?zeroIdx:0;
@@ -1235,6 +1255,9 @@ static void luma_mv_merge_mode(HEVCContext *s, int x0, int y0, int nPbW, int nPb
     int size_in_pus = pb_size >> s->sps->log2_min_pu_size;
     int pic_width_in_min_pu = s->sps->pic_width_in_min_cbs * 4;
     int i,j;
+    struct MvField mergecandlist[MRG_MAX_NUM_CANDS];
+    struct MvField currentMVfield = mergecandlist[merge_idx];
+    int x_pu, y_pu;
 
 	if((s->pps->log2_parallel_merge_level -2 >0) && (nCS ==8)) {
 		singleMCLFlag = 1;
@@ -1246,22 +1269,20 @@ static void luma_mv_merge_mode(HEVCContext *s, int x0, int y0, int nPbW, int nPb
 		nPbW = nCS;
 		nPbH = nCS;
 	}
-    struct MvField mergecandlist[MRG_MAX_NUM_CANDS];
     derive_spatial_merge_candidates(s,x0, y0,nPbW, nPbH,log2_cb_size,singleMCLFlag, partIdx, mergecandlist );
-    struct MvField currentMVfield = mergecandlist[merge_idx];
 
-    printf("val of mergeindex = %d and MVfield are %d %d \n ",merge_idx, currentMVfield.acMv.m_iHor, currentMVfield.acMv.m_iVer);
+    av_dlog("val of mergeindex = %d and MVfield are %d %d \n ",merge_idx, currentMVfield.acMv.m_iHor, currentMVfield.acMv.m_iVer);
     /*
      * currentMVfiled contains the motionvectors for the current PU
      */
     /* TODO write the mvectors into the tab_mvf table */
-    int x_pu = x0 >> s->sps->log2_min_pu_size;
-    int y_pu = y0 >> s->sps->log2_min_pu_size;
+    x_pu = x0 >> s->sps->log2_min_pu_size;
+    y_pu = y0 >> s->sps->log2_min_pu_size;
     for(i = 0; i <size_in_pus; i++) {
            for(j = 0; j <size_in_pus; j++) {
                s->pu.tab_mvf[(x_pu+i)*pic_width_in_min_pu + y_pu+j] = currentMVfield;
-}
-       }
+           }
+    }
 }
 
 static void hls_prediction_unit(HEVCContext *s, int x0, int y0, int nPbW, int nPbH, int log2_cb_size, int partIdx)
