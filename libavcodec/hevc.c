@@ -188,10 +188,12 @@ static int hls_slice_header(HEVCContext *s)
     }
 
     if (!s->pps->dependent_slice_segments_enabled_flag) {
+        for(i= 0; i < s->pps->num_extra_slice_header_bits; i++)
+            get_bits1(gb); // slice_reserved_undetermined_flag[]
+        sh->slice_type = get_ue_golomb(gb);
         if (s->pps->output_flag_present_flag)
             sh->pic_output_flag = get_bits1(gb);
 
-        sh->slice_type = get_ue_golomb(gb);
         if (s->sps->separate_colour_plane_flag == 1)
             sh->colour_plane_id = get_bits(gb, 2);
 
@@ -203,7 +205,14 @@ static int hls_slice_header(HEVCContext *s)
                 av_log(s->avctx, AV_LOG_ERROR, "TODO: !short_term_ref_pic_set_sps_flag\n");
                 return -1;
             } else {
-                int short_term_ref_pic_set_idx = get_ue_golomb(gb);
+                int numbits = 0;
+                int short_term_ref_pic_set_idx;
+                while ((1 << numbits) < s->sps->num_short_term_ref_pic_sets)
+                    numbits++;
+                if (numbits > 0)
+                    short_term_ref_pic_set_idx = get_bits(gb, numbits);
+                else
+                    short_term_ref_pic_set_idx = 0;
             }
             if (s->sps->long_term_ref_pics_present_flag) {
                 av_log(s->avctx, AV_LOG_ERROR, "TODO: long_term_ref_pics_present_flag\n");
@@ -234,7 +243,7 @@ static int hls_slice_header(HEVCContext *s)
                 if (sh->slice_type == B_SLICE)
                     sh->num_ref_idx_l1_active = get_ue_golomb(gb) + 1;
             }
-            if (s->sps->lists_modification_present_flag) {
+            if (s->pps->lists_modification_present_flag) {
                 av_log(s->avctx, AV_LOG_ERROR, "TODO: ref_pic_list_modification() \n");
                 return -1;
             }

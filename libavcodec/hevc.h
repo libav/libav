@@ -101,7 +101,7 @@ typedef struct VPS {
     int vps_max_sub_layers; ///< vps_max_temporal_layers_minus1 + 1
 
     PTL ptl;
-
+    int vps_sub_layer_ordering_info_present_flag;
     int vps_max_dec_pic_buffering[MAX_SUB_LAYERS];
     int vps_num_reorder_pics[MAX_SUB_LAYERS];
     int vps_max_latency_increase[MAX_SUB_LAYERS];
@@ -147,7 +147,7 @@ typedef struct SPS {
     } pcm;
 
     int log2_max_poc_lsb; ///< log2_max_pic_order_cnt_lsb_minus4 + 4
-
+    uint8_t sps_sub_layer_ordering_info_present_flag;
     struct {
         int max_dec_pic_buffering;
         int num_reorder_pics;
@@ -155,7 +155,6 @@ typedef struct SPS {
     } temporal_layer[MAX_SUB_LAYERS];
 
     uint8_t restricted_ref_pic_lists_flag;
-    uint8_t lists_modification_present_flag;
 
     int log2_min_coding_block_size; ///< log2_min_coding_block_size_minus3 + 3
     int log2_diff_max_min_coding_block_size;
@@ -249,7 +248,9 @@ typedef struct PPS {
 
     int pps_scaling_list_data_present_flag;
 
+    uint8_t lists_modification_present_flag;
     int log2_parallel_merge_level; ///< log2_parallel_merge_level_minus2 + 2
+    int num_extra_slice_header_bits;
     uint8_t slice_header_extension_present_flag;
 
     uint8_t pps_extension_flag;
