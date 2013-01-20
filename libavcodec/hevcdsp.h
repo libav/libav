@@ -41,6 +41,12 @@ typedef struct HEVCDSPContext {
                             int sao_eo_class, int at_top_border, int at_bottom_border,
                             int at_left_border, int at_right_border,
                             int width, int height, int bit_depth);
+
+    void (*put_hevc_qpel[4][4])(uint8_t *dst, ptrdiff_t dststride, uint8_t *src, ptrdiff_t srcstride,
+                                int width, int height);
+
+    void (*put_hevc_epel[2][2])(uint8_t *dst, ptrdiff_t dststride, uint8_t *src, ptrdiff_t srcstride,
+                             int width, int height, int mx, int my);
 } HEVCDSPContext;
 
 void ff_hevc_dsp_init(HEVCDSPContext *hpc, int bit_depth);

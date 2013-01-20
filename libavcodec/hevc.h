@@ -24,6 +24,7 @@
 #define AVCODEC_HEVC_H
 
 #include "avcodec.h"
+#include "dsputil.h"
 #include "get_bits.h"
 #include "hevcpred.h"
 #include "hevcdsp.h"
@@ -79,6 +80,7 @@ typedef struct ShortTermRPS {
 #define MAX_TRANSFORM_DEPTH 3
 
 #define MAX_TB_SIZE 32
+#define MAX_PB_SIZE 64
 #define MAX_CTB_SIZE 64
 
 typedef struct PTL {
@@ -557,6 +559,7 @@ typedef struct HEVCContext {
 
     HEVCPredContext *hpc[3];
     HEVCDSPContext *hevcdsp[3];
+    DSPContext dsp;
 
     GetBitContext gb;
     HEVCCabacContext cc;
@@ -583,6 +586,8 @@ typedef struct HEVCContext {
     int ctb_addr_ts; ///< CtbAddrTS
 
     uint8_t *split_coding_unit_flag;
+
+    uint8_t *edge_emu_buffer;
 
     CodingTree ct;
     CodingUnit cu;
