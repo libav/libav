@@ -24,6 +24,7 @@
 #define AVCODEC_HEVC_H
 
 #include "avcodec.h"
+#include "dsputil.h"
 #include "get_bits.h"
 #include "hevcpred.h"
 #include "hevcdsp.h"
@@ -79,6 +80,8 @@ typedef struct ShortTermRPS {
 #define MAX_TRANSFORM_DEPTH 3
 
 #define MAX_TB_SIZE 32
+#define MAX_PB_SIZE 64
+#define MAX_CTB_SIZE 64
 
 typedef struct PTL {
     int general_profile_space;
@@ -86,10 +89,10 @@ typedef struct PTL {
     int general_profile_idc;
     int general_profile_compatibility_flag[32];
     int general_level_idc;
-    
+
     uint8_t sub_layer_profile_present_flag[MAX_SUB_LAYERS];
     uint8_t sub_layer_level_present_flag[MAX_SUB_LAYERS];
-    
+
     int sub_layer_profile_space[MAX_SUB_LAYERS];
     uint8_t sub_layer_tier_flag[MAX_SUB_LAYERS];
     int sub_layer_profile_idc[MAX_SUB_LAYERS];
@@ -98,27 +101,25 @@ typedef struct PTL {
 } PTL;
 
 typedef struct VPS {
-
     uint8_t vps_temporal_id_nesting_flag;
     int vps_max_sub_layers; ///< vps_max_temporal_layers_minus1 + 1
-    
+
     PTL ptl;
-    
+    int vps_sub_layer_ordering_info_present_flag;
     int vps_max_dec_pic_buffering[MAX_SUB_LAYERS];
     int vps_num_reorder_pics[MAX_SUB_LAYERS];
     int vps_max_latency_increase[MAX_SUB_LAYERS];
-    
+
     int vps_num_hrd_parameters;
 } VPS;
 
 typedef struct SPS {
-
     int vps_id;
 
     int sps_max_sub_layers; ///< sps_max_sub_layers_minus1 + 1
-    
+
     PTL ptl;
-    
+
     int chroma_format_idc;
     uint8_t separate_colour_plane_flag;
 
@@ -150,7 +151,7 @@ typedef struct SPS {
     } pcm;
 
     int log2_max_poc_lsb; ///< log2_max_pic_order_cnt_lsb_minus4 + 4
-
+    uint8_t sps_sub_layer_ordering_info_present_flag;
     struct {
         int max_dec_pic_buffering;
         int num_reorder_pics;
@@ -158,7 +159,6 @@ typedef struct SPS {
     } temporal_layer[MAX_SUB_LAYERS];
 
     uint8_t restricted_ref_pic_lists_flag;
-    uint8_t lists_modification_present_flag;
 
     int log2_min_coding_block_size; ///< log2_min_coding_block_size_minus3 + 3
     int log2_diff_max_min_coding_block_size;
@@ -236,6 +236,7 @@ typedef struct PPS {
     uint8_t dependent_slice_segments_enabled_flag;
     uint8_t tiles_enabled_flag;
     uint8_t entropy_coding_sync_enabled_flag;
+
     int num_tile_columns; ///< num_tile_columns_minus1 + 1
     int num_tile_rows; ///< num_tile_rows_minus1 + 1
     uint8_t uniform_spacing_flag;
@@ -251,7 +252,9 @@ typedef struct PPS {
 
     int pps_scaling_list_data_present_flag;
 
+    uint8_t lists_modification_present_flag;
     int log2_parallel_merge_level; ///< log2_parallel_merge_level_minus2 + 2
+    int num_extra_slice_header_bits;
     uint8_t slice_header_extension_present_flag;
 
     uint8_t pps_extension_flag;
@@ -405,9 +408,9 @@ enum PredMode {
 };
 
 enum InterPredIdc {
-	Pred_L0 = 0,
-	Pred_L1,
-	Pred_BI
+    PRED_L0 = 0,
+    PRED_L1,
+    PRED_BI
 };
 
 typedef struct CodingTree {
@@ -497,7 +500,6 @@ typedef struct PredictionUnit {
 
     uint8_t *top_ipm;
     uint8_t *left_ipm;
-    uint8_t *tab_ipm;
 
     MvField *tab_mvf;
 } PredictionUnit;
@@ -529,6 +531,13 @@ enum SAOType {
     SAO_EDGE
 };
 
+enum SAOEOClass {
+    SAO_EO_HORIZ = 0,
+    SAO_EO_VERT,
+    SAO_EO_135D,
+    SAO_EO_45D
+};
+
 typedef struct SAOParams {
     uint8_t type_idx[3]; ///< sao_type_idx
 
@@ -546,9 +555,11 @@ typedef struct SAOParams {
 typedef struct HEVCContext {
     AVCodecContext *avctx;
     AVFrame frame;
+    AVFrame sao_frame;
 
     HEVCPredContext *hpc[3];
     HEVCDSPContext *hevcdsp[3];
+    DSPContext dsp;
 
     GetBitContext gb;
     HEVCCabacContext cc;
@@ -575,6 +586,8 @@ typedef struct HEVCContext {
     int ctb_addr_ts; ///< CtbAddrTS
 
     uint8_t *split_coding_unit_flag;
+
+    uint8_t *edge_emu_buffer;
 
     CodingTree ct;
     CodingUnit cu;

@@ -197,6 +197,8 @@ static int hls_slice_header(HEVCContext *s)
         ff_hevc_pred_init(s->hpc[1], s->sps->bit_depth[1]);
         ff_hevc_dsp_init(s->hevcdsp[0], s->sps->bit_depth[0]);
         ff_hevc_dsp_init(s->hevcdsp[1], s->sps->bit_depth[1]);
+
+        ff_dsputil_init(&s->dsp, s->avctx);
     }
 
     if (!sh->first_slice_in_pic_flag) {
@@ -1283,6 +1285,105 @@ static void luma_mv_merge_mode(HEVCContext *s, int x0, int y0, int nPbW, int nPb
     }
 }
 
+/**
+ * 8.5.3.2.2.1 Luma sample interpolation process
+ *
+ * @param s HEVC decoding context
+ * @param dst target buffer for block data at block position
+ * @param dststride stride of the dst buffer
+ * @param mv motion vector (relative to block position) to get pixel data from
+ * @param x_off horizontal position of block from origin (0, 0)
+ * @param y_off vertical position of block from origin (0, 0)
+ * @param block_w width of block
+ * @param block_h height of block
+ */
+static void luma_mc(HEVCContext *s, uint8_t *dst, ptrdiff_t dststride,
+                    const Mv *mv, int x_off, int y_off, int block_w, int block_h)
+{
+    HEVCDSPContext *hevcdsp = s->hevcdsp[0];
+
+    uint8_t *src = s->frame.data[0];
+    ptrdiff_t srcstride = s->frame.linesize[0];
+    int pic_width = s->sps->pic_width_in_luma_samples;
+    int pic_height = s->sps->pic_height_in_luma_samples;
+    int pixel = 1 + !!(s->sps->bit_depth[1] - 8); // sizeof(pixel)
+
+    int mx = mv->m_iHor & 3;
+    int my = mv->m_iVer & 3;
+    int extra_left = qpel_extra_before[mx];
+    int extra_top = qpel_extra_before[my];
+
+    x_off += mv->m_iHor >> 2;
+    y_off += mv->m_iVer >> 2;
+    src += y_off * srcstride + x_off * pixel;
+
+    if (x_off < extra_left || x_off >= pic_width - block_w - qpel_extra_after[mx] ||
+        y_off < extra_top || y_off >= pic_height - block_h - qpel_extra_after[my]) {
+        int offset = extra_top * srcstride + extra_left * pixel;
+        s->dsp.emulated_edge_mc(s->edge_emu_buffer, src - offset, srcstride,
+                                block_w + qpel_extra[mx], block_h + qpel_extra[my],
+                                x_off - extra_left, y_off - extra_top,
+                                pic_width, pic_height);
+        src = s->edge_emu_buffer + offset;
+    }
+    hevcdsp->put_hevc_qpel[my][mx](dst, dststride, src, srcstride, block_w, block_h);
+}
+
+/**
+ * 8.5.3.2.2.2 Chroma sample interpolation process
+ *
+ * @param s HEVC decoding context
+ * @param dst1 target buffer for block data at block position (U plane)
+ * @param dst2 target buffer for block data at block position (V plane)
+ * @param dststride stride of the dst1 and dst2 buffers
+ * @param mv motion vector (relative to block position) to get pixel data from
+ * @param x_off horizontal position of block from origin (0, 0)
+ * @param y_off vertical position of block from origin (0, 0)
+ * @param block_w width of block
+ * @param block_h height of block
+ */
+static void chroma_mc(HEVCContext *s, uint8_t *dst1, uint8_t *dst2, ptrdiff_t dststride,
+                      const Mv *mv, int x_off, int y_off, int block_w, int block_h)
+{
+    HEVCDSPContext *hevcdsp = s->hevcdsp[1];
+
+    uint8_t *src1 = s->frame.data[1];
+    uint8_t *src2 = s->frame.data[2];
+    ptrdiff_t srcstride = s->frame.linesize[1];
+    int pic_width = s->sps->pic_width_in_luma_samples >> 1;
+    int pic_height = s->sps->pic_height_in_luma_samples >> 1;
+    int pixel = 1 + !!(s->sps->bit_depth[1] - 8); // sizeof(pixel)
+
+    int mx = mv->m_iHor & 7;
+    int my = mv->m_iVer & 7;
+
+    x_off += mv->m_iHor >> 3;
+    y_off += mv->m_iVer >> 3;
+    src1 += y_off * srcstride + x_off * pixel;
+    src2 += y_off * srcstride + x_off * pixel;
+
+    if (x_off < epel_extra_before || x_off >= pic_width - block_w - epel_extra_after ||
+        y_off < epel_extra_after || y_off >= pic_height - block_h - epel_extra_after) {
+        int offset = epel_extra_before * (srcstride + 1 * pixel);
+        s->dsp.emulated_edge_mc(s->edge_emu_buffer, src1 - offset, srcstride,
+                                block_w + epel_extra, block_h + epel_extra,
+                                x_off - epel_extra_before, y_off - epel_extra_before,
+                                pic_width, pic_height);
+        src1 = s->edge_emu_buffer + offset;
+        hevcdsp->put_hevc_epel[!!my][!!mx](dst1, dststride, src1, srcstride, block_w, block_h, mx, my);
+
+        s->dsp.emulated_edge_mc(s->edge_emu_buffer, src2 - offset, srcstride,
+                                block_w + epel_extra, block_h + epel_extra,
+                                x_off - epel_extra_before, y_off - epel_extra_before,
+                                pic_width, pic_height);
+        src2 = s->edge_emu_buffer + offset;
+        hevcdsp->put_hevc_epel[!!my][!!mx](dst2, dststride, src2, srcstride, block_w, block_h, mx, my);
+    } else {
+        hevcdsp->put_hevc_epel[!!my][!!mx](dst1, dststride, src1, srcstride, block_w, block_h, mx, my);
+        hevcdsp->put_hevc_epel[!!my][!!mx](dst2, dststride, src2, srcstride, block_w, block_h, mx, my);
+    }
+}
+
 static void hls_prediction_unit(HEVCContext *s, int x0, int y0, int nPbW, int nPbH, int log2_cb_size, int partIdx)
 {
 	int merge_idx;
@@ -1792,6 +1893,8 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
             return -1;
         }
+        if (!s->edge_emu_buffer)
+            s->edge_emu_buffer = av_malloc((MAX_PB_SIZE + 7) * s->frame.linesize[0]);
 
         ff_hevc_cabac_init(s);
         if (hls_slice_data(s) < 0)
@@ -1838,6 +1941,8 @@ static av_cold int hevc_decode_free(AVCodecContext *avctx)
 
     if (s->frame.data[0])
         s->avctx->release_buffer(s->avctx, &s->frame);
+
+    av_freep(&s->edge_emu_buffer);
 
     for (i = 0; i < MAX_SPS_COUNT; i++) {
         av_freep(&s->sps_list[i]);
