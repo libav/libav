@@ -22,7 +22,7 @@
 
 #include "libavutil/attributes.h"
 #include "libavutil/common.h"
-#include "cabac.h"
+#include "cabac_functions.h"
 #include "hevc.h"
 
 /**
@@ -144,10 +144,6 @@ static const uint8_t init_values[] = {
     107, 167,  91, 122, 107, 167,
     107, 167,  91, 107, 107, 167
 };
-/**
- * mps and pstate, indexed by ctx_idx
- */
-static uint8_t states[sizeof(init_values)][2];
 
 static int derive_ctx_idx(HEVCContext *s, int bin_idx)
 {
@@ -158,96 +154,17 @@ static int derive_ctx_idx(HEVCContext *s, int bin_idx)
     return cc->ctx_idx_offset + ctx_idx_inc;
 }
 
-static void renormalization(HEVCContext *s)
-{
-    HEVCCabacContext *cc = &s->cc;
-    GetBitContext *gb = &s->gb;
-
-    while (cc->range < 256) {
-        cc->range <<= 1;
-        cc->offset <<= 1;
-        cc->offset |= get_bits1(gb);
-    }
-}
-
-static int cnt = 0;
-
 static int decode_bin(HEVCContext *s, int bin_idx)
 {
     HEVCCabacContext *cc = &s->cc;
-    GetBitContext *gb = &s->gb;
+    int ctx_idx;
 
-    int ctx_idx, mps, pstate, lpsrange, bin_val;
-    uint8_t *state;
-
-    av_dlog(s->avctx, "cc->elem: %d, ", cc->elem);
-
-    // Bypass decoding
-    if (cc->ctx_idx_offset == -1) {
-        cc->offset <<= 1;
-        cc->offset |= get_bits1(gb);
-        if (cc->offset >= cc->range) {
-            cc->offset -= cc->range;
-            bin_val = 1;
-        } else {
-            bin_val = 0;
-        }
-        av_dlog(s->avctx, "bypass bin_val: %d\n", bin_val);
-        return bin_val;
-    }
+    if (cc->ctx_idx_offset == -1)
+        return get_cabac_bypass(&s->c);
 
     ctx_idx = derive_ctx_idx(s, bin_idx);
-    state = cc->state[ctx_idx];
 
-    mps = state[0];
-    pstate = state[1];
-
-    lpsrange = ff_lps_range[pstate][(cc->range >> 6) & 3];
-    bin_val = 0;
-
-    av_dlog(s->avctx,
-           "ctx_idx: %d, %d#pstate: %d, mps: %d\n", ctx_idx, cnt++, pstate, mps);
-
-    av_dlog(s->avctx,
-           "old cc->range: %d, cc->offset: %d, lpsrange: %d\n", cc->range, cc->offset, lpsrange);
-
-    cc->range -= lpsrange;
-    if (cc->offset >= cc->range) {
-        cc->offset -= cc->range;
-        cc->range = lpsrange;
-
-        bin_val = 1 - mps;
-        state[1] = ff_lps_state[pstate];
-
-        if (pstate == 0)
-            state[0] = !mps;
-    } else {
-        bin_val = mps;
-        state[1] = ff_mps_state[pstate];
-    }
-
-    renormalization(s);
-
-    av_dlog(s->avctx, "cc->range: %d, cc->offset: %d, bin_val: %d\n",
-           cc->range, cc->offset, bin_val);
-    return bin_val;
-}
-
-static int bypass_decode_bin(HEVCContext *s)
-{
-    HEVCCabacContext *cc = &s->cc;
-    int bin_val;
-
-    cc->range -= 2;
-    if (cc->offset >= cc->range) {
-        bin_val = 1;
-    } else {
-        bin_val = 0;
-        renormalization(s);
-    }
-    av_dlog(s->avctx, "cc->range: %d, cc->offset: %d, bin_val: %d\n",
-           cc->range, cc->offset, bin_val);
-    return bin_val;
+    return get_cabac_noinline(&s->c, &s->cabac_state[elem_offset[cc->elem] + ctx_idx]);
 }
 
 static int u_binarization(HEVCContext *s)
@@ -322,10 +239,10 @@ void ff_hevc_cabac_init(HEVCContext *s)
 
     skip_bits(gb, 1);
     align_get_bits(gb);
-
-    cc->range = 510;
-    cc->offset = get_bits(gb, 9);
-    av_dlog(s->avctx, "cc->offset: %d\n", cc->offset);
+    ff_init_cabac_states(&s->c);
+    ff_init_cabac_decoder(&s->c,
+                          gb->buffer + get_bits_count(gb) / 8,
+                          (get_bits_left(&s->gb) + 7) / 8);
 
     cc->init_type = 2 - s->sh.slice_type;
     if (s->sh.cabac_init_flag && s->sh.slice_type != I_SLICE)
@@ -341,8 +258,9 @@ void ff_hevc_cabac_init(HEVCContext *s)
         int n = ((init_value & 15) << 3) - 16;
         int pre_ctx_state = av_clip_c(((m * av_clip_c(s->sh.slice_qp, 0, 51)) >> 4) + n,
                                       1, 126);
-        states[i][0] = (pre_ctx_state <= 63) ? 0 : 1; //mps
-        states[i][1] = states[i][0] ? (pre_ctx_state - 64) : (63 - pre_ctx_state); //stateIdx
+        int mps = (pre_ctx_state <= 63) ? 0 : 1;
+        int state_idx = mps ? (pre_ctx_state - 64) : (63 - pre_ctx_state);
+        s->cabac_state[i] = (state_idx << 1) + mps;
     }
 }
 
@@ -352,7 +270,6 @@ int ff_hevc_sao_merge_flag_decode(HEVCContext *s)
     const int8_t ctx_idx_inc[1] = { 0 };
 
     cc->elem = SAO_MERGE_FLAG;
-    cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 0;
     cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
@@ -367,7 +284,6 @@ int ff_hevc_sao_type_idx_decode(HEVCContext *s)
     int i = 0;
 
     cc->elem = SAO_TYPE_IDX;
-    cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 0;
     cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
@@ -428,7 +344,7 @@ int ff_hevc_sao_eo_class_decode(HEVCContext *s)
 
 int ff_hevc_end_of_slice_flag_decode(HEVCContext *s)
 {
-    return bypass_decode_bin(s);
+    return get_cabac_terminate(&s->c);
 }
 
 int ff_hevc_cu_transquant_bypass_flag_decode(HEVCContext *s)
@@ -437,7 +353,6 @@ int ff_hevc_cu_transquant_bypass_flag_decode(HEVCContext *s)
     const int8_t ctx_idx_inc[1] = { 0 };
 
     cc->elem = CU_TRANSQUANT_BYPASS_FLAG;
-    cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 0;
     cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
@@ -455,7 +370,6 @@ int ff_hevc_skip_flag_decode(HEVCContext *s, int x_cb, int y_cb)
     };
 
     cc->elem = SKIP_FLAG;
-    cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 0;
     cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
@@ -469,7 +383,6 @@ int ff_hevc_pred_mode_decode(HEVCContext *s)
     const int8_t ctx_idx_inc[1] = { 0 };
 
     cc->elem = PRED_MODE_FLAG;
-    cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 0;
     cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
@@ -491,7 +404,6 @@ int ff_hevc_split_coding_unit_flag_decode(HEVCContext *s, int ct_depth, int x0, 
         depth_top = s->cu.top_ct_depth[x0 >> s->sps->log2_min_coding_block_size];
 
     cc->elem = SPLIT_CODING_UNIT_FLAG;
-    cc->state = states + elem_offset[cc->elem];
 
     av_dlog(s->avctx, "depth cur: %d, left: %d, top: %d\n",
            ct_depth, depth_left, depth_top);
@@ -514,7 +426,6 @@ int ff_hevc_part_mode_decode(HEVCContext *s, int log2_cb_size)
     int i = 0;
 
     cc->elem = PART_MODE;
-    cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 3;
     cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
@@ -560,7 +471,7 @@ int ff_hevc_part_mode_decode(HEVCContext *s, int log2_cb_size)
 
 int ff_hevc_pcm_flag_decode(HEVCContext *s)
 {
-    return bypass_decode_bin(s);
+    return get_cabac_terminate(&s->c);
 }
 
 int ff_hevc_prev_intra_luma_pred_flag_decode(HEVCContext *s)
@@ -569,7 +480,6 @@ int ff_hevc_prev_intra_luma_pred_flag_decode(HEVCContext *s)
     const int8_t ctx_idx_inc[1] = { 0 };
 
     cc->elem = PREV_INTRA_LUMA_PRED_FLAG;
-    cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 0;
     cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
@@ -609,7 +519,6 @@ int ff_hevc_intra_chroma_pred_mode_decode(HEVCContext *s)
     int i = 0;
 
     cc->elem = INTRA_CHROMA_PRED_MODE;
-    cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 1;
     cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
@@ -633,7 +542,6 @@ int ff_hevc_merge_idx_decode(HEVCContext *s)
     int i = 0;
 
     cc->elem = MERGE_IDX;
-    cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 0;
     cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
@@ -651,7 +559,6 @@ int ff_hevc_merge_flag_decode(HEVCContext *s)
     const int8_t ctx_idx_inc[1] = { 0 };
 
     cc->elem = MERGE_FLAG;
-    cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 0;
     cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
@@ -666,7 +573,6 @@ int ff_hevc_inter_pred_idc_decode(HEVCContext *s, int nPbW, int nPbH)
     const int8_t ctx_idx_inc[5] = { 0, 1, 2, 3, 4 };
 
     cc->elem = INTER_PRED_IDC;
-    cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 4;
     cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
@@ -688,7 +594,6 @@ int ff_hevc_ref_idx_lx_decode(HEVCContext *s, int c_max)
     int i = 0;
 
     cc->elem = REF_IDX_L0;
-    cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 1;
     cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
@@ -706,7 +611,6 @@ int ff_hevc_mvp_lx_flag_decode(HEVCContext *s)
     const int8_t ctx_idx_inc[1] = { 0 };
 
     cc->elem = MVP_LX_FLAG;
-    cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 0;
     cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
@@ -721,7 +625,6 @@ int ff_hevc_no_residual_syntax_flag_decode(HEVCContext *s)
     const int8_t ctx_idx_inc[1] = { 0 };
 
     cc->elem = NO_RESIDUAL_DATA_FLAG;
-    cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 0;
     cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
@@ -736,7 +639,6 @@ int ff_hevc_abs_mvd_greater0_flag_decode(HEVCContext *s)
     const int8_t ctx_idx_inc[1] = { 0 };
 
     cc->elem = ABS_MVD_GREATER0_FLAG;
-    cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 0;
     cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
@@ -751,7 +653,6 @@ int ff_hevc_abs_mvd_greater1_flag_decode(HEVCContext *s)
     const int8_t ctx_idx_inc[1] = { 1 };
 
     cc->elem = ABS_MVD_GREATER1_FLAG;
-    cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 0;
     cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
@@ -789,7 +690,6 @@ int ff_hevc_split_transform_flag_decode(HEVCContext *s, int log2_trafo_size)
     const int8_t ctx_idx_inc[1] = { 5 - log2_trafo_size };
 
     cc->elem = SPLIT_TRANSFORM_FLAG;
-    cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 0;
     cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
@@ -804,7 +704,6 @@ int ff_hevc_cbf_cb_cr_decode(HEVCContext *s, int trafo_depth)
     const int8_t ctx_idx_inc[1] = { trafo_depth };
 
     cc->elem = CBF_CB_CR;
-    cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 0;
     cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
@@ -819,7 +718,6 @@ int ff_hevc_cbf_luma_decode(HEVCContext *s, int trafo_depth)
     const int8_t ctx_idx_inc[1] = { trafo_depth == 0 };
 
     cc->elem = CBF_LUMA;
-    cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 0;
     cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
@@ -834,7 +732,6 @@ int ff_hevc_transform_skip_flag_decode(HEVCContext *s, int c_idx)
     const int8_t ctx_idx_inc[1] = { c_idx ? 1 : 0 };
 
     cc->elem = TRANSFORM_SKIP_FLAG;
-    cc->state = states + elem_offset[cc->elem];
 
     cc->max_bin_idx_ctx = 0;
     cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
@@ -853,7 +750,6 @@ int ff_hevc_last_significant_coeff_prefix_decode(HEVCContext *s, int c_idx,
 
     cc->elem = is_x ? LAST_SIGNIFICANT_COEFF_X_PREFIX
                : LAST_SIGNIFICANT_COEFF_Y_PREFIX;
-    cc->state = states + elem_offset[cc->elem];
 
     if (c_idx == 0) {
         ctx_offset = 3 * (log2_size - 2)  + ((log2_size - 1) >> 2);
@@ -905,7 +801,6 @@ int ff_hevc_significant_coeff_group_flag_decode(HEVCContext *s, int c_idx, int x
     int ctx_cg = 0;
 
     cc->elem = SIGNIFICANT_COEFF_GROUP_FLAG;
-    cc->state = states + elem_offset[cc->elem];
 
     if (x_cg < (1 << (log2_trafo_size - 2)) - 1)
         ctx_cg += s->rc.significant_coeff_group_flag[x_cg + 1][y_cg];
@@ -934,7 +829,6 @@ int ff_hevc_significant_coeff_flag_decode(HEVCContext *s, int c_idx, int x_c, in
     int y_cg = y_c >> 2;
 
     cc->elem = SIGNIFICANT_COEFF_FLAG;
-    cc->state = states + elem_offset[cc->elem];
 
     if (x_c + y_c == 0) {
         sig_ctx = 0;
@@ -1002,7 +896,6 @@ int ff_hevc_coeff_abs_level_greater1_flag_decode(HEVCContext *s, int c_idx,
     static int last_coeff_abs_level_greater1_flag = 0;
 
     cc->elem = COEFF_ABS_LEVEL_GREATER1_FLAG;
-    cc->state = states + elem_offset[cc->elem];
 
     if (first_elem) {
         ctx_set = (i > 0 && c_idx == 0) ? 2 : 0;
@@ -1038,7 +931,6 @@ int ff_hevc_coeff_abs_level_greater2_flag_decode(HEVCContext *s, int c_idx,
     int8_t ctx_idx_inc[1] = { 0 };
 
     cc->elem = COEFF_ABS_LEVEL_GREATER2_FLAG;
-    cc->state = states + elem_offset[cc->elem];
 
     ctx_idx_inc[0] = ctx_set;
     if (c_idx > 0)
@@ -1108,7 +1000,6 @@ int ff_hevc_coeff_sign_flag(HEVCContext *s, uint8_t nb)
     HEVCCabacContext *cc = &s->cc;
 
     cc->elem = COEFF_SIGN_FLAG;
-    cc->state = states + elem_offset[cc->elem];
 
     cc->ctx_idx_offset = -1;
 

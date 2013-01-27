@@ -24,6 +24,7 @@
 #define AVCODEC_HEVC_H
 
 #include "avcodec.h"
+#include "cabac.h"
 #include "dsputil.h"
 #include "get_bits.h"
 #include "hevcpred.h"
@@ -564,6 +565,9 @@ typedef struct HEVCContext {
 
     GetBitContext gb;
     HEVCCabacContext cc;
+
+    CABACContext c;
+    uint8_t cabac_state[1024];
 
     int nal_ref_flag;
     enum NALUnitType nal_unit_type;
