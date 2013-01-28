@@ -173,7 +173,7 @@ typedef struct SPS {
 
     uint8_t deblocking_filter_in_aps_enabled_flag;
 
-    uint8_t asymmetric_motion_partitions_enabled_flag;
+    uint8_t amp_enabled_flag;
     uint8_t sample_adaptive_offset_enabled_flag;
 
     uint8_t temporal_id_nesting_flag;
