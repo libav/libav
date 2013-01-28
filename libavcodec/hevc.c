@@ -524,19 +524,19 @@ static void hls_residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_s
     }
 
     last_significant_coeff_x =
-    ff_hevc_last_significant_coeff_prefix_decode(s, c_idx, log2_trafo_size, 1);
+    ff_hevc_last_significant_coeff_x_prefix_decode(s, c_idx, log2_trafo_size);
     last_significant_coeff_y =
-    ff_hevc_last_significant_coeff_prefix_decode(s, c_idx, log2_trafo_size, 0);
+    ff_hevc_last_significant_coeff_y_prefix_decode(s, c_idx, log2_trafo_size);
 
 
     if (last_significant_coeff_x > 3) {
-        int suffix = ff_hevc_last_significant_coeff_suffix_decode(s, last_significant_coeff_x, 1);
+        int suffix = ff_hevc_last_significant_coeff_suffix_decode(s, last_significant_coeff_x);
         last_significant_coeff_x = (1 << ((last_significant_coeff_x >> 1) - 1)) *
                                    (2 + (last_significant_coeff_x & 1)) +
                                    suffix;
     }
     if (last_significant_coeff_y > 3) {
-        int suffix = ff_hevc_last_significant_coeff_suffix_decode(s, last_significant_coeff_y, 0);
+        int suffix = ff_hevc_last_significant_coeff_suffix_decode(s, last_significant_coeff_y);
         last_significant_coeff_y = (1 << ((last_significant_coeff_y >> 1) - 1)) *
                                    (2 + (last_significant_coeff_y & 1)) +
                                    suffix;
@@ -625,8 +625,7 @@ static void hls_residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_s
         if ((i < num_last_subset) && (i > 0)) {
             s->rc.significant_coeff_group_flag[x_cg][y_cg] =
             ff_hevc_significant_coeff_group_flag_decode(s, c_idx, x_cg, y_cg,
-                                                        log2_trafo_size,
-                                                        scan_idx);
+                                                        log2_trafo_size);
             implicit_non_zero_coeff = 1;
         } else {
             s->rc.significant_coeff_group_flag[x_cg][y_cg] =
