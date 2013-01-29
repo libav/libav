@@ -41,7 +41,7 @@ static const int8_t num_bins_in_se[] = {
      3,  // skip_flag
      3,  // cu_qp_delta
      1,  // pred_mode
-     4,  // part_mode
+     3,  // part_mode
      0,  // pcm_flag
      1,  // prev_intra_luma_pred_mode
      0,  // mpm_idx
@@ -91,7 +91,7 @@ static const uint8_t init_values[] = {
     CNU, CNU, CNU, 197, 185, 201, 197, 185, 201, // skip_flag
     154, 154, 154, 154, 154, 154, 154, 154, 154, // cu_qp_delta
     CNU, 149, 134, // pred_mode
-    184, CNU, CNU, CNU, 154, 139, 154, 154, 154, 139, 154, 154, // part_mode
+    184, CNU, CNU, 154, 139, 154, 154, 139, 154, // part_mode
     184, 154, 183, // prev_intra_luma_pred_mode
      63, 139, 152, 139, 152, 139, // intra_chroma_pred_mode
     CNU, 110, 154, // merge_flag
@@ -509,19 +509,20 @@ int ff_hevc_split_coding_unit_flag_decode(HEVCContext *s, int ct_depth, int x0, 
 int ff_hevc_part_mode_decode(HEVCContext *s, int log2_cb_size)
 {
     HEVCCabacContext *cc = &s->cc;
-    const int8_t ctx_idx_inc[3] = { 0, 1, 2 };
+    int min_cb = log2_cb_size == s->sps->log2_min_coding_block_size;
+    const int8_t ctx_idx_inc[3] = { 0, 1, 3 - min_cb };
     int i = 0;
 
     cc->elem = PART_MODE;
     cc->state = states + elem_offset[cc->elem];
 
-    cc->max_bin_idx_ctx = 4;
+    cc->max_bin_idx_ctx = 3;
     cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
     cc->ctx_idx_inc = ctx_idx_inc;
 
     if (decode_bin(s, i++) == 1) // 1
         return PART_2Nx2N;
-    if (log2_cb_size == s->sps->log2_min_coding_block_size) {
+    if (min_cb) {
         if (s->cu.pred_mode == MODE_INTRA) // 0
             return PART_NxN;
         if (decode_bin(s, i++) == 1) // 01
@@ -542,6 +543,7 @@ int ff_hevc_part_mode_decode(HEVCContext *s, int log2_cb_size)
     if (decode_bin(s, i++) == 1) { // 01X, 01XX
         if (decode_bin(s, i++) == 1) // 011
             return PART_2NxN;
+        cc->ctx_idx_offset = -1;
         if (decode_bin(s, i++) == 1) // 0101
             return PART_2NxnD;
         return PART_2NxnU; // 0100
@@ -549,6 +551,8 @@ int ff_hevc_part_mode_decode(HEVCContext *s, int log2_cb_size)
     if (decode_bin(s, i++) == 1) // 001
         return PART_Nx2N;
 
+    // Last bin is bypass-coded
+    cc->ctx_idx_offset = -1;
     if (decode_bin(s, i++) == 1) // 0001
         return PART_nRx2N;
     return  PART_nLx2N; // 0000
