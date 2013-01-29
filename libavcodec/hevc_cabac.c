@@ -660,30 +660,26 @@ int ff_hevc_merge_flag_decode(HEVCContext *s)
     return fl_binarization(s, 1);
 }
 
-int ff_hevc_inter_pred_idc_decode(HEVCContext *s, int max)
+int ff_hevc_inter_pred_idc_decode(HEVCContext *s, int nPbW, int nPbH)
 {
     HEVCCabacContext *cc = &s->cc;
-    const int8_t ctx_idx_inc[2] = { s->ct.depth , 4 };
+    const int8_t ctx_idx_inc[5] = { 0, 1, 2, 3, 4 };
 
-    int ret = 0;
     cc->elem = INTER_PRED_IDC;
     cc->state = states + elem_offset[cc->elem];
 
-    cc->max_bin_idx_ctx = 1;
+    cc->max_bin_idx_ctx = 4;
     cc->ctx_idx_offset = num_bins_in_se[cc->elem] * cc->init_type;
     cc->ctx_idx_inc = ctx_idx_inc;
 
-    if (s->cu.part_mode == PART_2Nx2N || max != 8) {
-        ret = decode_bin(s, 0) + PRED_L0;
-    }
-    if (ret == 0) {
-        ret = decode_bin(s, 1) + PRED_L0;
-    } else {
-        ret = PRED_BI;
-    }
+    if (nPbW + nPbH == 12)
+        return decode_bin(s, 4);
+    if (decode_bin(s, s->ct.depth))
+        return PRED_BI;
 
-    return ret;
+    return decode_bin(s, 4);
 }
+
 int ff_hevc_ref_idx_lx_decode(HEVCContext *s, int c_max)
 {
     HEVCCabacContext *cc = &s->cc;

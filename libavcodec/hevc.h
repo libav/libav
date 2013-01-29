@@ -630,7 +630,7 @@ int ff_hevc_rem_intra_luma_pred_mode_decode(HEVCContext *s);
 int ff_hevc_intra_chroma_pred_mode_decode(HEVCContext *s);
 int ff_hevc_merge_idx_decode(HEVCContext *s);
 int ff_hevc_merge_flag_decode(HEVCContext *s);
-int ff_hevc_inter_pred_idc_decode(HEVCContext *s, int max);
+int ff_hevc_inter_pred_idc_decode(HEVCContext *s, int nPbW, int nPbH);
 int ff_hevc_ref_idx_lx_decode(HEVCContext *s, int c_max);
 int ff_hevc_mvp_lx_flag_decode(HEVCContext *s);
 int ff_hevc_no_residual_syntax_flag_decode(HEVCContext *s);
