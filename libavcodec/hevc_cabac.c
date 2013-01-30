@@ -327,11 +327,12 @@ void ff_hevc_cabac_init(HEVCContext *s)
         int init_value = init_values[init_type][i];
         int m = (init_value >> 4)*5 - 45;
         int n = ((init_value & 15) << 3) - 16;
-        int pre_ctx_state = av_clip_c(((m * av_clip_c(s->sh.slice_qp, 0, 51)) >> 4) + n,
-                                      1, 126);
-        int mps = (pre_ctx_state <= 63) ? 0 : 1;
-        int state_idx = mps ? (pre_ctx_state - 64) : (63 - pre_ctx_state);
-        s->cabac_state[i] = (state_idx << 1) + mps;
+        int pre = 2 * (((m * av_clip_c(s->sh.slice_qp, 0, 51)) >> 4) + n) - 127;
+        pre ^= pre >> 31;
+        if (pre > 124)
+            pre = 124 + (pre & 1);
+
+        s->cabac_state[i] =  pre;
     }
 }
 
