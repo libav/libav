@@ -137,11 +137,8 @@ typedef struct SPS {
         int top_offset;
         int bottom_offset;
     } pic_crop;
-
-    // bit_depth_luma_minus8 + 8
-    // bit_depth_chroma_minus8 + 8
-    // bit_depth_chroma_minus8 + 8
-    int bit_depth[3];
+    
+    int bit_depth; ///< bit_depth_luma_minus8 + 8
 
     int pcm_enabled_flag;
     struct {
@@ -206,10 +203,9 @@ typedef struct SPS {
     int hshift[3];
     int vshift[3];
 
-    int pixel_shift[3];
+    int pixel_shift;
 
-    int qp_bd_offset_luma; ///< QpBdOffsetY
-    int qp_bd_offset_chroma; ///< QPBdOffsetC
+    int qp_bd_offset; ///< QpBdOffsetY
 } SPS;
 
 typedef struct PPS {
@@ -544,8 +540,8 @@ typedef struct HEVCContext {
     AVFrame frame;
     AVFrame sao_frame;
 
-    HEVCPredContext *hpc[3];
-    HEVCDSPContext *hevcdsp[3];
+    HEVCPredContext hpc;
+    HEVCDSPContext hevcdsp;
     DSPContext dsp;
 
     GetBitContext gb;
@@ -603,7 +599,7 @@ void ff_hevc_cabac_init(HEVCContext *s);
 int ff_hevc_sao_merge_flag_decode(HEVCContext *s);
 int ff_hevc_sao_type_idx_decode(HEVCContext *s);
 int ff_hevc_sao_band_position_decode(HEVCContext *s);
-int ff_hevc_sao_offset_abs_decode(HEVCContext *s, int bit_depth);
+int ff_hevc_sao_offset_abs_decode(HEVCContext *s);
 int ff_hevc_sao_offset_sign_decode(HEVCContext *s);
 int ff_hevc_sao_eo_class_decode(HEVCContext *s);
 int ff_hevc_end_of_slice_flag_decode(HEVCContext *s);

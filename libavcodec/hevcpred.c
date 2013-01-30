@@ -31,6 +31,10 @@
 #include "hevcpred_template.c"
 #undef BIT_DEPTH
 
+#define BIT_DEPTH 10
+#include "hevcpred_template.c"
+#undef BIT_DEPTH
+
 void ff_hevc_pred_init(HEVCPredContext *hpc, int bit_depth)
 {
 #undef FUNCC
@@ -42,9 +46,15 @@ void ff_hevc_pred_init(HEVCPredContext *hpc, int bit_depth)
     hpc->pred_dc      = FUNCC(pred_dc, depth);      \
     hpc->pred_angular = FUNCC(pred_angular, depth);
 
-    if (bit_depth > 8) {
+    switch (bit_depth) {
+    case 9:
         HEVC_PRED(9);
-    } else {
+        break;
+    case 10:
+        HEVC_PRED(10);
+        break;
+    default:
         HEVC_PRED(8);
+        break;
     }
 }

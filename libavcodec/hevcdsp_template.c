@@ -28,9 +28,9 @@
 
 #define SET(dst, x) (dst) = (x)
 #define SCALE(dst, x) (dst) = av_clip_int16_c(((x) + add) >> shift)
-#define ADD_AND_SCALE(dst, x) (dst) = av_clip_uintp2((dst) + av_clip_int16_c(((x) + add) >> shift), bit_depth)
+#define ADD_AND_SCALE(dst, x) (dst) = av_clip_pixel((dst) + av_clip_int16_c(((x) + add) >> shift))
 
-static void FUNC(transquant_bypass)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stride, int log2_size, int bit_depth)
+static void FUNC(transquant_bypass)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stride, int log2_size)
 {
     int x, y;
     pixel *dst = (pixel*)_dst;
@@ -46,14 +46,14 @@ static void FUNC(transquant_bypass)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _s
     }
 }
 
-static void FUNC(transform_skip)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stride, int log2_size, int bit_depth)
+static void FUNC(transform_skip)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stride, int log2_size)
 {
     int x, y;
     pixel *dst = (pixel*)_dst;
     ptrdiff_t stride = _stride / sizeof(pixel);
     int size = 1 << log2_size;
 #if REFERENCE_ENCODER_QUIRKS
-    int shift = 15 - bit_depth - log2_size;
+    int shift = 15 - BIT_DEPTH - log2_size;
     if (shift > 0) {
         int offset = 1 << (shift - 1);
         for (y = 0; y < size; y++) {
@@ -77,7 +77,7 @@ static void FUNC(transform_skip)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stri
 #endif
 }
 
-static void FUNC(transform_4x4_luma_add)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stride, int bit_depth)
+static void FUNC(transform_4x4_luma_add)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stride)
 {
 #define TR_4x4_LUMA(dst, src, step, assign)                                     \
     do {                                                                        \
@@ -104,7 +104,7 @@ static void FUNC(transform_4x4_luma_add)(uint8_t *_dst, int16_t *coeffs, ptrdiff
         src++;
     }
 
-    shift = 20 - bit_depth;
+    shift = 20 - BIT_DEPTH;
     add = 1 << (shift - 1);
     for (i = 0; i < 4; i++) {
         TR_4x4_LUMA(dst, coeffs, 1, ADD_AND_SCALE);
@@ -134,7 +134,7 @@ static void FUNC(transform_4x4_luma_add)(uint8_t *_dst, int16_t *coeffs, ptrdiff
 #define TR_4_1(dst, src) TR_4(dst, src, 4, 4, SCALE)
 #define TR_4_2(dst, src) TR_4(dst, src, 1, 1, ADD_AND_SCALE)
 
-static void FUNC(transform_4x4_add)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stride, int bit_depth)
+static void FUNC(transform_4x4_add)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stride)
 {
     int i;
     pixel *dst = (pixel*)_dst;
@@ -148,7 +148,7 @@ static void FUNC(transform_4x4_add)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _s
         src++;
     }
 
-    shift = 20 - bit_depth;
+    shift = 20 - BIT_DEPTH;
     add = 1 << (shift - 1);
     for (i = 0; i < 4; i++) {
         TR_4_2(dst, coeffs);
@@ -213,7 +213,7 @@ static void FUNC(transform_4x4_add)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _s
 #define TR_16_2(dst, src) TR_16(dst, src, 1, 1, ADD_AND_SCALE)
 #define TR_32_2(dst, src) TR_32(dst, src, 1, 1, ADD_AND_SCALE)
 
-static void FUNC(transform_8x8_add)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stride, int bit_depth)
+static void FUNC(transform_8x8_add)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stride)
 {
     int i;
     pixel *dst = (pixel*)_dst;
@@ -227,7 +227,7 @@ static void FUNC(transform_8x8_add)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _s
         src++;
     }
 
-    shift = 20 - bit_depth;
+    shift = 20 - BIT_DEPTH;
     add = 1 << (shift - 1);
     for (i = 0; i < 8; i++) {
         TR_8_2(dst, coeffs);
@@ -236,7 +236,7 @@ static void FUNC(transform_8x8_add)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _s
     }
 }
 
-static void FUNC(transform_16x16_add)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stride, int bit_depth)
+static void FUNC(transform_16x16_add)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stride)
 {
     int i;
     pixel *dst = (pixel*)_dst;
@@ -250,7 +250,7 @@ static void FUNC(transform_16x16_add)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t 
         src++;
     }
 
-    shift = 20 - bit_depth;
+    shift = 20 - BIT_DEPTH;
     add = 1 << (shift - 1);
     for (i = 0; i < 16; i++) {
         TR_16_2(dst, coeffs);
@@ -259,7 +259,7 @@ static void FUNC(transform_16x16_add)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t 
     }
 }
 
-static void FUNC(transform_32x32_add)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stride, int bit_depth)
+static void FUNC(transform_32x32_add)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stride)
 {
     int i;
     pixel *dst = (pixel*)_dst;
@@ -273,7 +273,7 @@ static void FUNC(transform_32x32_add)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t 
         src++;
     }
 
-    shift = 20 - bit_depth;
+    shift = 20 - BIT_DEPTH;
     add = 1 << (shift - 1);
     for (i = 0; i < 32; i++) {
         TR_32_2(dst, coeffs);
@@ -283,13 +283,13 @@ static void FUNC(transform_32x32_add)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t 
 }
 
 static void FUNC(sao_band_filter)(uint8_t * _dst, uint8_t *_src, int _stride, int *sao_offset_val,
-                                  int sao_left_class, int width, int height, int bit_depth)
+                                  int sao_left_class, int width, int height)
 {
     pixel *dst = (pixel*)_dst;
     pixel *src = (pixel*)_src;
     int stride = _stride/sizeof(pixel);
     int band_table[32] = { 0 };
-    int shift = bit_depth - 5;
+    int shift = BIT_DEPTH - 5;
 
     for (int k = 0; k < 4; k++)
         band_table[(k + sao_left_class) & 31] = k + 1;
@@ -304,7 +304,7 @@ static void FUNC(sao_band_filter)(uint8_t * _dst, uint8_t *_src, int _stride, in
 static void FUNC(sao_edge_filter)(uint8_t *_dst, uint8_t *_src, int _stride, int *sao_offset_val,
                                   int sao_eo_class, int at_top_border, int at_bottom_border,
                                   int at_left_border, int at_right_border,
-                                  int width, int height, int bit_depth)
+                                  int width, int height)
 {
     int x, y;
     pixel *dst = (pixel*)_dst;

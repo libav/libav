@@ -123,7 +123,7 @@ static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int
             left_available = 1;
             bottom_left_available = 1;
         } else { // No samples available
-            top[0] = left[-1] = (1 << (s->sps->bit_depth[c_idx] - 1));
+            top[0] = left[-1] = (1 << (BIT_DEPTH - 1));
             EXTEND_RIGHT(&top[0], 2*size-1);
             EXTEND_DOWN(&left[-1], 2*size);
         }
@@ -162,7 +162,7 @@ static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int
         int intra_hor_ver_dist_thresh[] = { 7, 1, 0 };
         int min_dist_vert_hor = FFMIN(FFABS((int)mode-26), FFABS((int)mode-10));
         if (min_dist_vert_hor > intra_hor_ver_dist_thresh[log2_size-3]) {
-            int thresold = 1 << (s->sps->bit_depth[0] - 5);
+            int thresold = 1 << (BIT_DEPTH - 5);
             if (s->sps->sps_strong_intra_smoothing_enable_flag && log2_size == 5 &&
                 FFABS(top[-1] + top[63] - 2 * top[31]) < thresold &&
                 FFABS(left[-1] + left[63] - 2 * left[31]) < thresold) {
@@ -194,14 +194,14 @@ static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int
 
     switch(mode) {
     case INTRA_PLANAR:
-        s->hpc[c_idx]->pred_planar((uint8_t*)src, (uint8_t*)top, (uint8_t*)left, stride, log2_size);
+        s->hpc.pred_planar((uint8_t*)src, (uint8_t*)top, (uint8_t*)left, stride, log2_size);
         break;
     case INTRA_DC:
-        s->hpc[c_idx]->pred_dc((uint8_t*)src, (uint8_t*)top, (uint8_t*)left, stride, log2_size, c_idx);
+        s->hpc.pred_dc((uint8_t*)src, (uint8_t*)top, (uint8_t*)left, stride, log2_size, c_idx);
         break;
     default:
-        s->hpc[c_idx]->pred_angular((uint8_t*)src, (uint8_t*)top, (uint8_t*)left, stride, log2_size, c_idx,
-                            mode, s->sps->bit_depth[c_idx]);
+        s->hpc.pred_angular((uint8_t*)src, (uint8_t*)top, (uint8_t*)left, stride, log2_size, c_idx,
+                            mode);
         break;
     }
 }
@@ -252,10 +252,8 @@ static void FUNCC(pred_dc)(uint8_t *_src, const uint8_t *_top, const uint8_t *_l
 }
 
 static void FUNCC(pred_angular)(uint8_t *_src, const uint8_t *_top, const uint8_t *_left,
-                                ptrdiff_t stride, int log2_size, int c_idx, int mode, int bit_depth)
+                                ptrdiff_t stride, int log2_size, int c_idx, int mode)
 {
-#define CLIP_1(x) av_clip_c((x), 0, (1 << bit_depth) - 1)
-
     int x, y;
     int size = 1 << log2_size;
     pixel *src = (pixel*)_src;
@@ -295,7 +293,7 @@ static void FUNCC(pred_angular)(uint8_t *_src, const uint8_t *_top, const uint8_
         }
         if (mode == 26 && c_idx == 0 && size < 32) {
             for (y = 0; y < size; y++)
-                POS(0, y) = CLIP_1(top[0] + ((left[y] - left[-1]) >> 1));
+                POS(0, y) = av_clip_pixel(top[0] + ((left[y] - left[-1]) >> 1));
         }
     } else {
         ref = left - 1;
@@ -316,10 +314,9 @@ static void FUNCC(pred_angular)(uint8_t *_src, const uint8_t *_top, const uint8_
         }
         if (mode == 10 && c_idx == 0 && size < 32) {
             for (x = 0; x < size; x++)
-                POS(x, 0) = CLIP_1(left[0] + ((top[x] - top[-1]) >> 1));
+                POS(x, 0) = av_clip_pixel(left[0] + ((top[x] - top[-1]) >> 1));
         }
     }
-#undef CLIP_1
 }
 
 #undef POS

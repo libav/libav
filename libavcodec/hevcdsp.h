@@ -26,21 +26,21 @@
 typedef struct HEVCDSPContext {
     void (*dequant)(int16_t *coeffs, int log2_size, int qp, int bit_depth);
 
-    void (*transquant_bypass)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stride, int log2_size, int bit_depth);
+    void (*transquant_bypass)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stride, int log2_size);
 
-    void (*transform_skip)(uint8_t *dst, int16_t *coeffs, ptrdiff_t stride, int log2_size, int bit_depth);
+    void (*transform_skip)(uint8_t *dst, int16_t *coeffs, ptrdiff_t stride, int log2_size);
 
-    void (*transform_4x4_luma_add)(uint8_t *dst, int16_t *coeffs, ptrdiff_t stride, int bit_depth);
+    void (*transform_4x4_luma_add)(uint8_t *dst, int16_t *coeffs, ptrdiff_t stride);
 
-    void (*transform_add[4])(uint8_t *dst, int16_t *coeffs, ptrdiff_t _stride, int bit_depth);
+    void (*transform_add[4])(uint8_t *dst, int16_t *coeffs, ptrdiff_t _stride);
 
     void (*sao_band_filter)(uint8_t *dst, uint8_t *src, int stride, int *sao_offset_val,
-                            int sao_left_class, int width, int height, int bit_depth);
+                            int sao_left_class, int width, int height);
 
     void (*sao_edge_filter)(uint8_t *dst, uint8_t *src, int stride, int *sao_offset_val,
                             int sao_eo_class, int at_top_border, int at_bottom_border,
                             int at_left_border, int at_right_border,
-                            int width, int height, int bit_depth);
+                            int width, int height);
 
     void (*put_hevc_qpel[4][4])(uint8_t *dst, ptrdiff_t dststride, uint8_t *src, ptrdiff_t srcstride,
                                 int width, int height);
