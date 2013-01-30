@@ -555,12 +555,12 @@ int ff_hevc_inter_pred_idc_decode(HEVCContext *s, int max)
     cc->ctx_idx_inc = ctx_idx_inc;
 
 	if (s->cu.part_mode == PART_2Nx2N || max != 8) {
-		ret = decode_bin(s, 0) + Pred_L0;
+		ret = decode_bin(s, 0) + PRED_L0;
 	}
 	if (ret == 0) {
-		ret = decode_bin(s, 1) + Pred_L0;
+		ret = decode_bin(s, 1) + PRED_L0;
 	} else {
-		ret = Pred_BI;
+		ret = PRED_BI;
 	}
 
     return ret;
