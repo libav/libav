@@ -504,7 +504,6 @@ static int hls_sao_param(HEVCContext *s, int rx, int ry)
     return 0;
 }
 
-#undef CTB
 #undef set_sao
 
 static void sao_filter(HEVCContext *s)
