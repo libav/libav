@@ -85,7 +85,7 @@ static int elem_offset[sizeof(num_bins_in_se)];
 #define CNU 154
 static const uint8_t init_values[] = {
     153, 153, 153, // sao_merge_flag
-    160, 185, 200, // sao_type_idx
+    200, 185, 160, // sao_type_idx
     139, 141, 157, 107, 139, 126, 107, 139, 126, // split_coding_unit_flag
     154, 154, 154, // cu_transquant_bypass_flag
     CNU, CNU, CNU, 197, 185, 201, 197, 185, 201, // skip_flag
@@ -103,7 +103,7 @@ static const uint8_t init_values[] = {
     CNU, CNU, 140, 198, 169, 198, // abs_mvd_greater1_flag
     CNU, CNU, 168, CNU, 168, CNU, // mvp_lx_flag
     CNU,  79,  79, // no_residual_data_flag
-    224, 167, 122, 124, 138,  94, 153, 138, 138, // split_transform_flag
+    153, 138, 138, 124, 138,  94, 224, 167, 122, // split_transform_flag
     111, 141, 153, 111, 153, 111, // cbf_luma
      94, 138, 182, 149, 107, 167, 149,  92, 167, // cbf_cb, cbf_cr
     139, 139, 139, 139, 139, 139, // transform_skip_flag
