@@ -113,7 +113,90 @@ static void compute_POC(HEVCContext *s, int iPOClsb)
 	}
 	s->poc = iPOCmsb + iPOClsb;
 }
+static void set_ref_pic_list(HEVCContext *s)
+{
+	SliceHeader *sh = &s->sh;
+	RefPicList  *refPocList = s->sh.refPocList;
+	RefPicList  *refPicList = s->sh.refPicList;
 
+	uint8_t num_ref_idx_lx_act[2];
+	uint8_t cIdx;
+	uint8_t num_poc_total_curr;
+	uint8_t num_rps_curr_lx;
+	uint8_t first_list;
+	uint8_t sec_list;
+	uint8_t i, list_idx;
+
+	num_ref_idx_lx_act[0] = sh->num_ref_idx_l0_active;
+	num_ref_idx_lx_act[1] = sh->num_ref_idx_l1_active;
+	for ( list_idx = 0; list_idx < 2; list_idx++) {
+		/* The order of the elements is
+		 * ST_CURR_BEF - ST_CURR_AFT - LT_CURR for the RefList0 and
+		 * ST_CURR_AFT - ST_CURR_BEF - LT_CURR for the RefList1
+		 */
+		first_list = list_idx == 0 ? ST_CURR_BEF : ST_CURR_AFT;
+		sec_list   = list_idx == 0 ? ST_CURR_AFT : ST_CURR_BEF;
+
+		/* even if num_ref_idx_lx_act is inferior to num_poc_total_curr we fill in
+		 * all the element from the Rps because we might reorder the list. If
+		 * we reorder the list might need a reference picture located after
+		 * num_ref_idx_lx_act.
+		 */
+		num_poc_total_curr = refPocList[ST_CURR_BEF].numPic + refPocList[ST_CURR_AFT].numPic + refPocList[LT_CURR].numPic;
+		num_rps_curr_lx    = num_poc_total_curr<num_ref_idx_lx_act[list_idx] ? num_poc_total_curr : num_ref_idx_lx_act[list_idx];
+		cIdx = 0;
+		while(cIdx < num_rps_curr_lx) {
+			for(i = 0; i < refPocList[first_list].numPic; i++) {
+				refPicList[list_idx].list[cIdx] = refPocList[first_list].list[i];
+				cIdx++;
+			}
+			for(i = 0; i < refPicList[sec_list].numPic; i++) {
+				refPicList[list_idx].list[cIdx] = refPocList[sec_list].list[i];
+				cIdx++;
+			}
+			for(i = 0; i < refPocList[LT_CURR].numPic; i++) {
+				refPicList[list_idx].list[cIdx] = refPocList[LT_CURR].list[i];
+				cIdx++;
+			}
+		}
+		refPicList[list_idx].numPic = cIdx;
+	}
+}
+static void set_ref_poc_list(HEVCContext *s)
+{
+	int i;
+	int j = 0;
+	int k = 0;
+	ShortTermRPS *rps        = s->sh.short_term_rps;
+	RefPicList   *refPocList = s->sh.refPocList;
+	if (rps != NULL) {
+		for (i = 0; i < rps->num_negative_pics; i ++) {
+			if ( rps->used[i] == 1 ) {
+				refPocList[ST_CURR_BEF].list[j] = s->poc + rps->delta_poc[i];
+				j++;
+			} else {
+				refPocList[ST_FOLL].list[k] = s->poc + rps->delta_poc[i];
+				k++;
+			}
+		}
+		refPocList[ST_CURR_BEF].numPic = j;
+		j = 0;
+		for( i = rps->num_negative_pics; i < rps->num_delta_pocs; i ++ ) {
+			if (rps->used[i] ==1) {
+				refPocList[ST_CURR_AFT].list[j] = s->poc + rps->delta_poc[i];
+				j++;
+			} else {
+				refPocList[ST_FOLL].list[k] = s->poc + rps->delta_poc[i];
+				k++;
+			}
+		}
+		refPocList[ST_CURR_AFT].numPic = j;
+		refPocList[ST_FOLL].numPic = k;
+		refPocList[LT_CURR].numPic = 0;
+		refPocList[LT_FOLL].numPic = 0;
+		set_ref_pic_list(s);
+	}
+}
 static int hls_slice_header(HEVCContext *s)
 {
     int i;
@@ -224,10 +307,11 @@ static int hls_slice_header(HEVCContext *s)
     	    compute_POC(s, sh->pic_order_cnt_lsb);
             short_term_ref_pic_set_sps_flag = get_bits1(gb);
             if (!short_term_ref_pic_set_sps_flag) {
-                av_log(s->avctx, AV_LOG_ERROR, "TODO: !short_term_ref_pic_set_sps_flag\n");
-                return -1;
+            	ff_hevc_decode_short_term_rps(s, MAX_SHORT_TERM_RPS_COUNT, s->sps);
+                sh->short_term_rps = &s->sps->short_term_rps_list[MAX_SHORT_TERM_RPS_COUNT];
             } else {
                 int short_term_ref_pic_set_idx = get_ue_golomb(gb);
+                sh->short_term_rps = &s->sps->short_term_rps_list[short_term_ref_pic_set_idx];
             }
             if (s->sps->long_term_ref_pics_present_flag) {
                 av_log(s->avctx, AV_LOG_ERROR, "TODO: long_term_ref_pics_present_flag\n");
@@ -247,12 +331,15 @@ static int hls_slice_header(HEVCContext *s)
             sh->slice_sample_adaptive_offset_flag[1] = get_bits1(gb);
         }
 
-        sh->num_ref_idx_l0_active = s->pps->num_ref_idx_l0_default_active;
-        sh->num_ref_idx_l1_active = s->pps->num_ref_idx_l1_default_active;
+        sh->num_ref_idx_l0_active = 0;
+        sh->num_ref_idx_l1_active = 0;
         if(s->sps->sps_temporal_mvp_enabled_flag && s->nal_unit_type != NAL_IDR_W_DLP) {
             sh->slice_temporal_mvp_enable_flag = get_bits1(gb);
         }
         if (sh->slice_type == P_SLICE || sh->slice_type == B_SLICE) {
+            sh->num_ref_idx_l0_active = s->pps->num_ref_idx_l0_default_active;
+            if (sh->slice_type == B_SLICE)
+	            sh->num_ref_idx_l1_active = s->pps->num_ref_idx_l1_default_active;
         	sh->num_ref_idx_active_override_flag = get_bits1(gb);
 
         	if (sh->num_ref_idx_active_override_flag) {
@@ -286,6 +373,7 @@ static int hls_slice_header(HEVCContext *s)
             
             sh->max_num_merge_cand = 5 - get_ue_golomb(gb);
         }
+        set_ref_poc_list(s);
         sh->slice_qp_delta = get_se_golomb(gb);
         if (s->pps->pic_slice_level_chroma_qp_offsets_present_flag) {
             sh->slice_cb_qp_offset = get_se_golomb(gb);
@@ -933,7 +1021,8 @@ static int z_scan_block_avail(HEVCContext *s, int xCurr, int yCurr, int xN, int 
     } else {
         minBlockAddrN = s->pps->min_tb_addr_zs[((xN >> s->sps->log2_min_transform_block_size)*s->sps->pic_width_in_min_tbs)+(yN >> s->sps->log2_min_transform_block_size)];
     }
-    av_log(s->avctx, AV_LOG_ERROR, "TODO : check for different slices and tiles \n");
+	if (s->sh.slice_address != 0 || s->pps->tiles_enabled_flag != 0)
+    	av_log(s->avctx, AV_LOG_ERROR, "TODO : check for different slices and tiles \n");
     
     //TODO : check for different slices and tiles
     if ((minBlockAddrN < 0) || (minBlockAddrN > minBlockAddrCurr)) {
