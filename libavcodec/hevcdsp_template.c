@@ -58,13 +58,13 @@ static void FUNC(transform_skip)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stri
         int offset = 1 << (shift - 1);
         for (y = 0; y < size; y++) {
             for (x = 0; x < size; x++)
-                dst[x] += (coeffs[y * size + x] + offset) >> shift;
+                dst[x] = av_clip_pixel(dst[x] + ((coeffs[y * size + x] + offset) >> shift));
             dst += stride;
         }
     } else {
         for (y = 0; y < size; y++) {
             for (x = 0; x < size; x++)
-                dst[x] += coeffs[y * size + x] << (-shift);
+                dst[x] = av_clip_pixel(dst[x] + (coeffs[y * size + x] << (-shift)));
             dst += stride;
         }
     }
