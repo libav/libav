@@ -24,7 +24,7 @@
 #define AVCODEC_HEVCDSP_H
 
 typedef struct HEVCDSPContext {
-    void (*dequant)(int16_t *coeffs, int log2_size, int qp, int bit_depth);
+    void (*dequant)(int16_t *coeffs, int log2_size, int qp);
 
     void (*transquant_bypass)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stride, int log2_size);
 
