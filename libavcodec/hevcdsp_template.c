@@ -26,9 +26,23 @@
 #include "hevcdata.h"
 #include "hevcdsp.h"
 
-#define SET(dst, x) (dst) = (x)
-#define SCALE(dst, x) (dst) = av_clip_int16_c(((x) + add) >> shift)
-#define ADD_AND_SCALE(dst, x) (dst) = av_clip_pixel((dst) + av_clip_int16_c(((x) + add) >> shift))
+static void FUNC(dequant)(int16_t *coeffs, int log2_size, int qp)
+{
+    int x, y;
+    int size = 1 << log2_size;
+
+    const uint8_t level_scale[] = { 40, 45, 51, 57, 64, 72 };
+
+    //TODO: scaling_list_enabled_flag support
+
+    int m = 16;
+    int shift = BIT_DEPTH + log2_size - 5;
+    int scale = level_scale[qp % 6] << (qp / 6);
+    for (y = 0; y < size; y++)
+        for (x = 0; x < size; x++)
+            coeffs[size*y+x] = av_clip_int16_c(((coeffs[size*y+x] * m * scale) +
+                                                (1 << (shift - 1))) >> shift);
+}
 
 static void FUNC(transquant_bypass)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stride, int log2_size)
 {
@@ -64,6 +78,10 @@ static void FUNC(transform_skip)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stri
         dst += stride;
     }
 }
+
+#define SET(dst, x) (dst) = (x)
+#define SCALE(dst, x) (dst) = av_clip_int16_c(((x) + add) >> shift)
+#define ADD_AND_SCALE(dst, x) (dst) = av_clip_pixel((dst) + av_clip_int16_c(((x) + add) >> shift))
 
 static void FUNC(transform_4x4_luma_add)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stride)
 {
