@@ -35,30 +35,13 @@
 #include "hevcdsp_template.c"
 #undef BIT_DEPTH
 
-static void dequant(int16_t *coeffs, int log2_size, int qp, int bit_depth)
-{
-    int x, y;
-    int size = 1 << log2_size;
-
-    const uint8_t level_scale[] = { 40, 45, 51, 57, 64, 72 };
-
-    //TODO: scaling_list_enabled_flag support
-
-    int m = 16;
-    int shift = bit_depth + log2_size - 5;
-    int scale = level_scale[qp % 6] << (qp / 6);
-    for (y = 0; y < size; y++)
-        for (x = 0; x < size; x++)
-            coeffs[size*y+x] = av_clip_int16_c(((coeffs[size*y+x] * m * scale) +
-                                                (1 << (shift - 1))) >> shift);
-}
-
 void ff_hevc_dsp_init(HEVCDSPContext *hevcdsp, int bit_depth)
 {
 #undef FUNC
 #define FUNC(a, depth) a ## _ ## depth
 
 #define HEVC_DSP(depth)                                                     \
+    hevcdsp->dequant = FUNC(dequant, depth);                                \
     hevcdsp->transquant_bypass = FUNC(transquant_bypass, depth);            \
     hevcdsp->transform_skip = FUNC(transform_skip, depth);                  \
     hevcdsp->transform_4x4_luma_add = FUNC(transform_4x4_luma_add, depth);  \
@@ -90,8 +73,6 @@ void ff_hevc_dsp_init(HEVCDSPContext *hevcdsp, int bit_depth)
     hevcdsp->put_hevc_epel[0][1] = FUNC(put_hevc_epel_h, depth);            \
     hevcdsp->put_hevc_epel[1][0] = FUNC(put_hevc_epel_v, depth);            \
     hevcdsp->put_hevc_epel[1][1] = FUNC(put_hevc_epel_hv, depth);
-
-    hevcdsp->dequant = dequant;
 
     switch (bit_depth) {
     case 9:
