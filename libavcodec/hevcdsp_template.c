@@ -46,35 +46,23 @@ static void FUNC(transquant_bypass)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _s
     }
 }
 
-static void FUNC(transform_skip)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stride, int log2_size)
+static void FUNC(transform_skip)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stride)
 {
     int x, y;
     pixel *dst = (pixel*)_dst;
     ptrdiff_t stride = _stride / sizeof(pixel);
-    int size = 1 << log2_size;
-#if REFERENCE_ENCODER_QUIRKS
-    int shift = 15 - BIT_DEPTH - log2_size;
-    if (shift > 0) {
-        int offset = 1 << (shift - 1);
-        for (y = 0; y < size; y++) {
-            for (x = 0; x < size; x++)
-                dst[x] = av_clip_pixel(dst[x] + ((coeffs[y * size + x] + offset) >> shift));
-            dst += stride;
-        }
-    } else {
-        for (y = 0; y < size; y++) {
-            for (x = 0; x < size; x++)
-                dst[x] = av_clip_pixel(dst[x] + (coeffs[y * size + x] << (-shift)));
-            dst += stride;
-        }
-    }
-#else
+    int size = 4;
+    int shift = 13 - BIT_DEPTH;
+    int offset = 1 << (shift - 1);
     for (y = 0; y < size; y++) {
         for (x = 0; x < size; x++)
-            dst[x] += coeffs[y * size + x] << 7;
+#if BIT_DEPTH <= 13
+            dst[x] = av_clip_pixel(dst[x] + ((coeffs[y * size + x] + offset) >> shift));
+#else
+            dst[x] = av_clip_pixel(dst[x] + (coeffs[y * size + x] << (-shift)));
+#endif
         dst += stride;
     }
-#endif
 }
 
 static void FUNC(transform_4x4_luma_add)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stride)

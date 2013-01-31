@@ -28,7 +28,7 @@ typedef struct HEVCDSPContext {
 
     void (*transquant_bypass)(uint8_t *_dst, int16_t *coeffs, ptrdiff_t _stride, int log2_size);
 
-    void (*transform_skip)(uint8_t *dst, int16_t *coeffs, ptrdiff_t stride, int log2_size);
+    void (*transform_skip)(uint8_t *dst, int16_t *coeffs, ptrdiff_t stride);
 
     void (*transform_4x4_luma_add)(uint8_t *dst, int16_t *coeffs, ptrdiff_t stride);
 
