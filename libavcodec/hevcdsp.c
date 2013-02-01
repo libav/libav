@@ -73,7 +73,10 @@ void ff_hevc_dsp_init(HEVCDSPContext *hevcdsp, int bit_depth)
     hevcdsp->put_hevc_epel[0][0] = FUNC(put_hevc_epel_pixels, depth);       \
     hevcdsp->put_hevc_epel[0][1] = FUNC(put_hevc_epel_h, depth);            \
     hevcdsp->put_hevc_epel[1][0] = FUNC(put_hevc_epel_v, depth);            \
-    hevcdsp->put_hevc_epel[1][1] = FUNC(put_hevc_epel_hv, depth);
+    hevcdsp->put_hevc_epel[1][1] = FUNC(put_hevc_epel_hv, depth);           \
+                                                                            \
+    hevcdsp->hevc_loop_filter_luma = FUNC(hevc_loop_filter_luma, depth);    \
+    hevcdsp->hevc_loop_filter_chroma = FUNC(hevc_loop_filter_chroma, depth);
 
     switch (bit_depth) {
     case 9:
