@@ -405,7 +405,7 @@ static int decode_wmv9(AVCodecContext *avctx, const uint8_t *buf, int buf_size,
         return -1;
     }
 
-    ff_er_frame_start(s);
+    ff_mpeg_er_frame_start(s);
 
     v->bits = buf_size * 8;
 
@@ -418,7 +418,7 @@ static int decode_wmv9(AVCodecContext *avctx, const uint8_t *buf, int buf_size,
 
     ff_vc1_decode_blocks(v);
 
-    ff_er_frame_end(s);
+    ff_er_frame_end(&s->er);
 
     ff_MPV_frame_end(s);
 
