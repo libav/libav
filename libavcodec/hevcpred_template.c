@@ -239,8 +239,8 @@ static void FUNCC(pred_dc)(uint8_t *_src, const uint8_t *_top, const uint8_t *_l
     a = PIXEL_SPLAT_X4(dc);
 
     for (i = 0; i < size; i++)
-        for (j = 0; j < size / sizeof(pixel4); j++)
-            AV_WN4PA(&POS(j * sizeof(pixel4), i), a);
+        for (j = 0; j < size / 4; j++)
+            AV_WN4PA(&POS(j * 4, i), a);
 
     if (c_idx == 0 && size < 32) {
         POS(0, 0) = (left[0] + 2 * dc  + top[0] + 2) >> 2;
