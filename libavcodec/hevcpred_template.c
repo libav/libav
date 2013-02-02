@@ -287,8 +287,14 @@ static void FUNCC(pred_angular)(uint8_t *_src, const uint8_t *_top, const uint8_
         for (y = 0; y < size; y++) {
             int idx = ((y + 1) * angle) >> 5;
             int fact = ((y + 1) * angle) & 31;
-            for (x = 0; x < size; x++) {
-                POS(x, y) = ((32 - fact) * ref[x + idx + 1] + fact * ref[x + idx + 2] + 16) >> 5;
+            if (fact) {
+                for (x = 0; x < size; x++) {
+                    POS(x, y) = ((32 - fact) * ref[x + idx + 1] + fact * ref[x + idx + 2] + 16) >> 5;
+                }
+            } else {
+                for (x = 0; x < size; x++) {
+                    POS(x, y) = ref[x + idx + 1];
+                }
             }
         }
         if (mode == 26 && c_idx == 0 && size < 32) {
@@ -308,8 +314,14 @@ static void FUNCC(pred_angular)(uint8_t *_src, const uint8_t *_top, const uint8_
         for (x = 0; x < size; x++) {
             int idx = ((x + 1) * angle) >> 5;
             int fact = ((x + 1) * angle) & 31;
-            for (y = 0; y < size; y++) {
-                POS(x, y) = ((32 - fact) * ref[y + idx + 1] + fact * ref[y + idx + 2] + 16) >> 5;
+            if (fact) {
+                for (y = 0; y < size; y++) {
+                    POS(x, y) = ((32 - fact) * ref[y + idx + 1] + fact * ref[y + idx + 2] + 16) >> 5;
+                }
+            } else {
+                for (y = 0; y < size; y++) {
+                    POS(x, y) = ref[y + idx + 1];
+                }
             }
         }
         if (mode == 10 && c_idx == 0 && size < 32) {
