@@ -66,7 +66,8 @@ static int pic_arrays_init(HEVCContext *s)
         }
 
     if (!s->sao || !s->split_coding_unit_flag || !s->cu.skip_flag ||
-        !s->pu.left_ipm || !s->pu.top_ipm)
+        !s->cu.left_ct_depth || !s->cu.top_ct_depth ||
+        !s->pu.left_ipm || !s->pu.top_ipm || !s->pu.tab_mvf)
         return -1;
 
     for (i = 0; i < MAX_TRANSFORM_DEPTH; i++) {
@@ -87,6 +88,9 @@ static void pic_arrays_free(HEVCContext *s)
 
     av_freep(&s->split_coding_unit_flag);
     av_freep(&s->cu.skip_flag);
+
+    av_freep(&s->cu.left_ct_depth);
+    av_freep(&s->cu.top_ct_depth);
 
     av_freep(&s->pu.left_ipm);
     av_freep(&s->pu.top_ipm);
@@ -1962,6 +1966,10 @@ static av_cold int hevc_decode_free(AVCodecContext *avctx)
         s->avctx->release_buffer(s->avctx, &s->sao_frame);
 
     av_freep(&s->edge_emu_buffer);
+
+    for (i = 0; i < MAX_VPS_COUNT; i++) {
+        av_freep(&s->vps_list[i]);
+    }
 
     for (i = 0; i < MAX_SPS_COUNT; i++) {
         av_freep(&s->sps_list[i]);
