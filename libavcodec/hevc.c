@@ -2263,6 +2263,8 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         if (hls_slice_header(s) < 0)
             return -1;
 
+        if (s->sao_frame.data[0])
+            s->avctx->release_buffer(s->avctx, &s->sao_frame);
         if (s->frame.data[0])
             s->avctx->release_buffer(s->avctx, &s->frame);
         if (s->avctx->get_buffer(s->avctx, &s->frame) < 0) {
@@ -2274,21 +2276,21 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         if (hls_slice_data(s) < 0)
             return -1;
 
-        if (s->sao_frame.data[0])
-            s->avctx->release_buffer(s->avctx, &s->sao_frame);
-        if (s->avctx->get_buffer(s->avctx, &s->sao_frame) < 0) {
-            av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
-            return -1;
-        }
-        av_picture_copy((AVPicture*)&s->sao_frame, (AVPicture*)&s->frame,
-                        s->avctx->pix_fmt, s->avctx->width, s->avctx->height);
-
-        if (s->sps->sample_adaptive_offset_enabled_flag)
+        if (s->sps->sample_adaptive_offset_enabled_flag) {
+            if (s->avctx->get_buffer(s->avctx, &s->sao_frame) < 0) {
+                av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
+                return -1;
+            }
+            av_picture_copy((AVPicture*)&s->sao_frame, (AVPicture*)&s->frame,
+                            s->avctx->pix_fmt, s->avctx->width, s->avctx->height);
             sao_filter(s);
+            *(AVFrame*)data = s->sao_frame;
+        } else {
+            *(AVFrame*)data = s->frame;
+        }
 
         s->frame.pict_type = AV_PICTURE_TYPE_I;
         s->frame.key_frame = 1;
-        *(AVFrame*)data = s->sao_frame;
         *data_size = sizeof(AVFrame);
         break;
     default:
