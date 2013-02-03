@@ -884,7 +884,7 @@ static void hls_transform_unit(HEVCContext *s, int x0, int  y0, int xBase, int y
         SAMPLE_CBF(s->tt.cbf_cb[trafo_depth], x0, y0) ||
         SAMPLE_CBF(s->tt.cbf_cr[trafo_depth], x0, y0)) {
         if (s->pps->cu_qp_delta_enabled_flag && !s->tu.is_cu_qp_delta_coded) {
-            av_dlog(s->avctx, AV_LOG_ERROR, "TODO: cu_qp_delta_enabled_flag\n");
+            av_log(s->avctx, AV_LOG_ERROR, "TODO: cu_qp_delta_enabled_flag\n");
             s->tu.is_cu_qp_delta_coded = 1;
         }
 
@@ -2010,7 +2010,7 @@ static void hls_coding_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
                 log2_cb_size >= s->sps->pcm.log2_min_pcm_coding_block_size &&
                 log2_cb_size <= s->sps->pcm.log2_min_pcm_coding_block_size + s->sps->pcm.log2_diff_max_min_pcm_coding_block_size) {
                 s->cu.pcm_flag = ff_hevc_pcm_flag_decode(s);
-                av_dlog(s->avctx, AV_LOG_ERROR, "pcm_flag: %d\n", s->cu.pcm_flag);
+                av_dlog(s->avctx, "pcm_flag: %d\n", s->cu.pcm_flag);
             }
             if (s->cu.pcm_flag) {
                 s->num_pcm_block = 1;
