@@ -146,7 +146,7 @@ typedef struct Picture{
     uint8_t *mb_mean;           ///< Table for MB luminance
     int32_t *mb_cmp_score;      ///< Table for MB cmp scores, for mb decision FIXME remove
     int b_frame_score;          /* */
-    struct MpegEncContext *owner2; ///< pointer to the MpegEncContext that allocated this picture
+    void *owner2;               ///< pointer to the context that allocated this picture
     int needs_realloc;          ///< Picture needs to be reallocated (eg due to a frame size change)
 } Picture;
 
