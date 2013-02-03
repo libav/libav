@@ -186,7 +186,7 @@ void ff_vdpau_h264_picture_complete(MpegEncContext *s)
     memcpy(render->info.h264.scaling_lists_8x8[0], h->pps.scaling_matrix8[0], sizeof(render->info.h264.scaling_lists_8x8[0]));
     memcpy(render->info.h264.scaling_lists_8x8[1], h->pps.scaling_matrix8[3], sizeof(render->info.h264.scaling_lists_8x8[0]));
 
-    ff_draw_horiz_band(s, 0, s->avctx->height);
+    ff_mpeg_draw_horiz_band(s, 0, s->avctx->height);
     render->bitstream_buffers_used = 0;
 }
 
@@ -243,7 +243,7 @@ void ff_vdpau_mpeg_picture_complete(MpegEncContext *s, const uint8_t *buf,
     render->info.mpeg.slice_count                = slice_count;
 
     if (slice_count)
-        ff_draw_horiz_band(s, 0, s->avctx->height);
+        ff_mpeg_draw_horiz_band(s, 0, s->avctx->height);
     render->bitstream_buffers_used               = 0;
 }
 
@@ -312,7 +312,7 @@ void ff_vdpau_vc1_decode_picture(MpegEncContext *s, const uint8_t *buf,
 
     render->info.vc1.slice_count          = 1;
 
-    ff_draw_horiz_band(s, 0, s->avctx->height);
+    ff_mpeg_draw_horiz_band(s, 0, s->avctx->height);
     render->bitstream_buffers_used        = 0;
 }
 
@@ -366,7 +366,7 @@ void ff_vdpau_mpeg4_decode_picture(MpegEncContext *s, const uint8_t *buf,
 
     ff_vdpau_add_data_chunk(s, buf, buf_size);
 
-    ff_draw_horiz_band(s, 0, s->avctx->height);
+    ff_mpeg_draw_horiz_band(s, 0, s->avctx->height);
     render->bitstream_buffers_used = 0;
 }
 
