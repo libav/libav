@@ -81,8 +81,12 @@ static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int
 
     // Fill left and top with the available samples
     if (bottom_left_available) {
-        for (i = 0; i < bottom_left_size; i++)
+        for (i = 0; i < bottom_left_size; i++) {
             left[size + i] = POS(-1, size + i);
+        }
+        for (; i < size; i++) {
+            left[size + i] = POS(-1, size + bottom_left_size - 1);
+        }
     }
     if (left_available) {
         for (i = 0; i < size; i++)
@@ -95,8 +99,11 @@ static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int
     } else {
         if (top_available)
             memcpy(&top[0], &POS(0, -1), size * sizeof(pixel));
-        if (top_right_available)
+        if (top_right_available) {
             memcpy(&top[size], &POS(size, -1), top_right_size * sizeof(pixel));
+            for (i = top_right_size; i < size; i++)
+                top[size + i] = POS(size + top_right_size - 1, -1);
+        }
     }
 
     // Infer the unavailable samples
@@ -143,11 +150,6 @@ static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int
     }
     if (!top_right_available)
         EXTEND_RIGHT(&top[size-1], size);
-
-    if (bottom_left_size < size)
-        EXTEND_DOWN(&left[size + bottom_left_size - 1], size - bottom_left_size);
-    if (top_right_size < size)
-        EXTEND_RIGHT(&top[size + top_right_size - 1], size - top_right_size);
 
     top[-1] = left[-1];
 
