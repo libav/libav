@@ -322,7 +322,7 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
         goto err;
     }
 
-    sps->asymmetric_motion_partitions_enabled_flag  = get_bits1(gb);
+    sps->amp_enabled_flag  = get_bits1(gb);
     sps->sample_adaptive_offset_enabled_flag        = get_bits1(gb);
 
     if (sps->pcm_enabled_flag)

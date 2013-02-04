@@ -605,19 +605,19 @@ static void hls_residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_s
     }
 
     last_significant_coeff_x =
-    ff_hevc_last_significant_coeff_prefix_decode(s, c_idx, log2_trafo_size, 1);
+    ff_hevc_last_significant_coeff_x_prefix_decode(s, c_idx, log2_trafo_size);
     last_significant_coeff_y =
-    ff_hevc_last_significant_coeff_prefix_decode(s, c_idx, log2_trafo_size, 0);
+    ff_hevc_last_significant_coeff_y_prefix_decode(s, c_idx, log2_trafo_size);
 
 
     if (last_significant_coeff_x > 3) {
-        int suffix = ff_hevc_last_significant_coeff_suffix_decode(s, last_significant_coeff_x, 1);
+        int suffix = ff_hevc_last_significant_coeff_suffix_decode(s, last_significant_coeff_x);
         last_significant_coeff_x = (1 << ((last_significant_coeff_x >> 1) - 1)) *
                                    (2 + (last_significant_coeff_x & 1)) +
                                    suffix;
     }
     if (last_significant_coeff_y > 3) {
-        int suffix = ff_hevc_last_significant_coeff_suffix_decode(s, last_significant_coeff_y, 0);
+        int suffix = ff_hevc_last_significant_coeff_suffix_decode(s, last_significant_coeff_y);
         last_significant_coeff_y = (1 << ((last_significant_coeff_y >> 1) - 1)) *
                                    (2 + (last_significant_coeff_y & 1)) +
                                    suffix;
@@ -706,8 +706,7 @@ static void hls_residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_s
         if ((i < num_last_subset) && (i > 0)) {
             s->rc.significant_coeff_group_flag[x_cg][y_cg] =
             ff_hevc_significant_coeff_group_flag_decode(s, c_idx, x_cg, y_cg,
-                                                        log2_trafo_size,
-                                                        scan_idx);
+                                                        log2_trafo_size);
             implicit_non_zero_coeff = 1;
         } else {
             s->rc.significant_coeff_group_flag[x_cg][y_cg] =
@@ -1536,7 +1535,7 @@ static void hls_prediction_unit(HEVCContext *s, int x0, int y0, int nPbW, int nP
                 merge_idx = ff_hevc_merge_idx_decode(s);
         } else {
             if (s->sh.slice_type == B_SLICE)
-                inter_pred_idc = ff_hevc_inter_pred_idc_decode(s, 1<<log2_cb_size);
+                inter_pred_idc = ff_hevc_inter_pred_idc_decode(s, nPbW, nPbH);
             if (inter_pred_idc != PRED_L1) {
                 if (s->sh.num_ref_idx_l0_active > 1)
                     ref_idx_l0 = ff_hevc_ref_idx_lx_decode(s, s->sh.num_ref_idx_l0_active);
