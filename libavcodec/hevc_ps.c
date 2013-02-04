@@ -138,7 +138,7 @@ int ff_hevc_decode_short_term_rps(HEVCContext *s, int idx, SPS *sps)
     return 0;
 }
 
-static void decode_profile_tier_level(HEVCContext *s, PTL *ptl,
+static int decode_profile_tier_level(HEVCContext *s, PTL *ptl,
                                       int profile_present_flag, int max_num_sub_layers)
 {
     int i, j;
@@ -150,7 +150,12 @@ static void decode_profile_tier_level(HEVCContext *s, PTL *ptl,
         ptl->general_profile_idc = get_bits(gb, 5);
         for (i = 0; i < 32; i++)
             ptl->general_profile_compatibility_flag[i] = get_bits1(gb);
-        skip_bits(gb, 16); // general_reserved_zero_16bits
+        if (get_bits(gb, 16) != 0) // XXX_reserved_zero_48bits[0..15]
+            return -1;
+        if (get_bits(gb, 16) != 0) // XXX_reserved_zero_48bits[16..31]
+            return -1;
+        if (get_bits(gb, 16) != 0) // XXX_reserved_zero_48bits[32..47]
+            return -1;
     }
 
     ptl->general_level_idc = get_bits(gb, 8);
@@ -168,6 +173,7 @@ static void decode_profile_tier_level(HEVCContext *s, PTL *ptl,
         if (ptl->sub_layer_level_present_flag[i])
             ptl->sub_layer_level_idc[i] = get_bits(gb, 8);
     }
+    return 0;
 }
 
 static void decode_bit_rate_pic_rate(HEVCContext *s, int tempLevelLow, int tempLevelHigh)
@@ -232,7 +238,10 @@ int ff_hevc_decode_nal_vps(HEVCContext *s)
         goto err;
     }
 
-    decode_profile_tier_level(s, &vps->ptl, 1, vps->vps_max_sub_layers);
+    if (decode_profile_tier_level(s, &vps->ptl, 1, vps->vps_max_sub_layers) != 0) {
+        av_log(s->avctx, AV_LOG_ERROR, "error decoding profile tier level");
+        goto err;
+    }
     decode_bit_rate_pic_rate(s, 0, vps->vps_max_sub_layers - 1);
 
     vps->vps_sub_layer_ordering_info_present_flag = get_bits1(gb);
@@ -250,12 +259,19 @@ int ff_hevc_decode_nal_vps(HEVCContext *s)
         for (i = 0; i <= vps->vps_max_nuh_reserved_zero_layer_id; i++)
             skip_bits(gb, 1); // layer_id_included_flag[opsIdx][i]
     }
-
-    vps->vps_num_hrd_parameters = get_ue_golomb(gb);
-    if (vps->vps_num_hrd_parameters != 0) {
-        av_log_missing_feature(s->avctx, "support for vps_num_hrd_parameters != 0", 0);
-        av_free(vps);
-        return AVERROR_PATCHWELCOME;
+    vps->vps_timing_info_present_flag = get_bits1(gb);
+    if(vps->vps_timing_info_present_flag) {
+        vps->vps_num_units_in_tick = get_bits_long(gb, 32);
+        vps->vps_time_scale = get_bits_long(gb, 32);
+        vps->vps_poc_proportional_to_timing_flag = get_bits1(gb);
+        if(vps->vps_poc_proportional_to_timing_flag)
+            vps->vps_num_ticks_poc_diff_one = get_ue_golomb(gb) + 1;
+        vps->vps_num_hrd_parameters = get_ue_golomb(gb);
+        if (vps->vps_num_hrd_parameters != 0) {
+            av_log_missing_feature(s->avctx, "support for vps_num_hrd_parameters != 0", 0);
+            av_free(vps);
+            return AVERROR_PATCHWELCOME;
+        }
     }
     get_bits1(gb); /* vps_extension_flag */
     av_free(s->vps_list[vps_id]);
@@ -298,7 +314,10 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
     }
 
     sps->temporal_id_nesting_flag = get_bits1(gb);
-    decode_profile_tier_level(s, &sps->ptl, 1, sps->sps_max_sub_layers);
+    if(decode_profile_tier_level(s, &sps->ptl, 1, sps->sps_max_sub_layers) != 0) {
+        av_log(s->avctx, AV_LOG_ERROR, "error decoding profile tier level");
+        goto err;
+    }
     sps_id = get_ue_golomb(gb);
     if (sps_id >= MAX_SPS_COUNT) {
         av_log(s->avctx, AV_LOG_ERROR, "SPS id out of range: %d\n", sps_id);
@@ -440,6 +459,8 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
     sps = s->sps_list[pps->sps_id];
 
     pps->dependent_slice_segments_enabled_flag = get_bits1(gb);
+    pps->output_flag_present_flag = get_bits1(gb);
+    pps->num_extra_slice_header_bits = get_bits(gb, 3);
 
     pps->sign_data_hiding_flag = get_bits1(gb);
 
@@ -463,7 +484,6 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
 
     pps->weighted_pred_flag            = get_bits1(gb);
     pps->weighted_bipred_flag          = get_bits1(gb);
-    pps->output_flag_present_flag      = get_bits1(gb);
     pps->transquant_bypass_enable_flag = get_bits1(gb);
     pps->tiles_enabled_flag               = get_bits1(gb);
     pps->entropy_coding_sync_enabled_flag = get_bits1(gb);
@@ -508,7 +528,6 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
     }
     pps->lists_modification_present_flag = get_bits1(gb);
     pps->log2_parallel_merge_level = get_ue_golomb(gb) + 2;
-    pps->num_extra_slice_header_bits = get_bits(gb, 3);
 
     pps->slice_header_extension_present_flag = get_bits1(gb);
     pps->pps_extension_flag = get_bits1(gb);
