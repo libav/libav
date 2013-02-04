@@ -114,6 +114,11 @@ typedef struct VPS {
     int vps_max_latency_increase[MAX_SUB_LAYERS];
     int vps_max_nuh_reserved_zero_layer_id;
     int vps_max_op_sets; ///< vps_max_op_sets_minus1 + 1
+    uint8_t vps_timing_info_present_flag;
+    uint32_t vps_num_units_in_tick;
+    uint32_t vps_time_scale;
+    uint8_t vps_poc_proportional_to_timing_flag;
+    int vps_num_ticks_poc_diff_one; ///< vps_num_ticks_poc_diff_one_minus1 + 1
     int vps_num_hrd_parameters;
 } VPS;
 
