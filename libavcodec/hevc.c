@@ -1336,7 +1336,6 @@ static void luma_mc(HEVCContext *s, uint8_t *dst, ptrdiff_t dststride,
     ptrdiff_t srcstride = s->frame.linesize[0];
     int pic_width = s->sps->pic_width_in_luma_samples;
     int pic_height = s->sps->pic_height_in_luma_samples;
-    int pixel = 1 + !!(s->sps->bit_depth - 8); // sizeof(pixel)
 
     int mx = mv->m_iHor & 3;
     int my = mv->m_iVer & 3;
@@ -1345,11 +1344,11 @@ static void luma_mc(HEVCContext *s, uint8_t *dst, ptrdiff_t dststride,
 
     x_off += mv->m_iHor >> 2;
     y_off += mv->m_iVer >> 2;
-    src += y_off * srcstride + x_off * pixel;
+    src += y_off * srcstride + (x_off << s->sps->pixel_shift);
 
     if (x_off < extra_left || x_off >= pic_width - block_w - qpel_extra_after[mx] ||
         y_off < extra_top || y_off >= pic_height - block_h - qpel_extra_after[my]) {
-        int offset = extra_top * srcstride + extra_left * pixel;
+        int offset = extra_top * srcstride + (extra_left << s->sps->pixel_shift);
         s->dsp.emulated_edge_mc(s->edge_emu_buffer, src - offset, srcstride,
                                 block_w + qpel_extra[mx], block_h + qpel_extra[my],
                                 x_off - extra_left, y_off - extra_top,
@@ -1380,19 +1379,18 @@ static void chroma_mc(HEVCContext *s, uint8_t *dst1, uint8_t *dst2, ptrdiff_t ds
     ptrdiff_t srcstride = s->frame.linesize[1];
     int pic_width = s->sps->pic_width_in_luma_samples >> 1;
     int pic_height = s->sps->pic_height_in_luma_samples >> 1;
-    int pixel = 1 + !!(s->sps->bit_depth - 8); // sizeof(pixel)
 
     int mx = mv->m_iHor & 7;
     int my = mv->m_iVer & 7;
 
     x_off += mv->m_iHor >> 3;
     y_off += mv->m_iVer >> 3;
-    src1 += y_off * srcstride + x_off * pixel;
-    src2 += y_off * srcstride + x_off * pixel;
+    src1 += y_off * srcstride + (x_off << s->sps->pixel_shift);
+    src2 += y_off * srcstride + (x_off << s->sps->pixel_shift);
 
     if (x_off < epel_extra_before || x_off >= pic_width - block_w - epel_extra_after ||
         y_off < epel_extra_after || y_off >= pic_height - block_h - epel_extra_after) {
-        int offset = epel_extra_before * (srcstride + 1 * pixel);
+        int offset = epel_extra_before * (srcstride + (1 << s->sps->pixel_shift));
         s->dsp.emulated_edge_mc(s->edge_emu_buffer, src1 - offset, srcstride,
                                 block_w + epel_extra, block_h + epel_extra,
                                 x_off - epel_extra_before, y_off - epel_extra_before,
