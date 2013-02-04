@@ -326,11 +326,32 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
 
     sps->pcm_enabled_flag = get_bits1(gb);
     if (sps->pcm_enabled_flag) {
-        sps->pcm.bit_depth_luma = get_bits(gb, 4) + 1;
-        sps->pcm.bit_depth_chroma = get_bits(gb, 4) + 1;
-        sps->pcm.log2_min_pcm_coding_block_size = get_ue_golomb(gb) + 3;
-        sps->pcm.log2_diff_max_min_pcm_coding_block_size = get_ue_golomb(gb);
+        int pcm_bit_depth_chroma;
+        sps->pcm.bit_depth = get_bits(gb, 4) + 1;
+        pcm_bit_depth_chroma = get_bits(gb, 4) + 1;
+        if (pcm_bit_depth_chroma != sps->pcm.bit_depth) {
+            av_log(s->avctx, AV_LOG_ERROR,
+                   "PCM Luma bit depth (%d) is different from PCM chroma"\
+                   "bit depth (%d), this is unsupported.\n",
+                   sps->pcm.bit_depth, pcm_bit_depth_chroma);
+            goto err;
+        }
+
+        sps->pcm.log2_min_pcm_cb_size = get_ue_golomb(gb) + 3;
+        sps->pcm.log2_max_pcm_cb_size =
+            sps->pcm.log2_min_pcm_cb_size + get_ue_golomb(gb);
+        if (sps->pcm.bit_depth > sps->bit_depth) {
+            av_log(s->avctx, AV_LOG_ERROR,
+                   "PCM bit depth (%d) is greater than normal bit depth (%d)\n",
+                   sps->pcm.bit_depth, sps->bit_depth);
+            goto err;
+        }
+
         sps->pcm.loop_filter_disable_flag = get_bits1(gb);
+        if (sps->pcm.loop_filter_disable_flag) {
+            av_log_missing_feature(s->avctx, "pcm_loop_filter_disable_flag", 0);
+            goto err;
+        }
     }
 
     sps->num_short_term_ref_pic_sets = get_ue_golomb(gb);
