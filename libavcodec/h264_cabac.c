@@ -1975,23 +1975,13 @@ decode_intra_mb:
     if(IS_INTRA_PCM(mb_type)) {
         const int mb_size = ff_h264_mb_sizes[h->sps.chroma_format_idc] *
                             h->sps.bit_depth_luma >> 3;
-        const uint8_t *ptr;
 
         // We assume these blocks are very rare so we do not optimize it.
-        // FIXME The two following lines get the bitstream position in the cabac
-        // decode, I think it should be done by a function in cabac.h (or cabac.c).
-        ptr= h->cabac.bytestream;
-        if(h->cabac.low&0x1) ptr--;
-        if(CABAC_BITS==16){
-            if(h->cabac.low&0x1FF) ptr--;
-        }
-
-        // The pixels are stored in the same order as levels in h->mb array.
-        if ((int) (h->cabac.bytestream_end - ptr) < mb_size)
+        const uint8_t *ptr = skip_bytes(&h->cabac, mb_size);
+        if (!ptr)
             return -1;
-        memcpy(h->mb, ptr, mb_size); ptr+=mb_size;
-
-        ff_init_cabac_decoder(&h->cabac, ptr, h->cabac.bytestream_end - ptr);
+        // The pixels are stored in the same order as levels in h->mb array.
+        memcpy(h->mb, ptr, mb_size);
 
         // All blocks are present
         h->cbp_table[mb_xy] = 0xf7ef;
