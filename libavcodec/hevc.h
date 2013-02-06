@@ -59,12 +59,12 @@ enum NALUnitType {
 
 typedef struct ShortTermRPS {
     uint8_t inter_ref_pic_set_prediction_flag;
+    int num_ref_idc;
     int num_negative_pics;
     int num_positive_pics;
     int num_delta_pocs;
-    uint8_t delta_rps_sign;
-    int abs_delta_rps;
-    int delta_poc[32];
+    uint8_t ref_idc[32];
+    uint32_t delta_poc[32];
     uint8_t used[32];
 } ShortTermRPS;
 
@@ -335,6 +335,8 @@ typedef struct SliceHeader {
 
     uint8_t slice_loop_filter_across_slices_enabled_flag;
 
+    int* entry_point_offset;
+
 #if REFERENCE_ENCODER_QUIRKS
     uint8_t tile_marker_flag;
 #endif
@@ -476,15 +478,15 @@ enum IntraPredMode {
 };
 
 typedef struct Mv {
-    int16_t m_iHor;     ///< horizontal component of motion vector
-    int16_t m_iVer;     ///< vertical component of motion vector
+    int16_t x;     ///< horizontal component of motion vector
+    int16_t y;     ///< vertical component of motion vector
 } Mv;
 
 typedef struct MvField {
-      Mv   acMv;
-      int  RefIdx;
-      int predFlag;
-      int isIntra;
+      Mv  mv;
+      int ref_idx;
+      int pred_flag;
+      int is_intra;
 } MvField;
 
 // MERGE
@@ -502,6 +504,7 @@ typedef struct PredictionUnit {
     uint8_t *top_ipm;
     uint8_t *left_ipm;
 
+    Mv mvd;
     MvField *tab_mvf;
 } PredictionUnit;
 
@@ -566,6 +569,7 @@ typedef struct HEVCContext {
     CABACContext cc;
 
     uint8_t cabac_state[HEVC_CONTEXTS];
+    uint8_t cabac_state_save[HEVC_CONTEXTS];
 
     int nal_ref_flag;
     enum NALUnitType nal_unit_type;
@@ -613,6 +617,9 @@ int ff_hevc_decode_nal_sps(HEVCContext *s);
 int ff_hevc_decode_nal_pps(HEVCContext *s);
 int ff_hevc_decode_nal_sei(HEVCContext *s);
 
+void save_states(HEVCContext *s);
+void load_states(HEVCContext *s);
+void ff_hevc_cabac_reinit(HEVCContext *s);
 void ff_hevc_cabac_init(HEVCContext *s);
 int ff_hevc_sao_merge_flag_decode(HEVCContext *s);
 int ff_hevc_sao_type_idx_decode(HEVCContext *s);
