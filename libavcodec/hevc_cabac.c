@@ -41,7 +41,7 @@ static const int8_t num_bins_in_se[] = {
      3,  // skip_flag
      3,  // cu_qp_delta
      1,  // pred_mode
-     3,  // part_mode
+     4,  // part_mode
      0,  // pcm_flag
      1,  // prev_intra_luma_pred_mode
      0,  // mpm_idx
@@ -100,7 +100,7 @@ const uint8_t init_values[3][HEVC_CONTEXTS] = {
         // pred_mode
         CNU,
         // part_mode
-        184, CNU, CNU,
+        184, CNU, CNU, CNU,
         // prev_intra_luma_pred_mode
         184,
         // intra_chroma_pred_mode
@@ -165,7 +165,7 @@ const uint8_t init_values[3][HEVC_CONTEXTS] = {
         // pred_mode
         149,
         // part_mode
-        154, 139, 154,
+        154, 139, 154, 154,
         // prev_intra_luma_pred_mode
         154,
         // intra_chroma_pred_mode
@@ -230,7 +230,7 @@ const uint8_t init_values[3][HEVC_CONTEXTS] = {
         // pred_mode
         134,
         // part_mode
-        154, 139, 154,
+        154, 139, 154, 154,
         // prev_intra_luma_pred_mode
         183,
         // intra_chroma_pred_mode
@@ -450,14 +450,14 @@ int ff_hevc_part_mode_decode(HEVCContext *s, int log2_cb_size)
     }
 
     if (GET_CABAC(elem_offset[PART_MODE] + 1)) { // 01X, 01XX
-        if (GET_CABAC(elem_offset[PART_MODE] + 2)) // 011
+        if (GET_CABAC(elem_offset[PART_MODE] + 3)) // 011
             return PART_2NxN;
         if (get_cabac_bypass(&s->cc)) // 0101
             return PART_2NxnD;
         return PART_2NxnU; // 0100
     }
 
-    if (GET_CABAC(elem_offset[PART_MODE] + 2)) // 001
+    if (GET_CABAC(elem_offset[PART_MODE] + 3)) // 001
         return PART_Nx2N;
     if (get_cabac_bypass(&s->cc)) // 0001
         return PART_nRx2N;
