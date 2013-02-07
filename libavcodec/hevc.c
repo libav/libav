@@ -496,20 +496,20 @@ static int hls_sao_param(HEVCContext *s, int rx, int ry)
                 } else {
                     sao->offset_sign[c_idx][i] = 0;
                 }
-                set_sao(band_position[c_idx], ff_hevc_sao_band_position_decode(s));
-            } else if (c_idx != 2) {
-                set_sao(eo_class[c_idx], ff_hevc_sao_eo_class_decode(s));
             }
+            set_sao(band_position[c_idx], ff_hevc_sao_band_position_decode(s));
+        } else if (c_idx != 2) {
+            set_sao(eo_class[c_idx], ff_hevc_sao_eo_class_decode(s));
+        }
 
-            // Inferred parameters
-            for (i = 0; i < 4; i++) {
-                sao->offset_val[c_idx][i+1] = sao->offset_abs[c_idx][i] << shift;
-                if (sao->type_idx[c_idx] == SAO_EDGE) {
-                    if (i > 1)
-                        sao->offset_val[c_idx][i+1] = -sao->offset_val[c_idx][i+1];
-                } else if (sao->offset_sign[c_idx][i+1]) {
+        // Inferred parameters
+        for (i = 0; i < 4; i++) {
+            sao->offset_val[c_idx][i+1] = sao->offset_abs[c_idx][i] << shift;
+            if (sao->type_idx[c_idx] == SAO_EDGE) {
+                if (i > 1)
                     sao->offset_val[c_idx][i+1] = -sao->offset_val[c_idx][i+1];
-                }
+            } else if (sao->offset_sign[c_idx][i]) {
+                sao->offset_val[c_idx][i+1] = -sao->offset_val[c_idx][i+1];
             }
         }
     }
