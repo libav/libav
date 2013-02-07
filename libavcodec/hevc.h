@@ -173,7 +173,6 @@ typedef struct SPS {
     } temporal_layer[MAX_SUB_LAYERS];
 
     uint8_t restricted_ref_pic_lists_flag;
-    uint8_t lists_modification_present_flag;
 
     int log2_min_coding_block_size; ///< log2_min_coding_block_size_minus3 + 3
     int log2_diff_max_min_coding_block_size;
