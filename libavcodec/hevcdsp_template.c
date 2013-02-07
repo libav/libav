@@ -22,9 +22,24 @@
 
 #include "libavutil/avassert.h"
 #include "libavutil/pixdesc.h"
+#include "get_bits.h"
 #include "bit_depth_template.c"
 #include "hevcdata.h"
 #include "hevcdsp.h"
+
+static void FUNC(put_pcm)(uint8_t *_dst, ptrdiff_t _stride, int size,
+                          GetBitContext *gb, int pcm_bit_depth)
+{
+    int x, y;
+    pixel *dst = (pixel*)_dst;
+    ptrdiff_t stride = _stride / sizeof(pixel);
+
+    for (y = 0; y < size; y++) {
+        for (x = 0; x < size; x++)
+            dst[x] = get_bits(gb, pcm_bit_depth) << (BIT_DEPTH - pcm_bit_depth);
+        dst += stride;
+    }
+}
 
 static void FUNC(dequant)(int16_t *coeffs, int log2_size, int qp)
 {

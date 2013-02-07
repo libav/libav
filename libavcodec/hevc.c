@@ -25,6 +25,7 @@
 #include "libavutil/common.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/internal.h"
+#include "cabac_functions.h"
 #include "golomb.h"
 #include "hevcdata.h"
 #include "hevc.h"
@@ -1008,22 +1009,26 @@ static void hls_transform_tree(HEVCContext *s, int x0, int y0,
 
 static void hls_pcm_sample(HEVCContext *s, int x0, int y0, int log2_cb_size)
 {
-    int i, j;
-    GetBitContext *gb = &s->gb;
+    //TODO: non-4:2:0 support
+
+    int x, y;
+    GetBitContext gb;
     int cb_size = 1 << log2_cb_size;
+    int stride0 = s->frame.linesize[0];
+    uint8_t *dst0 = &s->frame.data[0][y0 * stride0 + x0];
+    int stride1 = s->frame.linesize[1];
+    uint8_t *dst1 = &s->frame.data[1][(y0 >> s->sps->vshift[1]) * stride1 + (x0 >> s->sps->hshift[1])];
+    int stride2 = s->frame.linesize[2];
+    uint8_t *dst2 = &s->frame.data[2][(y0 >> s->sps->vshift[2]) * stride2 + (x0 >> s->sps->hshift[2])];
 
-    // Directly fill the current frame (section 8.4)
-    for (j = 0; j < cb_size; j++)
-        for (i = 0; i < cb_size; i++)
-            s->frame.data[0][(y0 + j) * s->frame.linesize[0] + (x0 + i)]
-                = get_bits(gb, s->sps->pcm.bit_depth_luma) <<
-                (s->sps->bit_depth - s->sps->pcm.bit_depth_luma);
+    int length = cb_size * cb_size * 3 / 2 * s->sps->pcm.bit_depth;
+    uint8_t *pcm = skip_bytes(&s->cc, length / 8);
 
-    //TODO: put the samples at the correct place in the frame
-    for (i = 0; i < (1 << (log2_cb_size << 1)) >> 1; i++)
-        get_bits(gb, s->sps->pcm.bit_depth_chroma);
+    init_get_bits(&gb, pcm, length);
 
-    s->num_pcm_block--;
+    s->hevcdsp.put_pcm(dst0, stride0, cb_size, &gb, s->sps->pcm.bit_depth);
+    s->hevcdsp.put_pcm(dst1, stride1, cb_size/2, &gb, s->sps->pcm.bit_depth);
+    s->hevcdsp.put_pcm(dst2, stride2, cb_size/2, &gb, s->sps->pcm.bit_depth);
 }
 
 static void hls_mvd_coding(HEVCContext *s, int x0, int y0, int log2_cb_size)
@@ -1967,7 +1972,6 @@ static void hls_coding_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
     s->cu.x = x0;
     s->cu.y = y0;
     s->cu.no_residual_data_flag = 1;
-    s->cu.pcm_flag = 0;
 
     s->cu.pred_mode = MODE_INTRA;
     s->cu.part_mode = PART_2Nx2N;
@@ -2007,17 +2011,12 @@ static void hls_coding_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
 
         if (s->cu.pred_mode == MODE_INTRA) {
             if (s->cu.part_mode == PART_2Nx2N && s->sps->pcm_enabled_flag &&
-                log2_cb_size >= s->sps->pcm.log2_min_pcm_coding_block_size &&
-                log2_cb_size <= s->sps->pcm.log2_min_pcm_coding_block_size + s->sps->pcm.log2_diff_max_min_pcm_coding_block_size) {
+                log2_cb_size >= s->sps->pcm.log2_min_pcm_cb_size &&
+                log2_cb_size <= s->sps->pcm.log2_max_pcm_cb_size) {
                 s->cu.pcm_flag = ff_hevc_pcm_flag_decode(s);
                 av_dlog(s->avctx, "pcm_flag: %d\n", s->cu.pcm_flag);
-            }
+           }
             if (s->cu.pcm_flag) {
-                s->num_pcm_block = 1;
-                while (s->num_pcm_block < 4 && get_bits1(&s->gb))
-                    s->num_pcm_block++;
-
-                align_get_bits(&s->gb);
                 hls_pcm_sample(s, x0, y0, log2_cb_size);
                 intra_prediction_unit_default_value(s, x0, y0, log2_cb_size);
             } else {
@@ -2086,7 +2085,7 @@ static int hls_coding_tree(HEVCContext *s, int x0, int y0, int log2_cb_size, int
         (y0 + (1 << log2_cb_size) <= s->sps->pic_height_in_luma_samples) &&
         min_cb_addr_zs(s, x0 >> s->sps->log2_min_coding_block_size,
                        y0 >> s->sps->log2_min_coding_block_size) >= s->sh.slice_cb_addr_zs &&
-        log2_cb_size > s->sps->log2_min_coding_block_size && s->num_pcm_block == 0) {
+        log2_cb_size > s->sps->log2_min_coding_block_size) {
         SAMPLE(s->split_coding_unit_flag, x0, y0) =
         ff_hevc_split_coding_unit_flag_decode(s, cb_depth, x0, y0);
     } else {
@@ -2115,11 +2114,7 @@ static int hls_coding_tree(HEVCContext *s, int x0, int y0, int log2_cb_size, int
         return ((x1 + cb_size) < s->sps->pic_width_in_luma_samples ||
                 (y1 + cb_size) < s->sps->pic_height_in_luma_samples);
     } else {
-        if (s->num_pcm_block == 0) {
-            hls_coding_unit(s, x0, y0, log2_cb_size);
-        } else {
-            hls_pcm_sample(s, x0, y0, log2_cb_size);
-        }
+        hls_coding_unit(s, x0, y0, log2_cb_size);
 
         av_dlog(s->avctx, "x0: %d, y0: %d, cb: %d, %d\n",
                x0, y0, (1 << log2_cb_size), (1 << (s->sps->log2_ctb_size)));
@@ -2128,8 +2123,7 @@ static int hls_coding_tree(HEVCContext *s, int x0, int y0, int log2_cb_size, int
              (x0 + (1 << log2_cb_size) >= s->sps->pic_width_in_luma_samples)) &&
             (!((y0 + (1 << log2_cb_size)) %
                (1 << (s->sps->log2_ctb_size))) ||
-             (y0 + (1 << log2_cb_size) >= s->sps->pic_height_in_luma_samples)) &&
-            s->num_pcm_block == 0) {
+             (y0 + (1 << log2_cb_size) >= s->sps->pic_height_in_luma_samples))) {
             int end_of_slice_flag = ff_hevc_end_of_slice_flag_decode(s);
             return !end_of_slice_flag;
         } else {
@@ -2158,7 +2152,6 @@ static int hls_slice_data(HEVCContext *s)
     while (more_data) {
         x_ctb = INVERSE_RASTER_SCAN(s->ctb_addr_rs, ctb_size, ctb_size, s->sps->pic_width_in_luma_samples, 0);
         y_ctb = INVERSE_RASTER_SCAN(s->ctb_addr_rs, ctb_size, ctb_size, s->sps->pic_width_in_luma_samples, 1);
-        s->num_pcm_block = 0;
         s->ctb_addr_in_slice = s->ctb_addr_rs - s->sh.slice_address;
         if (s->sh.slice_sample_adaptive_offset_flag[0] ||
             s->sh.slice_sample_adaptive_offset_flag[1])
@@ -2171,6 +2164,7 @@ static int hls_slice_data(HEVCContext *s)
         s->ctb_addr_ts++;
         s->ctb_addr_rs = s->pps->ctb_addr_ts_to_rs[s->ctb_addr_ts];
 
+<<<<<<< HEAD
         if (more_data) {
             if ((s->pps->tiles_enabled_flag &&
                  s->pps->tile_id[s->ctb_addr_ts] !=
@@ -2185,6 +2179,15 @@ static int hls_slice_data(HEVCContext *s)
                     ((s->ctb_addr_ts % s->sps->pic_width_in_ctbs) == 2)) {
                 save_states(s);
             }
+=======
+        if (more_data && (s->pps->tiles_enabled_flag &&
+                          s->pps->tile_id[s->ctb_addr_ts] !=
+                          s->pps->tile_id[s->ctb_addr_ts - 1]) ||
+            (s->pps->entropy_coding_sync_enabled_flag &&
+             ((s->ctb_addr_ts % s->sps->pic_width_in_ctbs) == 0))) {
+            av_log(s->avctx, AV_LOG_ERROR, "TODO: align\n");
+            return -1;
+>>>>>>> 6cfd474... hevc: fix PCM support
         }
     }
 
