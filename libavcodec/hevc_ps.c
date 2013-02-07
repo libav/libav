@@ -180,20 +180,19 @@ static void decode_bit_rate_pic_rate(HEVCContext *s, int tempLevelLow, int tempL
         bit_rate_info_present_flag = get_bits1(gb);
         pic_rate_info_present_flag = get_bits1(gb);
         if (bit_rate_info_present_flag) {
-            skip_bits(gb,16); // avg_bit_rate[i]
-            skip_bits(gb,16); // max_bit_rate[i]
+            skip_bits(gb, 16); // avg_bit_rate[i]
+            skip_bits(gb, 16); // max_bit_rate[i]
         }
         if (pic_rate_info_present_flag) {
-            skip_bits(gb,2);  // constant_pic_rate_idc[i]
-            skip_bits(gb,16); // avg_pic_rate[i]
+            skip_bits(gb, 2);  // constant_pic_rate_idc[i]
+            skip_bits(gb, 16); // avg_pic_rate[i]
         }
     }
 }
 
 int ff_hevc_decode_nal_vps(HEVCContext *s)
 {
-    int i;
-    int start;
+    int i,j;
     uint8_t vps_temporal_id_nesting_flag, vps_extension_flag;
     GetBitContext *gb = &s->gb;
     int vps_id = 0;
@@ -209,9 +208,8 @@ int ff_hevc_decode_nal_vps(HEVCContext *s)
         av_log(s->avctx, AV_LOG_ERROR, "VPS id out of range: %d\n", vps_id);
         goto err;
     }
-    vps->vps_temporal_id_nesting_flag = get_bits1(gb);
 
-    if (get_bits(gb,2) != 3) { // vps_reserved_three_2bits
+    if (get_bits(gb, 2) != 3) { // vps_reserved_three_2bits
         av_log(s->avctx, AV_LOG_ERROR, "vps_reserved_three_2bits is not three\n");
         goto err;
     }
@@ -222,6 +220,7 @@ int ff_hevc_decode_nal_vps(HEVCContext *s)
     }
 
     vps->vps_max_sub_layers = get_bits(gb, 3) + 1;
+    vps->vps_temporal_id_nesting_flag = get_bits1(gb);
     if (get_bits(gb, 16) != 0xffff) { // vps_reserved_ffff_16bits
         av_log(s->avctx, AV_LOG_ERROR, "vps_reserved_ffff_16bits is not 0xffff\n");
         goto err;
@@ -237,11 +236,19 @@ int ff_hevc_decode_nal_vps(HEVCContext *s)
     decode_bit_rate_pic_rate(s, 0, vps->vps_max_sub_layers - 1);
 
     vps->vps_sub_layer_ordering_info_present_flag = get_bits1(gb);
-    start = (vps->vps_sub_layer_ordering_info_present_flag ? 0 : (vps->vps_max_sub_layers-1));
-    for (i = start; i < vps->vps_max_sub_layers; i++) {
+    j = vps->vps_sub_layer_ordering_info_present_flag ? 0 : (vps->vps_max_sub_layers - 1);
+    for (i = j; i < vps->vps_max_sub_layers; i++) {
         vps->vps_max_dec_pic_buffering[i] = get_ue_golomb(gb);
         vps->vps_num_reorder_pics[i] = get_ue_golomb(gb);
         vps->vps_max_latency_increase[i] = get_ue_golomb(gb);
+    }
+
+    vps->vps_max_nuh_reserved_zero_layer_id = get_bits(gb, 6);
+    vps->vps_max_op_sets = get_ue_golomb(gb) + 1;
+    for (j = 1; j < vps->vps_max_op_sets; j++)
+    {
+        for (i = 0; i <= vps->vps_max_nuh_reserved_zero_layer_id; i++)
+            skip_bits(gb, 1); // layer_id_included_flag[opsIdx][i]
     }
 
     vps->vps_num_hrd_parameters = get_ue_golomb(gb);
@@ -501,7 +508,7 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
     }
     pps->lists_modification_present_flag = get_bits1(gb);
     pps->log2_parallel_merge_level = get_ue_golomb(gb) + 2;
-    pps->num_extra_slice_header_bits = get_bits(gb,3);
+    pps->num_extra_slice_header_bits = get_bits(gb, 3);
 
     pps->slice_header_extension_present_flag = get_bits1(gb);
     pps->pps_extension_flag = get_bits1(gb);

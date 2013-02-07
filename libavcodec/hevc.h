@@ -123,7 +123,8 @@ typedef struct VPS {
     int vps_max_dec_pic_buffering[MAX_SUB_LAYERS];
     int vps_num_reorder_pics[MAX_SUB_LAYERS];
     int vps_max_latency_increase[MAX_SUB_LAYERS];
-
+    int vps_max_nuh_reserved_zero_layer_id;
+    int vps_max_op_sets; ///< vps_max_op_sets_minus1 + 1
     int vps_num_hrd_parameters;
 } VPS;
 

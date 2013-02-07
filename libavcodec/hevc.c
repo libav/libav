@@ -299,8 +299,8 @@ static int hls_slice_header(HEVCContext *s)
     }
 
     if (!s->pps->dependent_slice_segments_enabled_flag) {
-        for(i= 0; i < s->pps->num_extra_slice_header_bits; i++)
-            get_bits1(gb); // slice_reserved_undetermined_flag[]
+        for(i = 0; i < s->pps->num_extra_slice_header_bits; i++)
+            skip_bits(gb, 1); // slice_reserved_undetermined_flag[]
         sh->slice_type = get_ue_golomb(gb);
         if (s->pps->output_flag_present_flag)
             sh->pic_output_flag = get_bits1(gb);
