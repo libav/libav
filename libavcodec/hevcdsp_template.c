@@ -339,6 +339,7 @@ static void FUNC(sao_edge_filter)(uint8_t *_dst, uint8_t *_src, ptrdiff_t _strid
         { { -1, -1 }, {  1, 1 } }, // 45 degree
         { {  1, -1 }, { -1, 1 } }, // 135 degree
     };
+    const uint8_t edge_idx[] = { 1, 2, 0, 3, 4 };
 
     int init_x = 0, init_y = 0;
     int border_edge_idx = 0;
@@ -349,10 +350,9 @@ static void FUNC(sao_edge_filter)(uint8_t *_dst, uint8_t *_src, ptrdiff_t _strid
 #define FILTER(x, y, edge_idx)                                      \
     DST(x, y) = av_clip_pixel(SRC(x, y) + sao_offset_val[edge_idx])
 
-#define EDGE_IDX(a) ((a) < 3) ? (((a) + 1) % 3) : (a)
-#define DIFF(x, y, k) SIGN(SRC(x, y) - SRC((x) + pos[sao_eo_class][(k)][0],     \
-                                           (y) + pos[sao_eo_class][(k)][1]))
-#define SIGN(a) ((a) > 0 ? 1 : ((a) == 0 ? 0 : -1))
+#define DIFF(x, y, k) CMP(SRC(x, y), SRC((x) + pos[sao_eo_class][(k)][0],       \
+                                         (y) + pos[sao_eo_class][(k)][1]))
+#define CMP(a, b) ((a) > (b) ? 1 : ((a) == (b) ? 0 : -1))
 
     if (sao_eo_class != SAO_EO_VERT) {
         if (at_left_border) {
@@ -382,16 +382,14 @@ static void FUNC(sao_edge_filter)(uint8_t *_dst, uint8_t *_src, ptrdiff_t _strid
 
     for (y = init_y; y < height; y++) {
         for (x = init_x; x < width; x++) {
-            int edge_idx = EDGE_IDX(2 + DIFF(x, y, 0) + DIFF(x, y, 1));
-            FILTER(x, y, edge_idx);
+            FILTER(x, y, edge_idx[2 + DIFF(x, y, 0) + DIFF(x, y, 1)]);
         }
     }
 #undef DST
 #undef SRC
 #undef FILTER
-#undef EDGE_IDX
 #undef DIFF
-#undef SIGN
+#undef CMP
 }
 
 #undef SET
