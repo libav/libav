@@ -312,7 +312,7 @@ typedef struct SliceHeader {
 
     uint8_t slice_sample_adaptive_offset_flag[3];
 
-    uint8_t slice_temporal_mvp_enable_flag;
+    uint8_t slice_temporal_mvp_enabled_flag;
     uint8_t num_ref_idx_active_override_flag;
     int num_ref_idx_l0_active;
     int num_ref_idx_l1_active;

@@ -319,6 +319,9 @@ static int hls_slice_header(HEVCContext *s)
                 av_log(s->avctx, AV_LOG_ERROR, "TODO: long_term_ref_pics_present_flag\n");
                 return -1;
             }
+            if (s->sps->sps_temporal_mvp_enabled_flag) {
+                sh->slice_temporal_mvp_enabled_flag = get_bits1(gb);
+            }
         } else {
             s->poc = 0;
         }
@@ -335,9 +338,6 @@ static int hls_slice_header(HEVCContext *s)
 
         sh->num_ref_idx_l0_active = 0;
         sh->num_ref_idx_l1_active = 0;
-        if (s->sps->sps_temporal_mvp_enabled_flag && s->nal_unit_type != NAL_IDR_W_DLP) {
-            sh->slice_temporal_mvp_enable_flag = get_bits1(gb);
-        }
         if (sh->slice_type == P_SLICE || sh->slice_type == B_SLICE) {
             sh->num_ref_idx_l0_active = s->pps->num_ref_idx_l0_default_active;
             if (sh->slice_type == B_SLICE)
@@ -360,7 +360,7 @@ static int hls_slice_header(HEVCContext *s)
             if (s->pps->cabac_init_present_flag) {
                 sh->cabac_init_flag = get_bits1(gb);
             }
-            if (sh->slice_temporal_mvp_enable_flag) {
+            if (sh->slice_temporal_mvp_enabled_flag) {
                 if (sh->slice_type == B_SLICE) {
                     sh->collocated_from_l0_flag = get_bits1(gb);
                 }
