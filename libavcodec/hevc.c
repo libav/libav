@@ -2273,6 +2273,8 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
             return -1;
         }
+        if (!s->edge_emu_buffer)
+            s->edge_emu_buffer = av_malloc((MAX_PB_SIZE + 7) * s->frame.linesize[0]);
 
         ff_hevc_cabac_init(s);
         if (hls_slice_data(s) < 0)
