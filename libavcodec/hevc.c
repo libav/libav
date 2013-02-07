@@ -2162,7 +2162,6 @@ static int hls_slice_data(HEVCContext *s)
         s->ctb_addr_ts++;
         s->ctb_addr_rs = s->pps->ctb_addr_ts_to_rs[s->ctb_addr_ts];
 
-<<<<<<< HEAD
         if (more_data) {
             if ((s->pps->tiles_enabled_flag &&
                  s->pps->tile_id[s->ctb_addr_ts] !=
@@ -2177,15 +2176,6 @@ static int hls_slice_data(HEVCContext *s)
                     ((s->ctb_addr_ts % s->sps->pic_width_in_ctbs) == 2)) {
                 save_states(s);
             }
-=======
-        if (more_data && (s->pps->tiles_enabled_flag &&
-                          s->pps->tile_id[s->ctb_addr_ts] !=
-                          s->pps->tile_id[s->ctb_addr_ts - 1]) ||
-            (s->pps->entropy_coding_sync_enabled_flag &&
-             ((s->ctb_addr_ts % s->sps->pic_width_in_ctbs) == 0))) {
-            av_log(s->avctx, AV_LOG_ERROR, "TODO: align\n");
-            return -1;
->>>>>>> 6cfd474... hevc: fix PCM support
         }
     }
 
