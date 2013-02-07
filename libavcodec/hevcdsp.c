@@ -30,6 +30,11 @@
 #define BIT_DEPTH 9
 #include "hevcdsp_template.c"
 #undef BIT_DEPTH
+
+#define BIT_DEPTH 10
+#include "hevcdsp_template.c"
+#undef BIT_DEPTH
+
 static void dequant(int16_t *coeffs, int log2_size, int qp, int bit_depth)
 {
     int x, y;
@@ -87,9 +92,16 @@ void ff_hevc_dsp_init(HEVCDSPContext *hevcdsp, int bit_depth)
     hevcdsp->put_hevc_epel[1][1] = FUNC(put_hevc_epel_hv, depth);
 
     hevcdsp->dequant = dequant;
-    if (bit_depth > 8) {
+
+    switch (bit_depth) {
+    case 9:
         HEVC_DSP(9);
-    } else {
+        break;
+    case 10:
+        HEVC_DSP(10);
+        break;
+    default:
         HEVC_DSP(8);
+        break;
     }
 }

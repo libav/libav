@@ -363,10 +363,10 @@ int ff_hevc_sao_band_position_decode(HEVCContext *s)
     return value;
 }
 
-int ff_hevc_sao_offset_abs_decode(HEVCContext *s, int bit_depth)
+int ff_hevc_sao_offset_abs_decode(HEVCContext *s)
 {
     int i = 0;
-    int length = (1 << (FFMIN(bit_depth, 10) - 5)) - 1;
+    int length = (1 << (FFMIN(s->sps->bit_depth, 10) - 5)) - 1;
 
     while (i < length && get_cabac_bypass(&s->cc))
         i++;

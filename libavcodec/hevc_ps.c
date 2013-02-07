@@ -286,7 +286,7 @@ err:
 int ff_hevc_decode_nal_sps(HEVCContext *s)
 {
     int i;
-    int start;
+    int bit_depth_chroma, start;
     GetBitContext *gb = &s->gb;
 
     int sps_id = 0;
@@ -342,9 +342,19 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
         sps->pic_crop.bottom_offset = get_ue_golomb(gb);
     }
 
-    sps->bit_depth[0] = get_ue_golomb(gb) + 8;
-    sps->bit_depth[2] =
-    sps->bit_depth[1] = get_ue_golomb(gb) + 8;
+    sps->bit_depth = get_ue_golomb(gb) + 8;
+    bit_depth_chroma = get_ue_golomb(gb) + 8;
+    if (bit_depth_chroma != sps->bit_depth) {
+        av_log(s->avctx, AV_LOG_ERROR,
+               "Luma bit depth (%d) is different from chroma bit depth (%d), this is unsupported.\n",
+               sps->bit_depth, bit_depth_chroma);
+        goto err;
+    }
+    if (sps->bit_depth > 10) {
+        av_log(s->avctx, AV_LOG_ERROR, "Unsupported bit depth: %d\n",
+               sps->bit_depth);
+        goto err;
+    }
 
     sps->log2_max_poc_lsb = get_ue_golomb(gb) + 4;
     sps->sps_sub_layer_ordering_info_present_flag = get_bits1(gb);
@@ -410,8 +420,7 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
                                  sps->log2_min_transform_block_size;
     sps->log2_min_pu_size = sps->log2_min_coding_block_size - 1;
 
-    sps->qp_bd_offset_luma   = 6 * (sps->bit_depth[0] - 8);
-    sps->qp_bd_offset_chroma = 6 * (sps->bit_depth[1] - 8);
+    sps->qp_bd_offset = 6 * (sps->bit_depth - 8);
 
     av_free(s->sps_list[sps_id]);
     s->sps_list[sps_id] = sps;
