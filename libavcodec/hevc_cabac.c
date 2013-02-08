@@ -41,7 +41,7 @@ static const int8_t num_bins_in_se[] = {
      3,  // skip_flag
      3,  // cu_qp_delta
      1,  // pred_mode
-     3,  // part_mode
+     4,  // part_mode
      0,  // pcm_flag
      1,  // prev_intra_luma_pred_mode
      0,  // mpm_idx
@@ -100,7 +100,7 @@ const uint8_t init_values[3][HEVC_CONTEXTS] = {
         // pred_mode
         CNU,
         // part_mode
-        184, CNU, CNU,
+        184, CNU, CNU, CNU,
         // prev_intra_luma_pred_mode
         184,
         // intra_chroma_pred_mode
@@ -165,7 +165,7 @@ const uint8_t init_values[3][HEVC_CONTEXTS] = {
         // pred_mode
         149,
         // part_mode
-        154, 139, 154,
+        154, 139, 154, 154,
         // prev_intra_luma_pred_mode
         154,
         // intra_chroma_pred_mode
@@ -230,7 +230,7 @@ const uint8_t init_values[3][HEVC_CONTEXTS] = {
         // pred_mode
         134,
         // part_mode
-        154, 139, 154,
+        154, 139, 154, 154,
         // prev_intra_luma_pred_mode
         183,
         // intra_chroma_pred_mode
@@ -280,6 +280,27 @@ const uint8_t init_values[3][HEVC_CONTEXTS] = {
         107, 167, 91, 107, 107, 167,
     },
 };
+
+void save_states(HEVCContext *s)
+{
+	memcpy(s->cabac_state_save, s->cabac_state, sizeof(s->cabac_state));
+}
+void load_states(HEVCContext *s)
+{
+	memcpy(s->cabac_state, s->cabac_state_save, sizeof(s->cabac_state));
+}
+
+void ff_hevc_cabac_reinit(HEVCContext *s)
+{
+     int n;
+     GetBitContext *gb = &s->gb;
+     
+     n = -get_bits_count(gb) & 7;
+     if (n) skip_bits(gb, n);
+     ff_init_cabac_decoder(&s->cc,
+                          gb->buffer + get_bits_count(gb) / 8,
+                          (get_bits_left(&s->gb) + 7) / 8);
+}
 
 void ff_hevc_cabac_init(HEVCContext *s)
 {
@@ -485,8 +506,10 @@ int ff_hevc_merge_idx_decode(HEVCContext *s)
 {
     int i = GET_CABAC(elem_offset[MERGE_IDX]);
 
-    while (i < s->sh.max_num_merge_cand-2 && get_cabac_bypass(&s->cc))
-        i++;
+    if (i != 0) {
+        while (i < s->sh.max_num_merge_cand-1 && get_cabac_bypass(&s->cc))
+            i++;
+    }
     return i;
 }
 
@@ -510,11 +533,13 @@ int ff_hevc_ref_idx_lx_decode(HEVCContext *s, int num_ref_idx_lx)
     int i = 0;
     int max = num_ref_idx_lx - 1;
     int max_ctx = FFMIN(max, 2);
-
+    
     while (i < max_ctx && GET_CABAC(elem_offset[REF_IDX_L0] + i))
         i++;
-    while (i < max && get_cabac_bypass(&s->cc))
-        i++;
+    if (i==2) {
+        while (i < max && get_cabac_bypass(&s->cc))
+            i++;
+    }
     return i;
 }
 
@@ -535,7 +560,7 @@ int ff_hevc_abs_mvd_greater0_flag_decode(HEVCContext *s)
 
 int ff_hevc_abs_mvd_greater1_flag_decode(HEVCContext *s)
 {
-    return GET_CABAC(elem_offset[ABS_MVD_GREATER1_FLAG]);
+    return GET_CABAC(elem_offset[ABS_MVD_GREATER1_FLAG] + 1);
 }
 
 int ff_hevc_abs_mvd_minus2_decode(HEVCContext *s)

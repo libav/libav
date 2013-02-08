@@ -310,12 +310,13 @@ static void FUNC(sao_band_filter)(uint8_t * _dst, uint8_t *_src, ptrdiff_t _stri
     pixel *src = (pixel*)_src;
     ptrdiff_t stride = _stride/sizeof(pixel);
     int band_table[32] = { 0 };
+    int k, y, x;
     int shift = BIT_DEPTH - 5;
 
-    for (int k = 0; k < 4; k++)
+    for (k = 0; k < 4; k++)
         band_table[(k + sao_left_class) & 31] = k + 1;
-    for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++)
+    for (y = 0; y < height; y++) {
+        for (x = 0; x < width; x++)
             dst[x] = av_clip_pixel(src[x] + sao_offset_val[band_table[src[x] >> shift]]);
         dst += stride;
         src += stride;
@@ -406,7 +407,6 @@ static void FUNC(sao_edge_filter)(uint8_t *_dst, uint8_t *_src, ptrdiff_t _strid
 #undef TR_32
 #undef TR_32_1
 #undef TR_32_2
-
 
 static void FUNC(put_hevc_qpel_pixels)(uint8_t * _dst, ptrdiff_t _dststride,
                                        uint8_t *_src, ptrdiff_t _srcstride,

@@ -59,13 +59,24 @@ enum NALUnitType {
 
 typedef struct ShortTermRPS {
     uint8_t inter_ref_pic_set_prediction_flag;
+    int num_ref_idc;
     int num_negative_pics;
     int num_positive_pics;
     int num_delta_pocs;
-    uint8_t delta_rps_sign;
-    int abs_delta_rps;
-    int delta_poc;
+    uint8_t ref_idc[32];
+    uint32_t delta_poc[32];
+    uint8_t used[32];
 } ShortTermRPS;
+
+#define ST_CURR_BEF  0
+#define ST_CURR_AFT  1
+#define ST_FOLL      2
+#define LT_CURR      3
+#define LT_FOLL      4
+typedef struct RefPicList {
+    int list[16];
+    int numPic;
+} RefPicList;
 
 /**
  * 7.4.2.1
@@ -182,7 +193,7 @@ typedef struct SPS {
     uint8_t temporal_id_nesting_flag;
 
     int num_short_term_ref_pic_sets;
-    ShortTermRPS short_term_rps_list[MAX_SHORT_TERM_RPS_COUNT];
+    ShortTermRPS short_term_rps_list[MAX_SHORT_TERM_RPS_COUNT+1];
 
     uint8_t long_term_ref_pics_present_flag;
     uint8_t sps_temporal_mvp_enabled_flag;
@@ -293,12 +304,15 @@ typedef struct SliceHeader {
     uint8_t colour_plane_id;
 
     int pic_order_cnt_lsb;
+    ShortTermRPS *short_term_rps;
+    RefPicList refPocList[5];
+    RefPicList refPicList[2];
 
     uint8_t no_output_of_prior_pics_flag;
 
     uint8_t slice_sample_adaptive_offset_flag[3];
 
-    uint8_t slice_temporal_mvp_enable_flag;
+    uint8_t slice_temporal_mvp_enabled_flag;
     uint8_t num_ref_idx_active_override_flag;
     int num_ref_idx_l0_active;
     int num_ref_idx_l1_active;
@@ -318,6 +332,8 @@ typedef struct SliceHeader {
     int max_num_merge_cand; ///< 5 - 5_minus_max_num_merge_cand
 
     uint8_t slice_loop_filter_across_slices_enabled_flag;
+
+    int* entry_point_offset;
 
 #if REFERENCE_ENCODER_QUIRKS
     uint8_t tile_marker_flag;
@@ -460,15 +476,15 @@ enum IntraPredMode {
 };
 
 typedef struct Mv {
-    int16_t m_iHor;     ///< horizontal component of motion vector
-    int16_t m_iVer;     ///< vertical component of motion vector
+    int16_t x;     ///< horizontal component of motion vector
+    int16_t y;     ///< vertical component of motion vector
 } Mv;
 
 typedef struct MvField {
-      Mv   acMv;
-      int  RefIdx;
-      int predFlag;
-      int isIntra;
+      Mv  mv;
+      int ref_idx;
+      int pred_flag;
+      int is_intra;
 } MvField;
 
 // MERGE
@@ -486,6 +502,7 @@ typedef struct PredictionUnit {
     uint8_t *top_ipm;
     uint8_t *left_ipm;
 
+    Mv mvd;
     MvField *tab_mvf;
 } PredictionUnit;
 
@@ -550,6 +567,7 @@ typedef struct HEVCContext {
     CABACContext cc;
 
     uint8_t cabac_state[HEVC_CONTEXTS];
+    uint8_t cabac_state_save[HEVC_CONTEXTS];
 
     int nal_ref_flag;
     enum NALUnitType nal_unit_type;
@@ -596,6 +614,9 @@ int ff_hevc_decode_nal_sps(HEVCContext *s);
 int ff_hevc_decode_nal_pps(HEVCContext *s);
 int ff_hevc_decode_nal_sei(HEVCContext *s);
 
+void save_states(HEVCContext *s);
+void load_states(HEVCContext *s);
+void ff_hevc_cabac_reinit(HEVCContext *s);
 void ff_hevc_cabac_init(HEVCContext *s);
 int ff_hevc_sao_merge_flag_decode(HEVCContext *s);
 int ff_hevc_sao_type_idx_decode(HEVCContext *s);
