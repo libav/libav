@@ -308,6 +308,7 @@ void ff_hevc_cabac_init(HEVCContext *s)
     int init_type;
     GetBitContext *gb = &s->gb;
 
+    skip_bits(gb, 1);
     align_get_bits(gb);
     ff_init_cabac_states(&s->cc);
     ff_init_cabac_decoder(&s->cc,
