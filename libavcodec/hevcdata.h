@@ -23,9 +23,9 @@
 #ifndef AVCODEC_HEVCDATA_H
 #define AVCODEC_HEVCDATA_H
 
-static const uint8_t qpel_extra_before[3] = { 3, 3, 2 };
-static const uint8_t qpel_extra_after[3] = { 3, 4, 4 };
-static const uint8_t qpel_extra[3] = { 6, 7, 6 };
+static const uint8_t qpel_extra_before[4] = { 0, 3, 3, 2 };
+static const uint8_t qpel_extra_after[4] = { 0, 3, 4, 4 };
+static const uint8_t qpel_extra[4] = { 0, 6, 7, 6 };
 
 static const int epel_extra_before = 1;
 static const int epel_extra_after = 2;

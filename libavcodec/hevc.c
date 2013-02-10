@@ -1702,7 +1702,8 @@ static void chroma_mc(HEVCContext *s, uint8_t *dst1, uint8_t *dst2, ptrdiff_t ds
     src1 += y_off * srcstride + (x_off << s->sps->pixel_shift);
     src2 += y_off * srcstride + (x_off << s->sps->pixel_shift);
 
-    if (x_off < epel_extra_before || x_off >= pic_width - block_w - epel_extra_after ||
+    if ((mx || my) &&
+        x_off < epel_extra_before || x_off >= pic_width - block_w - epel_extra_after ||
         y_off < epel_extra_after || y_off >= pic_height - block_h - epel_extra_after) {
         int offset = epel_extra_before * (srcstride + (1 << s->sps->pixel_shift));
         s->dsp.emulated_edge_mc(s->edge_emu_buffer, src1 - offset, srcstride,
