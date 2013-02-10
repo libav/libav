@@ -1033,9 +1033,9 @@ static void hls_mvd_coding(HEVCContext *s, int x0, int y0, int log2_cb_size)
 {
 
     uint16_t abs_mvd_greater0_flag[2];
-    uint16_t abs_mvd_greater1_flag[2] = { 0, 0 };
-    uint16_t abs_mvd_minus2[2];
-    uint8_t mvd_sign_flag[2];
+    uint16_t abs_mvd_greater1_flag[2] = { 0 };
+    uint16_t abs_mvd_minus2[2] = { 0 };
+    uint8_t mvd_sign_flag[2] = { 0 };
     abs_mvd_greater0_flag[0] = ff_hevc_abs_mvd_greater0_flag_decode(s);
     av_dlog(s->avctx, "abs_mvd_greater0_flag[0]: %d\n",
             abs_mvd_greater0_flag[0]);
@@ -1461,7 +1461,7 @@ static void luma_mv_mvp_mode(HEVCContext *s, int x0, int y0, int nPbW, int nPbH,
     int xB2, yB2;
     int xB2_pu, yB2_pu;
     int isAvailableB2;
-    struct MvField mvpcand_list[2];
+    struct MvField mvpcand_list[2] = { 0 };
     int check_A0, check_A1, check_B0, check_B1, check_B2;
     MvField mxA;
     MvField mxB;
