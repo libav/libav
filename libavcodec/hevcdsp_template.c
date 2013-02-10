@@ -494,8 +494,8 @@ static void FUNC(put_hevc_qpel_h ## H ## v ## V )(uint8_t * _dst, ptrdiff_t _dst
     for (y = 0; y < height + qpel_extra[V]; y++) {                                        \
         for (x = 0; x < width; x++)                                                       \
             tmp[x] = QPEL_FILTER_ ## H (src, 1) >> (BIT_DEPTH - 8);                       \
-              src += srcstride;                                                           \
-              tmp += tmpstride;                                                           \
+        src += srcstride;                                                                 \
+        tmp += tmpstride;                                                                 \
     }                                                                                     \
                                                                                           \
     tmp = tmp_array + qpel_extra_before[V] * tmpstride;                                   \
@@ -503,8 +503,8 @@ static void FUNC(put_hevc_qpel_h ## H ## v ## V )(uint8_t * _dst, ptrdiff_t _dst
     for (y = 0; y < height; y++) {                                                        \
         for (x = 0; x < width; x++)                                                       \
             dst[x] = QPEL_FILTER_ ## V (tmp, tmpstride) >> 6;                             \
-         tmp += tmpstride;                                                                \
-         dst += dststride;                                                                \
+        tmp += tmpstride;                                                                 \
+        dst += dststride;                                                                 \
     }                                                                                     \
 }
 
