@@ -1724,7 +1724,7 @@ static void luma_mv_mvp_mode(HEVCContext *s, int x0, int y0, int nPbW, int nPbH,
  * @param block_w width of block
  * @param block_h height of block
  */
-static void luma_mc(HEVCContext *s, uint8_t *dst, ptrdiff_t dststride,
+static void luma_mc(HEVCContext *s, int16_t *dst, ptrdiff_t dststride,
                     const Mv *mv, int x_off, int y_off, int block_w, int block_h)
 {
     uint8_t *src = s->frame.data[0];
@@ -1766,7 +1766,7 @@ static void luma_mc(HEVCContext *s, uint8_t *dst, ptrdiff_t dststride,
  * @param block_w width of block
  * @param block_h height of block
  */
-static void chroma_mc(HEVCContext *s, uint8_t *dst1, uint8_t *dst2, ptrdiff_t dststride,
+static void chroma_mc(HEVCContext *s, int16_t *dst1, int16_t *dst2, ptrdiff_t dststride,
                       const Mv *mv, int x_off, int y_off, int block_w, int block_h)
 {
     uint8_t *src1 = s->frame.data[1];
