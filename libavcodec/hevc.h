@@ -97,6 +97,13 @@ typedef struct RefPicList {
 
 #define HEVC_CONTEXTS 183
 
+typedef struct window_t {
+    int left_offset;
+    int right_offset;
+    int top_offset;
+    int bottom_offset;
+} window_t;
+
 typedef struct SubLayerHRD {
     int *bit_rate_value_minus1;
     int *cpb_size_value_minus1;
@@ -158,12 +165,7 @@ typedef struct VUI {
     int frame_field_info_present_flag;
 
     int default_display_window_flag;
-    struct {
-        int left_offset;
-        int right_offset;
-        int top_offset;
-        int bottom_offset;
-    } def_disp_win;
+    window_t def_disp_win;
 
     int vui_timing_info_present_flag;
     uint32_t vui_num_units_in_tick;
@@ -234,12 +236,7 @@ typedef struct SPS {
     int pic_height_in_luma_samples;
 
     uint8_t pic_conformance_flag;
-    struct {
-        int left_offset;
-        int right_offset;
-        int top_offset;
-        int bottom_offset;
-    } pic_conf_win;
+    window_t pic_conf_win;
 
     int bit_depth; ///< bit_depth_luma_minus8 + 8
 
