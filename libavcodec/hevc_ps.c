@@ -334,12 +334,12 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
     sps->pic_width_in_luma_samples  = get_ue_golomb(gb);
     sps->pic_height_in_luma_samples = get_ue_golomb(gb);
 
-    sps->pic_cropping_flag = get_bits1(gb);
-    if (sps->pic_cropping_flag) {
-        sps->pic_crop.left_offset   = get_ue_golomb(gb);
-        sps->pic_crop.right_offset  = get_ue_golomb(gb);
-        sps->pic_crop.top_offset    = get_ue_golomb(gb);
-        sps->pic_crop.bottom_offset = get_ue_golomb(gb);
+    sps->pic_conformance_flag = get_bits1(gb);
+    if (sps->pic_conformance_flag) {
+        sps->pic_conf_win.left_offset   = get_ue_golomb(gb);
+        sps->pic_conf_win.right_offset  = get_ue_golomb(gb);
+        sps->pic_conf_win.top_offset    = get_ue_golomb(gb);
+        sps->pic_conf_win.bottom_offset = get_ue_golomb(gb);
     }
 
     sps->bit_depth = get_ue_golomb(gb) + 8;

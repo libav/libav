@@ -146,14 +146,14 @@ typedef struct SPS {
     int pic_width_in_luma_samples;
     int pic_height_in_luma_samples;
 
-    uint8_t pic_cropping_flag;
+    uint8_t pic_conformance_flag;
     struct {
         int left_offset;
         int right_offset;
         int top_offset;
         int bottom_offset;
-    } pic_crop;
-    
+    } pic_conf_win;
+
     int bit_depth; ///< bit_depth_luma_minus8 + 8
 
     int pcm_enabled_flag;
