@@ -2248,7 +2248,8 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     case NAL_PPS:
         ff_hevc_decode_nal_pps(s);
         break;
-    case NAL_SEI:
+    case NAL_SEI_PREFIX:
+    case NAL_SEI_SUFFIX:
         ff_hevc_decode_nal_sei(s);
         break;
     case NAL_TRAIL_R:

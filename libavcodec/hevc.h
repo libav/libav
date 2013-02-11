@@ -54,7 +54,8 @@ enum NALUnitType {
     NAL_PPS = 34,
     NAL_AUD = 35,
     NAL_FILLER_DATA = 38,
-    NAL_SEI = 39,
+    NAL_SEI_PREFIX = 39,
+    NAL_SEI_SUFFIX = 40,
 };
 
 typedef struct ShortTermRPS {
