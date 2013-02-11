@@ -473,6 +473,7 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
     pps->num_tile_columns     = 1;
     pps->num_tile_rows        = 1;
     pps->uniform_spacing_flag = 1;
+    pps->pps_disable_deblocking_filter_flag = 0;
 
 
     // Coded parameters

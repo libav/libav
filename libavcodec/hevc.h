@@ -94,6 +94,8 @@ typedef struct RefPicList {
 #define MAX_TB_SIZE 32
 #define MAX_PB_SIZE 64
 #define MAX_CTB_SIZE 64
+#define MAX_QP 51
+#define DEFAULT_INTRA_TC_OFFSET 2
 
 #define HEVC_CONTEXTS 183
 
@@ -590,6 +592,10 @@ typedef struct HEVCContext {
     int ctb_addr_ts; ///< CtbAddrTS
 
     uint8_t *split_coding_unit_flag;
+    uint8_t *horizontal_bs;
+    uint8_t *vertical_bs;
+    int bs_width;
+    int bs_height;
 
     uint8_t *edge_emu_buffer;
 
