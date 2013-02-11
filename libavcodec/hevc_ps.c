@@ -82,55 +82,55 @@ int ff_hevc_decode_short_term_rps(HEVCContext *s, int idx, SPS *sps)
         rps->num_delta_pocs    = k;
         rps->num_negative_pics = k0;
         rps->num_positive_pics = k1;
-		// sort in increasing order (smallest first)
-		if ( rps->num_delta_pocs != 0 ) {
-			int used, tmp;
-    		for (i = 1; i < rps->num_delta_pocs; i++) {
-    			delta_poc = rps->delta_poc[i];
-    			used      = rps->used[i];
-   				for (k = i-1 ; k >= 0;  k--) {
-   					tmp = rps->delta_poc[k];
-   					if (delta_poc < tmp ) {
-   						rps->delta_poc[k+1] = tmp;
-   						rps->used[k+1]      = rps->used[k];
-   						rps->delta_poc[k]   = delta_poc;
-   						rps->used[k]        = used;
-   					}
-   				}
-    		}
-		}
-	   	if ( (rps->num_negative_pics>>1) != 0 ) {
-			int used, tmp;
-   			k = rps->num_negative_pics - 1;
-			// flip the negative values to largest first
-    		for( i = 0; i < rps->num_negative_pics>>1; i++) {
-				delta_poc          = rps->delta_poc[i];
-   				used               = rps->used[i];
-   				rps->delta_poc[i]  = rps->delta_poc[k];
-   				rps->used[i]       = rps->used[k];
-   				rps->delta_poc[k]  = delta_poc;
-   				rps->used[k]       = used;
-   				k--;
-    		}
-	   	}
+        // sort in increasing order (smallest first)
+        if ( rps->num_delta_pocs != 0 ) {
+            int used, tmp;
+            for (i = 1; i < rps->num_delta_pocs; i++) {
+                delta_poc = rps->delta_poc[i];
+                used      = rps->used[i];
+                for (k = i-1 ; k >= 0;  k--) {
+                    tmp = rps->delta_poc[k];
+                    if (delta_poc < tmp ) {
+                        rps->delta_poc[k+1] = tmp;
+                        rps->used[k+1]      = rps->used[k];
+                        rps->delta_poc[k]   = delta_poc;
+                        rps->used[k]        = used;
+                    }
+                }
+            }
+        }
+        if ( (rps->num_negative_pics>>1) != 0 ) {
+            int used, tmp;
+            k = rps->num_negative_pics - 1;
+            // flip the negative values to largest first
+            for( i = 0; i < rps->num_negative_pics>>1; i++) {
+                delta_poc          = rps->delta_poc[i];
+                used               = rps->used[i];
+                rps->delta_poc[i]  = rps->delta_poc[k];
+                rps->used[i]       = rps->used[k];
+                rps->delta_poc[k]  = delta_poc;
+                rps->used[k]       = used;
+                k--;
+            }
+        }
     } else {
-    	int prev;
+        int prev;
         rps->num_negative_pics = get_ue_golomb(gb);
         rps->num_positive_pics = get_ue_golomb(gb);
         rps->num_delta_pocs = rps->num_negative_pics + rps->num_positive_pics;
         if (rps->num_negative_pics || rps->num_positive_pics) {
-        	prev = 0;
+            prev = 0;
             for (i = 0; i < rps->num_negative_pics; i++) {
-        		delta_poc = get_ue_golomb(gb) + 1;
-        		prev -= delta_poc;
-    	    	rps->delta_poc[i] = prev;
-        		rps->used[i] = get_bits1(gb);
+                delta_poc = get_ue_golomb(gb) + 1;
+                prev -= delta_poc;
+                rps->delta_poc[i] = prev;
+                rps->used[i] = get_bits1(gb);
             }
-        	prev = 0;
+            prev = 0;
             for (i = 0; i < rps->num_positive_pics; i++) {
-        		delta_poc = get_ue_golomb(gb) + 1;
-        		prev -= delta_poc;
-    	    	rps->delta_poc[rps->num_negative_pics + i] = prev;
+                delta_poc = get_ue_golomb(gb) + 1;
+                prev -= delta_poc;
+                rps->delta_poc[rps->num_negative_pics + i] = prev;
                 rps->used[rps->num_negative_pics + i] = get_bits1(gb);
             }
         }
@@ -406,7 +406,7 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
 
     sps->chroma_format_idc = get_ue_golomb(gb);
     if (sps->chroma_format_idc != 1)
-    	av_log(s->avctx, AV_LOG_ERROR, " chroma_format_idc != 1 : error SEI\n");
+        av_log(s->avctx, AV_LOG_ERROR, " chroma_format_idc != 1 : error SEI\n");
 
     if (sps->chroma_format_idc == 3)
         sps->separate_colour_plane_flag = get_bits1(gb);
@@ -786,24 +786,25 @@ err:
 
 static void decode_nal_sei_decoded_picture_hash(HEVCContext *s, int payload_size)
 {
-	int cIdx, i;
-	int hash_type;
-	int picture_md5;
-	int picture_crc;
-	int picture_checksum;
-	GetBitContext *gb = &s->gb;
-	hash_type = get_bits(gb, 8);
-	for( cIdx = 0; cIdx < 3/*((s->sps->chroma_format_idc == 0) ? 1 : 3)*/; cIdx++ ) {
-		if ( hash_type == 0 ) {
-			for( i = 0; i < 16; i++) {
-				picture_md5 = get_bits(gb, 8);
-			}
-		} else if( hash_type == 1 ) {
-			picture_crc = get_bits(gb, 16);
-		} else if( hash_type == 2 ) {
-			picture_checksum = get_bits(gb, 32);
-		}
-	}
+    int cIdx, i;
+    int hash_type;
+    int picture_md5;
+    int picture_crc;
+    int picture_checksum;
+    GetBitContext *gb = &s->gb;
+    hash_type = get_bits(gb, 8);
+
+    for( cIdx = 0; cIdx < 3/*((s->sps->chroma_format_idc == 0) ? 1 : 3)*/; cIdx++ ) {
+        if ( hash_type == 0 ) {
+            for( i = 0; i < 16; i++) {
+                picture_md5 = get_bits(gb, 8);
+            }
+        } else if( hash_type == 1 ) {
+            picture_crc = get_bits(gb, 16);
+        } else if( hash_type == 2 ) {
+            picture_checksum = get_bits(gb, 32);
+        }
+    }
 }
 static int decode_nal_sei_message(HEVCContext *s)
 {
@@ -815,18 +816,18 @@ static int decode_nal_sei_message(HEVCContext *s)
     av_log(s->avctx, AV_LOG_DEBUG, "Decoding SEI\n");
 
     while (byte == 0xFF) {
-    	byte = get_bits(gb, 8);
+        byte = get_bits(gb, 8);
         payload_type += byte;
     }
     byte = 0xFF;
     while (byte == 0xFF) {
-       	byte = get_bits(gb, 8);
+        byte = get_bits(gb, 8);
         payload_size += byte;
     }
     if (payload_type == 256)
-    	decode_nal_sei_decoded_picture_hash(s, payload_size);
+        decode_nal_sei_decoded_picture_hash(s, payload_size);
     else
-    skip_bits(gb, 8*payload_size);
+        skip_bits(gb, 8*payload_size);
     return 0;
 }
 
