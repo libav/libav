@@ -97,6 +97,93 @@ typedef struct RefPicList {
 
 #define HEVC_CONTEXTS 183
 
+typedef struct SubLayerHRD {
+    int *bit_rate_value_minus1;
+    int *cpb_size_value_minus1;
+    int *cpb_size_du_value_minus1;
+    int *bit_rate_du_value_minus1;
+    int *cbr_flag;
+} SubLayerHRD;
+
+typedef struct HRD {
+    int nal_hrd_parameters_present_flag;
+    int vcl_hrd_parameters_present_flag;
+    int sub_pic_cpb_params_present_flag;
+    uint8_t tick_divisor_minus2;
+    int du_cpb_removal_delay_increment_length_minus1;
+    int sbu_pic_cpb_params_in_pic_timing_sei_flag;
+    int dpb_output_delay_du_length_minus1;
+
+    int bit_rate_scale;
+    int cpb_size_scale;
+    int cpb_size_du_scale;
+
+    int initial_cpb_removal_delay_length_minus1;
+    int au_cpb_removal_delay_length_minus1;
+    int dpb_output_delay_length_minus1;
+
+    int *fixed_pic_rate_general_flag;
+    int *fixed_pic_rate_within_cvs_flag;
+    int *elemental_duration_in_tc_minus1;
+
+    int *low_delay_hrd_flag;
+    int *cpb_cnt_minus1;
+    SubLayerHRD *sub_layer_nal_hrd_parameters;
+    SubLayerHRD *sub_layer_vcl_hrd_parameters;
+} HRD;
+
+typedef struct VUI {
+    int aspect_ratio_info_present_flag;
+    uint8_t aspect_ratio_idc;
+    int sar_width;
+    int sar_height;
+
+    int overscan_info_present_flag;
+    int overscan_appropriate_flag;
+
+    int video_signal_type_present_flag;
+    int video_format;
+    int video_full_range_flag;
+    int colour_description_present_flag;
+    uint8_t colour_primaries;
+    uint8_t transfer_characteristic;
+    uint8_t matrix_coeffs;
+
+    int chroma_loc_info_present_flag;
+    int chroma_sample_loc_type_top_field;
+    int chroma_sample_loc_type_bottom_field;
+    int neutra_chroma_indication_flag;
+
+    int field_seq_flag;
+    int frame_field_info_present_flag;
+
+    int default_display_window_flag;
+    struct {
+        int left_offset;
+        int right_offset;
+        int top_offset;
+        int bottom_offset;
+    } def_disp_win;
+
+    int vui_timing_info_present_flag;
+    uint32_t vui_num_units_in_tick;
+    uint32_t vui_time_scale;
+    int vui_poc_proportional_to_timing_flag;
+    int vui_num_ticks_poc_diff_one_minus1;
+    int vui_hrd_parameters_present_flag;
+    HRD hrd;
+
+    int bitstream_restriction_flag;
+    int tiles_fixed_structure_flag;
+    int motion_vectors_over_pic_boundaries_flag;
+    int restricted_ref_pic_lists_flag;
+    int min_spatial_segmentation_idc;
+    int max_bytes_per_pic_denom;
+    int max_bits_per_min_cu_denom;
+    int log2_max_mv_length_horizontal;
+    int log2_max_mv_length_vertical;
+} VUI;
+
 typedef struct PTL {
     int general_profile_space;
     uint8_t general_tier_flag;
