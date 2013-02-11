@@ -284,6 +284,8 @@ typedef struct SPS {
     uint8_t sps_strong_intra_smoothing_enable_flag;
 
     uint8_t vui_parameters_present_flag;
+    VUI vui;
+
     uint8_t sps_extension_flag;
 
     // Inferred parameters

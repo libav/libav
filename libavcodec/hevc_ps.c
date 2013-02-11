@@ -196,6 +196,86 @@ static void decode_bit_rate_pic_rate(HEVCContext *s, int tempLevelLow, int tempL
     }
 }
 
+static void decode_hrd(HEVCContext *s)
+{
+    av_log(s->avctx, AV_LOG_ERROR, "HRD parsing not yet implemented\n");
+}
+
+static void decode_vui(HEVCContext *s)
+{
+    VUI *vui = &s->sps->vui;
+    GetBitContext *gb = &s->gb;
+
+    av_log(s->avctx, AV_LOG_DEBUG, "Decoding VUI\n");
+
+    vui->aspect_ratio_info_present_flag = get_bits1(gb);
+    if (vui->aspect_ratio_info_present_flag) {
+        vui->aspect_ratio_idc = get_bits(gb, 8);
+        if (vui->aspect_ratio_idc == 255) { // EXTENDED_SAR
+            vui->sar_width = get_bits(gb, 16);
+            vui->sar_height = get_bits(gb, 16);
+        }
+    }
+
+    vui->overscan_info_present_flag = get_bits1(gb);
+    if (vui->overscan_info_present_flag)
+        vui->overscan_appropriate_flag = get_bits1(gb);
+
+    vui->video_signal_type_present_flag = get_bits1(gb);
+    if (vui->video_signal_type_present_flag) {
+        vui->video_format = get_bits(gb, 3);
+        vui->video_full_range_flag = get_bits1(gb);
+        vui->colour_description_present_flag = get_bits1(gb);
+        if (vui->colour_description_present_flag) {
+            vui->colour_primaries = get_bits(gb, 8);
+            vui->transfer_characteristic = get_bits(gb, 8);
+            vui->matrix_coeffs = get_bits(gb, 8);
+        }
+    }
+
+    vui->chroma_loc_info_present_flag = get_bits1(gb);
+    if (vui->chroma_loc_info_present_flag) {
+        vui->chroma_sample_loc_type_top_field = get_ue_golomb(gb);
+        vui->chroma_sample_loc_type_bottom_field = get_ue_golomb(gb);
+    }
+
+    vui->neutra_chroma_indication_flag = get_bits1(gb);
+    vui->field_seq_flag = get_bits1(gb);
+    vui->frame_field_info_present_flag = get_bits1(gb);
+
+    vui->default_display_window_flag = get_bits1(gb);
+    if (vui->default_display_window_flag) {
+        vui->def_disp_win.left_offset = get_ue_golomb(gb);
+        vui->def_disp_win.right_offset = get_ue_golomb(gb);
+        vui->def_disp_win.top_offset = get_ue_golomb(gb);
+        vui->def_disp_win.bottom_offset = get_ue_golomb(gb);
+    }
+
+    vui->vui_timing_info_present_flag = get_bits1(gb);
+    if (vui->vui_timing_info_present_flag) {
+        vui->vui_num_units_in_tick = get_bits(gb, 32);
+        vui->vui_time_scale = get_bits(gb, 32);
+        vui->vui_poc_proportional_to_timing_flag = get_bits1(gb);
+        if (vui->vui_poc_proportional_to_timing_flag)
+            vui->vui_num_ticks_poc_diff_one_minus1 = get_ue_golomb(gb);
+        vui->vui_hrd_parameters_present_flag = get_bits1(gb);
+        if (vui->vui_hrd_parameters_present_flag)
+            decode_hrd(s);
+    }
+
+    vui->bitstream_restriction_flag = get_bits1(gb);
+    if (vui->bitstream_restriction_flag) {
+        vui->tiles_fixed_structure_flag = get_bits1(gb);
+        vui->motion_vectors_over_pic_boundaries_flag = get_bits1(gb);
+        vui->restricted_ref_pic_lists_flag = get_bits1(gb);
+        vui->min_spatial_segmentation_idc = get_ue_golomb(gb);
+        vui->max_bytes_per_pic_denom = get_ue_golomb(gb);
+        vui->max_bits_per_min_cu_denom = get_ue_golomb(gb);
+        vui->log2_max_mv_length_horizontal = get_ue_golomb(gb);
+        vui->log2_max_mv_length_vertical = get_ue_golomb(gb);
+    }
+}
+
 int ff_hevc_decode_nal_vps(HEVCContext *s)
 {
     int i,j;
@@ -423,6 +503,8 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
     sps->sps_temporal_mvp_enabled_flag   = get_bits1(gb);
     sps->sps_strong_intra_smoothing_enable_flag = get_bits1(gb);
     sps->vui_parameters_present_flag = get_bits1(gb);
+    if (sps->vui_parameters_present_flag)
+        decode_vui(s);
     sps->sps_extension_flag = get_bits1(gb);
 
     // Inferred parameters
