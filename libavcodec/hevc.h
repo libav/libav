@@ -645,8 +645,8 @@ typedef struct SAOParams {
 
 typedef struct HEVCContext {
     AVCodecContext *avctx;
-    AVFrame frame;
-    AVFrame sao_frame;
+    AVFrame *frame;
+    AVFrame *sao_frame;
 
     HEVCPredContext hpc;
     HEVCDSPContext hevcdsp;

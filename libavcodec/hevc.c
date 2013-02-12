@@ -26,6 +26,7 @@
 #include "libavutil/pixdesc.h"
 #include "cabac_functions.h"
 #include "golomb.h"
+#include "internal.h"
 #include "hevcdata.h"
 #include "hevc.h"
 
@@ -553,13 +554,13 @@ static void deblocking_filter(HEVCContext *s)
             if (bs) {
                 const int idxt = av_clip_c(qp + DEFAULT_INTRA_TC_OFFSET * (bs - 1) + s->sh.tc_offset, 0, MAX_QP + DEFAULT_INTRA_TC_OFFSET);
                 const int tc = tctable[idxt];
-                src = &s->frame.data[LUMA][y * 4 * s->frame.linesize[LUMA] + x * 4];
-                s->hevcdsp.hevc_loop_filter_luma(src, pixel, s->frame.linesize[LUMA], 0, 0, beta, tc);
+                src = &s->frame->data[LUMA][y * 4 * s->frame->linesize[LUMA] + x * 4];
+                s->hevcdsp.hevc_loop_filter_luma(src, pixel, s->frame->linesize[LUMA], 0, 0, beta, tc);
                 if (x % 4 == 0 && y % 2 == 0 && bs == 2) {
-                    src = &s->frame.data[CB][y * 2 * s->frame.linesize[CB] + x * 2];
-                    s->hevcdsp.hevc_loop_filter_chroma(src, pixel, s->frame.linesize[CB], 0, 0, tc);
-                    src = &s->frame.data[CR][y * 2 * s->frame.linesize[CR] + x * 2];
-                    s->hevcdsp.hevc_loop_filter_chroma(src, pixel, s->frame.linesize[CR], 0, 0, tc);
+                    src = &s->frame->data[CB][y * 2 * s->frame->linesize[CB] + x * 2];
+                    s->hevcdsp.hevc_loop_filter_chroma(src, pixel, s->frame->linesize[CB], 0, 0, tc);
+                    src = &s->frame->data[CR][y * 2 * s->frame->linesize[CR] + x * 2];
+                    s->hevcdsp.hevc_loop_filter_chroma(src, pixel, s->frame->linesize[CR], 0, 0, tc);
                 }
             }
         }
@@ -571,13 +572,13 @@ static void deblocking_filter(HEVCContext *s)
             if (bs) {
                 const int idxt = av_clip_c(qp + DEFAULT_INTRA_TC_OFFSET * (bs - 1) + s->sh.tc_offset, 0, MAX_QP + DEFAULT_INTRA_TC_OFFSET);
                 const int tc = tctable[idxt];
-                src = &s->frame.data[LUMA][y * 4 * s->frame.linesize[LUMA] + x * 4];
-                s->hevcdsp.hevc_loop_filter_luma(src, s->frame.linesize[LUMA], pixel, 0, 0, beta, tc);
+                src = &s->frame->data[LUMA][y * 4 * s->frame->linesize[LUMA] + x * 4];
+                s->hevcdsp.hevc_loop_filter_luma(src, s->frame->linesize[LUMA], pixel, 0, 0, beta, tc);
                 if (x % 2 == 0 && y % 4 == 0 && bs == 2) {
-                    src = &s->frame.data[CB][y * 2 * s->frame.linesize[CB] + x * 2];
-                    s->hevcdsp.hevc_loop_filter_chroma(src, s->frame.linesize[CB], pixel, 0, 0, tc);
-                    src = &s->frame.data[CR][y * 2 * s->frame.linesize[CR] + x * 2];
-                    s->hevcdsp.hevc_loop_filter_chroma(src, s->frame.linesize[CR], pixel, 0, 0, tc);
+                    src = &s->frame->data[CB][y * 2 * s->frame->linesize[CB] + x * 2];
+                    s->hevcdsp.hevc_loop_filter_chroma(src, s->frame->linesize[CB], pixel, 0, 0, tc);
+                    src = &s->frame->data[CR][y * 2 * s->frame->linesize[CR] + x * 2];
+                    s->hevcdsp.hevc_loop_filter_chroma(src, s->frame->linesize[CR], pixel, 0, 0, tc);
                 }
             }
         }
@@ -594,7 +595,7 @@ static void sao_filter(HEVCContext *s)
     //TODO: skip CBs when (cu_transquant_bypass_flag || (pcm_loop_filter_disable_flag && pcm_flag))
     int c_idx, y_ctb, x_ctb;
     for (c_idx = 0; c_idx < 3; c_idx++) {
-        int stride = s->frame.linesize[c_idx];
+        int stride = s->frame->linesize[c_idx];
         int ctb_size = (1 << (s->sps->log2_ctb_size)) >> s->sps->hshift[c_idx];
         for (y_ctb = 0; y_ctb < s->sps->pic_height_in_ctbs; y_ctb++) {
             for (x_ctb = 0; x_ctb < s->sps->pic_width_in_ctbs; x_ctb++) {
@@ -605,8 +606,8 @@ static void sao_filter(HEVCContext *s)
                                   (s->sps->pic_width_in_luma_samples >> s->sps->hshift[c_idx]) - x);
                 int height = FFMIN(ctb_size,
                                    (s->sps->pic_height_in_luma_samples >> s->sps->vshift[c_idx]) - y);
-                uint8_t *src = &s->frame.data[c_idx][y * stride + x];
-                uint8_t *dst = &s->sao_frame.data[c_idx][y * stride + x];
+                uint8_t *src = &s->frame->data[c_idx][y * stride + x];
+                uint8_t *dst = &s->sao_frame->data[c_idx][y * stride + x];
                 switch (sao->type_idx[c_idx]) {
                 case SAO_BAND:
                     s->hevcdsp.sao_band_filter(dst, src, stride, sao->offset_val[c_idx],
@@ -657,10 +658,10 @@ static void hls_residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_s
 
     const uint8_t *scan_x_cg, *scan_y_cg, *scan_x_off, *scan_y_off;
 
-    ptrdiff_t stride = s->frame.linesize[c_idx];
+    ptrdiff_t stride = s->frame->linesize[c_idx];
     int hshift = s->sps->hshift[c_idx];
     int vshift = s->sps->vshift[c_idx];
-    uint8_t *dst = &s->frame.data[c_idx][(y0 >> vshift) * stride +
+    uint8_t *dst = &s->frame->data[c_idx][(y0 >> vshift) * stride +
                                          ((x0 >> hshift) << s->sps->pixel_shift)];
 
     int16_t coeffs[MAX_TB_SIZE * MAX_TB_SIZE] = { 0 };
@@ -1093,12 +1094,12 @@ static void hls_pcm_sample(HEVCContext *s, int x0, int y0, int log2_cb_size)
 
     GetBitContext gb;
     int cb_size = 1 << log2_cb_size;
-    int stride0 = s->frame.linesize[0];
-    uint8_t *dst0 = &s->frame.data[0][y0 * stride0 + x0];
-    int stride1 = s->frame.linesize[1];
-    uint8_t *dst1 = &s->frame.data[1][(y0 >> s->sps->vshift[1]) * stride1 + (x0 >> s->sps->hshift[1])];
-    int stride2 = s->frame.linesize[2];
-    uint8_t *dst2 = &s->frame.data[2][(y0 >> s->sps->vshift[2]) * stride2 + (x0 >> s->sps->hshift[2])];
+    int stride0 = s->frame->linesize[0];
+    uint8_t *dst0 = &s->frame->data[0][y0 * stride0 + x0];
+    int stride1 = s->frame->linesize[1];
+    uint8_t *dst1 = &s->frame->data[1][(y0 >> s->sps->vshift[1]) * stride1 + (x0 >> s->sps->hshift[1])];
+    int stride2 = s->frame->linesize[2];
+    uint8_t *dst2 = &s->frame->data[2][(y0 >> s->sps->vshift[2]) * stride2 + (x0 >> s->sps->hshift[2])];
 
     int length = cb_size * cb_size * 3 / 2 * s->sps->pcm.bit_depth;
     uint8_t *pcm = skip_bytes(&s->cc, length / 8);
@@ -1727,8 +1728,8 @@ static void luma_mv_mvp_mode(HEVCContext *s, int x0, int y0, int nPbW, int nPbH,
 static void luma_mc(HEVCContext *s, int16_t *dst, ptrdiff_t dststride,
                     const Mv *mv, int x_off, int y_off, int block_w, int block_h)
 {
-    uint8_t *src = s->frame.data[0];
-    ptrdiff_t srcstride = s->frame.linesize[0];
+    uint8_t *src = s->frame->data[0];
+    ptrdiff_t srcstride = s->frame->linesize[0];
     int pic_width = s->sps->pic_width_in_luma_samples;
     int pic_height = s->sps->pic_height_in_luma_samples;
 
@@ -1769,9 +1770,9 @@ static void luma_mc(HEVCContext *s, int16_t *dst, ptrdiff_t dststride,
 static void chroma_mc(HEVCContext *s, int16_t *dst1, int16_t *dst2, ptrdiff_t dststride,
                       const Mv *mv, int x_off, int y_off, int block_w, int block_h)
 {
-    uint8_t *src1 = s->frame.data[1];
-    uint8_t *src2 = s->frame.data[2];
-    ptrdiff_t srcstride = s->frame.linesize[1];
+    uint8_t *src1 = s->frame->data[1];
+    uint8_t *src2 = s->frame->data[2];
+    ptrdiff_t srcstride = s->frame->linesize[1];
     int pic_width = s->sps->pic_width_in_luma_samples >> 1;
     int pic_height = s->sps->pic_height_in_luma_samples >> 1;
 
@@ -2306,7 +2307,7 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 {
     HEVCContext *s = avctx->priv_data;
     GetBitContext *gb = &s->gb;
-
+    int ret;
 
     *data_size = 0;
 
@@ -2347,16 +2348,10 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         if (hls_slice_header(s) < 0)
             return -1;
 
-        if (s->sao_frame.data[0])
-            s->avctx->release_buffer(s->avctx, &s->sao_frame);
-        if (s->frame.data[0])
-            s->avctx->release_buffer(s->avctx, &s->frame);
-        if (s->avctx->get_buffer(s->avctx, &s->frame) < 0) {
-            av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
-            return -1;
-        }
         if (!s->edge_emu_buffer)
-            s->edge_emu_buffer = av_malloc((MAX_PB_SIZE + 7) * s->frame.linesize[0]);
+            s->edge_emu_buffer = av_malloc((MAX_PB_SIZE + 7) * s->frame->linesize[0]);
+        if ((ret = ff_reget_buffer(s->avctx, s->frame)) < 0)
+            return -1;
 
         ff_hevc_cabac_init(s);
         if (hls_slice_data(s) < 0)
@@ -2369,20 +2364,22 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         }
 
         if (s->sps->sample_adaptive_offset_enabled_flag) {
-            if (s->avctx->get_buffer(s->avctx, &s->sao_frame) < 0) {
-                av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
-                return -1;
-            }
-            av_picture_copy((AVPicture*)&s->sao_frame, (AVPicture*)&s->frame,
+            if ((ret = ff_reget_buffer(s->avctx, s->sao_frame)) < 0)
+                return ret;
+            av_picture_copy((AVPicture*)s->sao_frame, (AVPicture*)s->frame,
                             s->avctx->pix_fmt, s->avctx->width, s->avctx->height);
             sao_filter(s);
-            *(AVFrame*)data = s->sao_frame;
+            if ((ret = av_frame_ref(data, s->sao_frame)) < 0)
+                return ret;
+            av_frame_unref(s->sao_frame);
         } else {
-            *(AVFrame*)data = s->frame;
+            if ((ret = av_frame_ref(data, s->frame)) < 0)
+                return ret;
         }
+        av_frame_unref(s->frame);
 
-        s->frame.pict_type = AV_PICTURE_TYPE_I;
-        s->frame.key_frame = 1;
+        s->frame->pict_type = AV_PICTURE_TYPE_I;
+        s->frame->key_frame = 1;
         *data_size = sizeof(AVFrame);
         break;
     default:
@@ -2399,6 +2396,10 @@ static av_cold int hevc_decode_init(AVCodecContext *avctx)
     HEVCContext *s = avctx->priv_data;
 
     s->avctx = avctx;
+    s->frame = av_frame_alloc();
+    s->sao_frame = av_frame_alloc();
+    if (!s->frame || !s->sao_frame)
+        return AVERROR(ENOMEM);
     memset(s->sps_list, 0, sizeof(s->sps_list));
     memset(s->pps_list, 0, sizeof(s->pps_list));
 
@@ -2410,10 +2411,8 @@ static av_cold int hevc_decode_free(AVCodecContext *avctx)
     int i;
     HEVCContext *s = avctx->priv_data;
 
-    if (s->frame.data[0])
-        s->avctx->release_buffer(s->avctx, &s->frame);
-    if (s->sao_frame.data[0])
-        s->avctx->release_buffer(s->avctx, &s->sao_frame);
+    av_frame_free(&s->frame);
+    av_frame_free(&s->sao_frame);
 
     av_freep(&s->edge_emu_buffer);
 
