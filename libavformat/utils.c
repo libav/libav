@@ -464,16 +464,20 @@ static AVPacket *add_to_pktbuf(AVPacketList **packet_buffer, AVPacket *pkt,
     return &pktl->pkt;
 }
 
-static void queue_attached_pictures(AVFormatContext *s)
+static int queue_attached_pictures(AVFormatContext *s)
 {
     int i;
     for (i = 0; i < s->nb_streams; i++)
         if (s->streams[i]->disposition & AV_DISPOSITION_ATTACHED_PIC &&
             s->streams[i]->discard < AVDISCARD_ALL) {
             AVPacket copy = s->streams[i]->attached_pic;
-            copy.destruct = NULL;
+            copy.buf      = av_buffer_ref(copy.buf);
+            if (!copy.buf)
+                return AVERROR(ENOMEM);
+
             add_to_pktbuf(&s->raw_packet_buffer, &copy, &s->raw_packet_buffer_end);
         }
+    return 0;
 }
 
 int avformat_open_input(AVFormatContext **ps, const char *filename, AVInputFormat *fmt, AVDictionary **options)
@@ -535,7 +539,8 @@ int avformat_open_input(AVFormatContext **ps, const char *filename, AVInputForma
         goto fail;
     ff_id3v2_free_extra_meta(&id3v2_extra_meta);
 
-    queue_attached_pictures(s);
+    if ((ret = queue_attached_pictures(s)) < 0)
+        goto fail;
 
     if (s->pb && !s->data_offset)
         s->data_offset = avio_tell(s->pb);
@@ -725,7 +730,10 @@ void ff_compute_frame_duration(int *pnum, int *pden, AVStream *st,
             *pnum = st->codec->time_base.num;
             *pden = st->codec->time_base.den;
             if (pc && pc->repeat_pict) {
-                *pnum = (*pnum) * (1 + pc->repeat_pict);
+                if (*pnum > INT_MAX / (1 + pc->repeat_pict))
+                    *pden /= 1 + pc->repeat_pict;
+                else
+                    *pnum *= 1 + pc->repeat_pict;
             }
             //If this codec can be interlaced or progressive then we need a parser to compute duration of a packet
             //Thus if we have no parser in such case leave duration undefined.
@@ -1071,8 +1079,12 @@ static int parse_packet(AVFormatContext *s, AVPacket *pkt, int stream_index)
         }
 
         if (out_pkt.data == pkt->data && out_pkt.size == pkt->size) {
+            out_pkt.buf      = pkt->buf;
+            pkt->buf      = NULL;
+#if FF_API_DESTRUCT_PACKET
             out_pkt.destruct = pkt->destruct;
             pkt->destruct = NULL;
+#endif
         }
         if ((ret = av_dup_packet(&out_pkt)) < 0)
             goto fail;
@@ -1732,7 +1744,7 @@ int av_seek_frame(AVFormatContext *s, int stream_index, int64_t timestamp, int f
     int ret = seek_frame_internal(s, stream_index, timestamp, flags);
 
     if (ret >= 0)
-        queue_attached_pictures(s);
+        ret = queue_attached_pictures(s);
 
     return ret;
 }
@@ -1748,7 +1760,7 @@ int avformat_seek_file(AVFormatContext *s, int stream_index, int64_t min_ts, int
         ret = s->iformat->read_seek2(s, stream_index, min_ts, ts, max_ts, flags);
 
         if (ret >= 0)
-            queue_attached_pictures(s);
+            ret = queue_attached_pictures(s);
         return ret;
     }
 
@@ -1759,7 +1771,7 @@ int avformat_seek_file(AVFormatContext *s, int stream_index, int64_t min_ts, int
     //Fallback to old API if new is not implemented but old is
     //Note the old has somewat different sematics
     if(s->iformat->read_seek || 1)
-        return av_seek_frame(s, stream_index, ts, flags | (ts - min_ts > (uint64_t)(max_ts - ts) ? AVSEEK_FLAG_BACKWARD : 0));
+        return av_seek_frame(s, stream_index, ts, flags | ((uint64_t)ts - min_ts > (uint64_t)max_ts - ts ? AVSEEK_FLAG_BACKWARD : 0));
 
     // try some generic seek like seek_frame_generic() but with new ts semantics
 }
@@ -2130,6 +2142,36 @@ enum AVCodecID ff_codec_get_id(const AVCodecTag *tags, unsigned int tag)
             return tags[i].id;
     }
     return AV_CODEC_ID_NONE;
+}
+
+enum AVCodecID ff_get_pcm_codec_id(int bps, int flt, int be, int sflags)
+{
+    if (flt) {
+        switch (bps) {
+        case 32: return be ? AV_CODEC_ID_PCM_F32BE : AV_CODEC_ID_PCM_F32LE;
+        case 64: return be ? AV_CODEC_ID_PCM_F64BE : AV_CODEC_ID_PCM_F64LE;
+        default: return AV_CODEC_ID_NONE;
+        }
+    } else {
+        bps >>= 3;
+        if (sflags & (1 << (bps - 1))) {
+            switch (bps) {
+            case 1:  return AV_CODEC_ID_PCM_S8;
+            case 2:  return be ? AV_CODEC_ID_PCM_S16BE : AV_CODEC_ID_PCM_S16LE;
+            case 3:  return be ? AV_CODEC_ID_PCM_S24BE : AV_CODEC_ID_PCM_S24LE;
+            case 4:  return be ? AV_CODEC_ID_PCM_S32BE : AV_CODEC_ID_PCM_S32LE;
+            default: return AV_CODEC_ID_NONE;
+            }
+        } else {
+            switch (bps) {
+            case 1:  return AV_CODEC_ID_PCM_U8;
+            case 2:  return be ? AV_CODEC_ID_PCM_U16BE : AV_CODEC_ID_PCM_U16LE;
+            case 3:  return be ? AV_CODEC_ID_PCM_U24BE : AV_CODEC_ID_PCM_U24LE;
+            case 4:  return be ? AV_CODEC_ID_PCM_U32BE : AV_CODEC_ID_PCM_U32LE;
+            default: return AV_CODEC_ID_NONE;
+            }
+        }
+    }
 }
 
 unsigned int av_codec_get_tag(const AVCodecTag * const *tags, enum AVCodecID id)
@@ -3059,7 +3101,6 @@ static void hex_dump_internal(void *avcl, FILE *f, int level,
                               const uint8_t *buf, int size)
 {
     int len, i, j, c;
-#undef fprintf
 #define PRINT(...) do { if (!f) av_log(avcl, level, __VA_ARGS__); else fprintf(f, __VA_ARGS__); } while(0)
 
     for(i=0;i<size;i+=16) {
@@ -3097,7 +3138,6 @@ void av_hex_dump_log(void *avcl, int level, const uint8_t *buf, int size)
 
 static void pkt_dump_internal(void *avcl, FILE *f, int level, AVPacket *pkt, int dump_payload, AVRational time_base)
 {
-#undef fprintf
 #define PRINT(...) do { if (!f) av_log(avcl, level, __VA_ARGS__); else fprintf(f, __VA_ARGS__); } while(0)
     PRINT("stream #%d:\n", pkt->stream_index);
     PRINT("  keyframe=%d\n", ((pkt->flags & AV_PKT_FLAG_KEY) != 0));

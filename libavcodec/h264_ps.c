@@ -37,6 +37,9 @@
 //#undef NDEBUG
 #include <assert.h>
 
+#define MAX_LOG2_MAX_FRAME_NUM    (12 + 4)
+#define MIN_LOG2_MAX_FRAME_NUM    4
+
 static const AVRational pixel_aspect[17]={
  {0, 1},
  {1, 1},
@@ -301,7 +304,7 @@ int ff_h264_decode_seq_parameter_set(H264Context *h){
     MpegEncContext * const s = &h->s;
     int profile_idc, level_idc, constraint_set_flags = 0;
     unsigned int sps_id;
-    int i;
+    int i, log2_max_frame_num_minus4;
     SPS *sps;
 
     profile_idc= get_bits(&s->gb, 8);
@@ -330,7 +333,11 @@ int ff_h264_decode_seq_parameter_set(H264Context *h){
     memset(sps->scaling_matrix8, 16, sizeof(sps->scaling_matrix8));
     sps->scaling_matrix_present = 0;
 
-    if(sps->profile_idc >= 100){ //high profile
+    if (sps->profile_idc == 100 || sps->profile_idc == 110 ||
+        sps->profile_idc == 122 || sps->profile_idc == 244 ||
+        sps->profile_idc ==  44 || sps->profile_idc ==  83 ||
+        sps->profile_idc ==  86 || sps->profile_idc == 118 ||
+        sps->profile_idc == 128 || sps->profile_idc == 144) {
         sps->chroma_format_idc= get_ue_golomb_31(&s->gb);
         if(sps->chroma_format_idc > 3) {
             av_log(h->s.avctx, AV_LOG_ERROR, "chroma_format_idc (%u) out of range\n", sps->chroma_format_idc);
@@ -348,7 +355,16 @@ int ff_h264_decode_seq_parameter_set(H264Context *h){
         sps->bit_depth_chroma = 8;
     }
 
-    sps->log2_max_frame_num= get_ue_golomb(&s->gb) + 4;
+    log2_max_frame_num_minus4 = get_ue_golomb(&s->gb);
+    if (log2_max_frame_num_minus4 < MIN_LOG2_MAX_FRAME_NUM - 4 ||
+        log2_max_frame_num_minus4 > MAX_LOG2_MAX_FRAME_NUM - 4) {
+        av_log(h->s.avctx, AV_LOG_ERROR,
+               "log2_max_frame_num_minus4 out of range (0-12): %d\n",
+               log2_max_frame_num_minus4);
+        goto fail;
+    }
+    sps->log2_max_frame_num = log2_max_frame_num_minus4 + 4;
+
     sps->poc_type= get_ue_golomb_31(&s->gb);
 
     if(sps->poc_type == 0){ //FIXME #define
@@ -447,10 +463,13 @@ int ff_h264_decode_seq_parameter_set(H264Context *h){
                sps->timing_info_present_flag ? sps->time_scale : 0
                );
     }
+    sps->new = 1;
 
     av_free(h->sps_buffers[sps_id]);
-    h->sps_buffers[sps_id]= sps;
-    h->sps = *sps;
+    h->sps_buffers[sps_id] = sps;
+    h->sps                 = *sps;
+    h->current_sps_id      = sps_id;
+
     return 0;
 fail:
     av_free(sps);

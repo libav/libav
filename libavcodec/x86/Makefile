@@ -19,6 +19,7 @@ OBJS-$(CONFIG_RV40_DECODER)            += x86/rv34dsp_init.o            \
                                           x86/rv40dsp_init.o
 OBJS-$(CONFIG_TRUEHD_DECODER)          += x86/mlpdsp.o
 OBJS-$(CONFIG_VC1_DECODER)             += x86/vc1dsp_init.o
+OBJS-$(CONFIG_VIDEODSP)                += x86/videodsp_init.o
 OBJS-$(CONFIG_VP3DSP)                  += x86/vp3dsp_init.o
 OBJS-$(CONFIG_VP5_DECODER)             += x86/vp56dsp_init.o
 OBJS-$(CONFIG_VP6_DECODER)             += x86/vp56dsp_init.o
@@ -31,7 +32,6 @@ MMX-OBJS                               += x86/dsputil_mmx.o             \
                                           x86/idct_sse2_xvid.o          \
                                           x86/simple_idct.o             \
 
-MMX-OBJS-$(CONFIG_DWT)                 += x86/snowdsp.o
 MMX-OBJS-$(CONFIG_ENCODERS)            += x86/dsputilenc_mmx.o          \
                                           x86/motion_est.o
 MMX-OBJS-$(CONFIG_VC1_DECODER)         += x86/vc1dsp_mmx.o
@@ -51,7 +51,8 @@ YASM-OBJS-$(CONFIG_H264DSP)            += x86/h264_deblock.o            \
                                           x86/h264_weight_10bit.o
 YASM-OBJS-$(CONFIG_H264PRED)           += x86/h264_intrapred.o          \
                                           x86/h264_intrapred_10bit.o
-YASM-OBJS-$(CONFIG_H264QPEL)           += x86/h264_qpel_10bit.o
+YASM-OBJS-$(CONFIG_H264QPEL)           += x86/h264_qpel_8bit.o          \
+                                          x86/h264_qpel_10bit.o
 YASM-OBJS-$(CONFIG_MPEGAUDIODSP)       += x86/imdct36.o
 YASM-OBJS-$(CONFIG_PNG_DECODER)        += x86/pngdsp.o
 YASM-OBJS-$(CONFIG_PRORES_DECODER)     += x86/proresdsp.o
@@ -59,6 +60,7 @@ YASM-OBJS-$(CONFIG_RV30_DECODER)       += x86/rv34dsp.o
 YASM-OBJS-$(CONFIG_RV40_DECODER)       += x86/rv34dsp.o                 \
                                           x86/rv40dsp.o
 YASM-OBJS-$(CONFIG_VC1_DECODER)        += x86/vc1dsp.o
+YASM-OBJS-$(CONFIG_VIDEODSP)           += x86/videodsp.o
 YASM-OBJS-$(CONFIG_VP3DSP)             += x86/vp3dsp.o
 YASM-OBJS-$(CONFIG_VP6_DECODER)        += x86/vp56dsp.o
 YASM-OBJS-$(CONFIG_VP8_DECODER)        += x86/vp8dsp.o

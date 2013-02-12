@@ -191,7 +191,7 @@ WINDOW_FUNC(only_long)
 {
     const float *lwindow = sce->ics.use_kb_window[0] ? ff_aac_kbd_long_1024 : ff_sine_1024;
     const float *pwindow = sce->ics.use_kb_window[1] ? ff_aac_kbd_long_1024 : ff_sine_1024;
-    float *out = sce->ret;
+    float *out = sce->ret_buf;
 
     fdsp->vector_fmul       (out,        audio,        lwindow, 1024);
     dsp->vector_fmul_reverse(out + 1024, audio + 1024, pwindow, 1024);
@@ -201,7 +201,7 @@ WINDOW_FUNC(long_start)
 {
     const float *lwindow = sce->ics.use_kb_window[1] ? ff_aac_kbd_long_1024 : ff_sine_1024;
     const float *swindow = sce->ics.use_kb_window[0] ? ff_aac_kbd_short_128 : ff_sine_128;
-    float *out = sce->ret;
+    float *out = sce->ret_buf;
 
     fdsp->vector_fmul(out, audio, lwindow, 1024);
     memcpy(out + 1024, audio + 1024, sizeof(out[0]) * 448);
@@ -213,7 +213,7 @@ WINDOW_FUNC(long_stop)
 {
     const float *lwindow = sce->ics.use_kb_window[0] ? ff_aac_kbd_long_1024 : ff_sine_1024;
     const float *swindow = sce->ics.use_kb_window[1] ? ff_aac_kbd_short_128 : ff_sine_128;
-    float *out = sce->ret;
+    float *out = sce->ret_buf;
 
     memset(out, 0, sizeof(out[0]) * 448);
     fdsp->vector_fmul(out + 448, audio + 448, swindow, 128);
@@ -226,7 +226,7 @@ WINDOW_FUNC(eight_short)
     const float *swindow = sce->ics.use_kb_window[0] ? ff_aac_kbd_short_128 : ff_sine_128;
     const float *pwindow = sce->ics.use_kb_window[1] ? ff_aac_kbd_short_128 : ff_sine_128;
     const float *in = audio + 448;
-    float *out = sce->ret;
+    float *out = sce->ret_buf;
     int w;
 
     for (w = 0; w < 8; w++) {
@@ -251,7 +251,7 @@ static void apply_window_and_mdct(AACEncContext *s, SingleChannelElement *sce,
                                   float *audio)
 {
     int i;
-    float *output = sce->ret;
+    float *output = sce->ret_buf;
 
     apply_window[sce->ics.window_sequence[0]](&s->dsp, &s->fdsp, sce, audio);
 
@@ -302,7 +302,7 @@ static void encode_ms_info(PutBitContext *pb, ChannelElement *cpe)
 /**
  * Produce integer coefficients from scalefactors provided by the model.
  */
-static void adjust_frame_information(AACEncContext *apc, ChannelElement *cpe, int chans)
+static void adjust_frame_information(ChannelElement *cpe, int chans)
 {
     int i, w, w2, g, ch;
     int start, maxsfb, cmaxsfb;
@@ -460,8 +460,7 @@ static int encode_individual_channel(AVCodecContext *avctx, AACEncContext *s,
 /**
  * Write some auxiliary information about the created AAC file.
  */
-static void put_bitstream_info(AVCodecContext *avctx, AACEncContext *s,
-                               const char *name)
+static void put_bitstream_info(AACEncContext *s, const char *name)
 {
     int i, namelen, padbits;
 
@@ -519,7 +518,7 @@ static int aac_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
 
     /* add current frame to queue */
     if (frame) {
-        if ((ret = ff_af_queue_add(&s->afq, frame) < 0))
+        if ((ret = ff_af_queue_add(&s->afq, frame)) < 0)
             return ret;
     }
 
@@ -584,7 +583,7 @@ static int aac_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
         init_put_bits(&s->pb, avpkt->data, avpkt->size);
 
         if ((avctx->frame_number & 0xFF)==1 && !(avctx->flags & CODEC_FLAG_BITEXACT))
-            put_bitstream_info(avctx, s, LIBAVCODEC_IDENT);
+            put_bitstream_info(s, LIBAVCODEC_IDENT);
         start_ch = 0;
         memset(chan_el_counter, 0, sizeof(chan_el_counter));
         for (i = 0; i < s->chan_map[0]; i++) {
@@ -626,7 +625,7 @@ static int aac_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
                     s->coder->search_for_ms(s, cpe, s->lambda);
                 }
             }
-            adjust_frame_information(s, cpe, chans);
+            adjust_frame_information(cpe, chans);
             if (chans == 2) {
                 put_bits(&s->pb, 1, cpe->common_window);
                 if (cpe->common_window) {

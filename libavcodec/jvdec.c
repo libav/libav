@@ -28,6 +28,7 @@
 #include "avcodec.h"
 #include "dsputil.h"
 #include "get_bits.h"
+#include "internal.h"
 #include "libavutil/intreadwrite.h"
 
 typedef struct JvContext {
@@ -129,23 +130,23 @@ static inline void decode8x8(GetBitContext *gb, uint8_t *dst, int linesize, DSPC
 }
 
 static int decode_frame(AVCodecContext *avctx,
-                        void *data, int *data_size,
+                        void *data, int *got_frame,
                         AVPacket *avpkt)
 {
     JvContext *s           = avctx->priv_data;
     int buf_size           = avpkt->size;
     const uint8_t *buf     = avpkt->data;
     const uint8_t *buf_end = buf + buf_size;
-    int video_size, video_type, i, j;
+    int video_size, video_type, i, j, ret;
 
     video_size = AV_RL32(buf);
     video_type = buf[4];
     buf += 5;
 
     if (video_size) {
-        if (avctx->reget_buffer(avctx, &s->frame) < 0) {
+        if ((ret = ff_reget_buffer(avctx, &s->frame)) < 0) {
             av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
-            return -1;
+            return ret;
         }
 
         if (video_type == 0 || video_type == 1) {
@@ -185,8 +186,9 @@ static int decode_frame(AVCodecContext *avctx,
         s->palette_has_changed       = 0;
         memcpy(s->frame.data[1], s->palette, AVPALETTE_SIZE);
 
-        *data_size      = sizeof(AVFrame);
-        *(AVFrame*)data = s->frame;
+        if ((ret = av_frame_ref(data, &s->frame)) < 0)
+            return ret;
+        *got_frame = 1;
     }
 
     return buf_size;
@@ -196,8 +198,7 @@ static av_cold int decode_close(AVCodecContext *avctx)
 {
     JvContext *s = avctx->priv_data;
 
-    if(s->frame.data[0])
-        avctx->release_buffer(avctx, &s->frame);
+    av_frame_unref(&s->frame);
 
     return 0;
 }

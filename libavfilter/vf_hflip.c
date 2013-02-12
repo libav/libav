@@ -75,31 +75,39 @@ static int query_formats(AVFilterContext *ctx)
 static int config_props(AVFilterLink *inlink)
 {
     FlipContext *flip = inlink->dst->priv;
-    const AVPixFmtDescriptor *pix_desc = &av_pix_fmt_descriptors[inlink->format];
+    const AVPixFmtDescriptor *pix_desc = av_pix_fmt_desc_get(inlink->format);
 
     av_image_fill_max_pixsteps(flip->max_step, NULL, pix_desc);
-    flip->hsub = av_pix_fmt_descriptors[inlink->format].log2_chroma_w;
-    flip->vsub = av_pix_fmt_descriptors[inlink->format].log2_chroma_h;
+    flip->hsub = pix_desc->log2_chroma_w;
+    flip->vsub = pix_desc->log2_chroma_h;
 
     return 0;
 }
 
-static int draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
+static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
-    FlipContext *flip = inlink->dst->priv;
-    AVFilterBufferRef *inpic  = inlink->cur_buf;
-    AVFilterBufferRef *outpic = inlink->dst->outputs[0]->out_buf;
+    AVFilterContext *ctx  = inlink->dst;
+    FlipContext *flip     = ctx->priv;
+    AVFilterLink *outlink = ctx->outputs[0];
+    AVFrame *out;
     uint8_t *inrow, *outrow;
     int i, j, plane, step, hsub, vsub;
 
-    for (plane = 0; plane < 4 && inpic->data[plane]; plane++) {
+    out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+    if (!out) {
+        av_frame_free(&in);
+        return AVERROR(ENOMEM);
+    }
+    av_frame_copy_props(out, in);
+
+    for (plane = 0; plane < 4 && in->data[plane]; plane++) {
         step = flip->max_step[plane];
         hsub = (plane == 1 || plane == 2) ? flip->hsub : 0;
         vsub = (plane == 1 || plane == 2) ? flip->vsub : 0;
 
-        outrow = outpic->data[plane] + (y>>vsub) * outpic->linesize[plane];
-        inrow  = inpic ->data[plane] + (y>>vsub) * inpic ->linesize[plane] + ((inlink->w >> hsub) - 1) * step;
-        for (i = 0; i < h>>vsub; i++) {
+        outrow = out->data[plane];
+        inrow  = in ->data[plane] + ((inlink->w >> hsub) - 1) * step;
+        for (i = 0; i < in->height >> vsub; i++) {
             switch (step) {
             case 1:
                 for (j = 0; j < (inlink->w >> hsub); j++)
@@ -140,21 +148,21 @@ static int draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
                     memcpy(outrow + j*step, inrow - j*step, step);
             }
 
-            inrow  += inpic ->linesize[plane];
-            outrow += outpic->linesize[plane];
+            inrow  += in ->linesize[plane];
+            outrow += out->linesize[plane];
         }
     }
 
-    return ff_draw_slice(inlink->dst->outputs[0], y, h, slice_dir);
+    av_frame_free(&in);
+    return ff_filter_frame(outlink, out);
 }
 
 static const AVFilterPad avfilter_vf_hflip_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
-        .draw_slice   = draw_slice,
+        .filter_frame = filter_frame,
         .config_props = config_props,
-        .min_perms    = AV_PERM_READ,
     },
     { NULL }
 };

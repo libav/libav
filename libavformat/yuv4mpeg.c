@@ -18,6 +18,8 @@
  * License along with Libav; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
+
+#include "libavutil/pixdesc.h"
 #include "avformat.h"
 #include "internal.h"
 
@@ -128,8 +130,8 @@ static int yuv4_write_packet(AVFormatContext *s, AVPacket *pkt)
 
     if (st->codec->pix_fmt != AV_PIX_FMT_GRAY8) {
         // Adjust for smaller Cb and Cr planes
-        avcodec_get_chroma_sub_sample(st->codec->pix_fmt, &h_chroma_shift,
-                                      &v_chroma_shift);
+        av_pix_fmt_get_chroma_sub_sample(st->codec->pix_fmt, &h_chroma_shift,
+                                         &v_chroma_shift);
         width  >>= h_chroma_shift;
         height >>= v_chroma_shift;
 
@@ -154,6 +156,11 @@ static int yuv4_write_header(AVFormatContext *s)
 
     if (s->nb_streams != 1)
         return AVERROR(EIO);
+
+    if (s->streams[0]->codec->codec_id != AV_CODEC_ID_RAWVIDEO) {
+        av_log(s, AV_LOG_ERROR, "ERROR: Only rawvideo supported.\n");
+        return AVERROR_INVALIDDATA;
+    }
 
     if (s->streams[0]->codec->pix_fmt == AV_PIX_FMT_YUV411P) {
         av_log(s, AV_LOG_ERROR, "Warning: generating rarely used 4:1:1 YUV "

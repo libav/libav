@@ -41,11 +41,11 @@
 #include "avcodec.h"
 #include "bytestream.h"
 #include "get_bits.h"
+#include "internal.h"
 
 typedef struct BlockInfo {
     uint8_t *pos;
     int      size;
-    int      unp_size;
 } BlockInfo;
 
 typedef struct FlashSVContext {
@@ -121,8 +121,7 @@ static av_cold int flashsv_decode_init(AVCodecContext *avctx)
 }
 
 
-static int flashsv2_prime(FlashSVContext *s, uint8_t *src,
-                          int size, int unp_size)
+static int flashsv2_prime(FlashSVContext *s, uint8_t *src, int size)
 {
     z_stream zs;
     int zret; // Zlib return code
@@ -173,8 +172,9 @@ static int flashsv_decode_block(AVCodecContext *avctx, AVPacket *avpkt,
         return AVERROR_UNKNOWN;
     }
     if (s->zlibprime_curr || s->zlibprime_prev) {
-        ret = flashsv2_prime(s, s->blocks[blk_idx].pos, s->blocks[blk_idx].size,
-                       s->blocks[blk_idx].unp_size);
+        ret = flashsv2_prime(s,
+                             s->blocks[blk_idx].pos,
+                             s->blocks[blk_idx].size);
         if (ret < 0)
             return ret;
     }
@@ -196,7 +196,6 @@ static int flashsv_decode_block(AVCodecContext *avctx, AVPacket *avpkt,
     if (s->is_keyframe) {
         s->blocks[blk_idx].pos      = s->keyframedata + (get_bits_count(gb) / 8);
         s->blocks[blk_idx].size     = block_size;
-        s->blocks[blk_idx].unp_size = s->block_size * 3 - s->zstream.avail_out;
     }
     if (!s->color_depth) {
         /* Flash Screen Video stores the image upside down, so copy
@@ -236,11 +235,11 @@ static int calc_deflate_block_size(int tmpblock_size)
 }
 
 static int flashsv_decode_frame(AVCodecContext *avctx, void *data,
-                                int *data_size, AVPacket *avpkt)
+                                int *got_frame, AVPacket *avpkt)
 {
     int buf_size       = avpkt->size;
     FlashSVContext *s  = avctx->priv_data;
-    int h_blocks, v_blocks, h_part, v_part, i, j;
+    int h_blocks, v_blocks, h_part, v_part, i, j, ret;
     GetBitContext gb;
 
     /* no supplementary picture */
@@ -264,7 +263,7 @@ static int flashsv_decode_frame(AVCodecContext *avctx, void *data,
             return AVERROR_PATCHWELCOME;
         }
         if (get_bits1(&gb)) {
-            av_log_missing_feature(avctx, "custom palette", 1);
+            av_log_missing_feature(avctx, "Custom palette", 1);
             return AVERROR_PATCHWELCOME;
         }
     }
@@ -329,13 +328,9 @@ static int flashsv_decode_frame(AVCodecContext *avctx, void *data,
             s->image_width, s->image_height, s->block_width, s->block_height,
             h_blocks, v_blocks, h_part, v_part);
 
-    s->frame.reference    = 3;
-    s->frame.buffer_hints = FF_BUFFER_HINTS_VALID    |
-                            FF_BUFFER_HINTS_PRESERVE |
-                            FF_BUFFER_HINTS_REUSABLE;
-    if (avctx->reget_buffer(avctx, &s->frame) < 0) {
+    if ((ret = ff_reget_buffer(avctx, &s->frame)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "reget_buffer() failed\n");
-        return -1;
+        return ret;
     }
 
     /* loop over all block columns */
@@ -360,8 +355,7 @@ static int flashsv_decode_frame(AVCodecContext *avctx, void *data,
             s->diff_height    = cur_blk_height;
 
             if (8 * size > get_bits_left(&gb)) {
-                avctx->release_buffer(avctx, &s->frame);
-                s->frame.data[0] = NULL;
+                av_frame_unref(&s->frame);
                 return AVERROR_INVALIDDATA;
             }
 
@@ -379,6 +373,11 @@ static int flashsv_decode_frame(AVCodecContext *avctx, void *data,
                 }
 
                 if (has_diff) {
+                    if (!s->keyframe) {
+                        av_log(avctx, AV_LOG_ERROR,
+                               "inter frame without keyframe\n");
+                        return AVERROR_INVALIDDATA;
+                    }
                     s->diff_start  = get_bits(&gb, 8);
                     s->diff_height = get_bits(&gb, 8);
                     av_log(avctx, AV_LOG_DEBUG,
@@ -397,6 +396,11 @@ static int flashsv_decode_frame(AVCodecContext *avctx, void *data,
                     size -= 2;
                     av_log_missing_feature(avctx, "zlibprime_curr", 1);
                     return AVERROR_PATCHWELCOME;
+                }
+                if (!s->blocks && (s->zlibprime_curr || s->zlibprime_prev)) {
+                    av_log(avctx, AV_LOG_ERROR, "no data available for zlib "
+                           "priming\n");
+                    return AVERROR_INVALIDDATA;
                 }
                 size--; // account for flags byte
             }
@@ -433,8 +437,10 @@ static int flashsv_decode_frame(AVCodecContext *avctx, void *data,
         memcpy(s->keyframe, s->frame.data[0], s->frame.linesize[0] * avctx->height);
     }
 
-    *data_size = sizeof(AVFrame);
-    *(AVFrame*)data = s->frame;
+    if ((ret = av_frame_ref(data, &s->frame)) < 0)
+        return ret;
+
+    *got_frame = 1;
 
     if ((get_bits_count(&gb) / 8) != buf_size)
         av_log(avctx, AV_LOG_ERROR, "buffer not fully consumed (%d != %d)\n",
@@ -450,8 +456,7 @@ static av_cold int flashsv_decode_end(AVCodecContext *avctx)
     FlashSVContext *s = avctx->priv_data;
     inflateEnd(&s->zstream);
     /* release the frame if needed */
-    if (s->frame.data[0])
-        avctx->release_buffer(avctx, &s->frame);
+    av_frame_unref(&s->frame);
 
     /* free the tmpblock */
     av_free(s->tmpblock);

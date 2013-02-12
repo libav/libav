@@ -566,13 +566,13 @@ static int decode_residual(H264Context *h, GetBitContext *gb, DCTELEM *block, in
     else{
         if (max_coeff <= 8) {
             if (max_coeff == 4)
-                zeros_left = get_vlc2(gb, (chroma_dc_total_zeros_vlc-1)[total_coeff].table,
+                zeros_left = get_vlc2(gb, chroma_dc_total_zeros_vlc[total_coeff - 1].table,
                                       CHROMA_DC_TOTAL_ZEROS_VLC_BITS, 1);
             else
-                zeros_left = get_vlc2(gb, (chroma422_dc_total_zeros_vlc-1)[total_coeff].table,
+                zeros_left = get_vlc2(gb, chroma422_dc_total_zeros_vlc[total_coeff - 1].table,
                                       CHROMA422_DC_TOTAL_ZEROS_VLC_BITS, 1);
         } else {
-            zeros_left= get_vlc2(gb, (total_zeros_vlc-1)[ total_coeff ].table, TOTAL_ZEROS_VLC_BITS, 1);
+            zeros_left= get_vlc2(gb, total_zeros_vlc[total_coeff - 1].table, TOTAL_ZEROS_VLC_BITS, 1);
         }
     }
 
@@ -582,7 +582,7 @@ static int decode_residual(H264Context *h, GetBitContext *gb, DCTELEM *block, in
         ((type*)block)[*scantable] = level[0]; \
         for(i=1;i<total_coeff && zeros_left > 0;i++) { \
             if(zeros_left < 7) \
-                run_before= get_vlc2(gb, (run_vlc-1)[zeros_left].table, RUN_VLC_BITS, 1); \
+                run_before= get_vlc2(gb, run_vlc[zeros_left - 1].table, RUN_VLC_BITS, 1); \
             else \
                 run_before= get_vlc2(gb, run7_vlc.table, RUN7_VLC_BITS, 2); \
             zeros_left -= run_before; \
@@ -597,7 +597,7 @@ static int decode_residual(H264Context *h, GetBitContext *gb, DCTELEM *block, in
         ((type*)block)[*scantable] = ((int)(level[0] * qmul[*scantable] + 32))>>6; \
         for(i=1;i<total_coeff && zeros_left > 0;i++) { \
             if(zeros_left < 7) \
-                run_before= get_vlc2(gb, (run_vlc-1)[zeros_left].table, RUN_VLC_BITS, 1); \
+                run_before= get_vlc2(gb, run_vlc[zeros_left - 1].table, RUN_VLC_BITS, 1); \
             else \
                 run_before= get_vlc2(gb, run7_vlc.table, RUN7_VLC_BITS, 2); \
             zeros_left -= run_before; \
@@ -610,15 +610,16 @@ static int decode_residual(H264Context *h, GetBitContext *gb, DCTELEM *block, in
         } \
     }
 
+    if (zeros_left < 0) {
+        av_log(h->s.avctx, AV_LOG_ERROR,
+               "negative number of zero coeffs at %d %d\n", s->mb_x, s->mb_y);
+        return AVERROR_INVALIDDATA;
+    }
+
     if (h->pixel_shift) {
         STORE_BLOCK(int32_t)
     } else {
         STORE_BLOCK(int16_t)
-    }
-
-    if(zeros_left<0){
-        av_log(h->s.avctx, AV_LOG_ERROR, "negative number of zero coeffs at %d %d\n", s->mb_x, s->mb_y);
-        return -1;
     }
 
     return 0;
@@ -776,11 +777,11 @@ decode_intra_mb:
         }
 
         // In deblocking, the quantizer is 0
-        s->current_picture.f.qscale_table[mb_xy] = 0;
+        s->current_picture.qscale_table[mb_xy] = 0;
         // All coeffs are present
         memset(h->non_zero_count[mb_xy], 16, 48);
 
-        s->current_picture.f.mb_type[mb_xy] = mb_type;
+        s->current_picture.mb_type[mb_xy] = mb_type;
         return 0;
     }
 
@@ -1075,7 +1076,7 @@ decode_intra_mb:
     }
     h->cbp=
     h->cbp_table[mb_xy]= cbp;
-    s->current_picture.f.mb_type[mb_xy] = mb_type;
+    s->current_picture.mb_type[mb_xy] = mb_type;
 
     if(cbp || IS_INTRA16x16(mb_type)){
         int i4x4, i8x8, chroma_idx;
@@ -1175,7 +1176,7 @@ decode_intra_mb:
         fill_rectangle(&h->non_zero_count_cache[scan8[16]], 4, 4, 8, 0, 1);
         fill_rectangle(&h->non_zero_count_cache[scan8[32]], 4, 4, 8, 0, 1);
     }
-    s->current_picture.f.qscale_table[mb_xy] = s->qscale;
+    s->current_picture.qscale_table[mb_xy] = s->qscale;
     write_back_non_zero_count(h);
 
     return 0;

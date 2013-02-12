@@ -29,6 +29,7 @@
 
 #include <stddef.h>
 
+#include "libavutil/channel_layout.h"
 #include "avcodec.h"
 #include "internal.h"
 #include "get_bits.h"
@@ -89,7 +90,9 @@ static av_cold int qcelp_decode_init(AVCodecContext *avctx)
     QCELPContext *q = avctx->priv_data;
     int i;
 
-    avctx->sample_fmt = AV_SAMPLE_FMT_FLT;
+    avctx->channels       = 1;
+    avctx->channel_layout = AV_CH_LAYOUT_MONO;
+    avctx->sample_fmt     = AV_SAMPLE_FMT_FLT;
 
     for (i = 0; i < 10; i++)
         q->prev_lspf[i] = (i + 1) / 11.;
@@ -696,7 +699,7 @@ static int qcelp_decode_frame(AVCodecContext *avctx, void *data,
 
     /* get output buffer */
     q->avframe.nb_samples = 160;
-    if ((ret = avctx->get_buffer(avctx, &q->avframe)) < 0) {
+    if ((ret = ff_get_buffer(avctx, &q->avframe, 0)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }

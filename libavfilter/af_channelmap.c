@@ -25,8 +25,8 @@
 
 #include <ctype.h>
 
-#include "libavutil/audioconvert.h"
 #include "libavutil/avstring.h"
+#include "libavutil/channel_layout.h"
 #include "libavutil/common.h"
 #include "libavutil/mathematics.h"
 #include "libavutil/opt.h"
@@ -124,7 +124,6 @@ static av_cold int channelmap_init(AVFilterContext *ctx, const char *args)
     ChannelMapContext *s = ctx->priv;
     int ret;
     char *mapping;
-    enum mode;
     int map_entries = 0;
     char buf[256];
     enum MappingMode mode;
@@ -314,7 +313,7 @@ static int channelmap_query_formats(AVFilterContext *ctx)
     return 0;
 }
 
-static int channelmap_filter_samples(AVFilterLink *inlink, AVFilterBufferRef *buf)
+static int channelmap_filter_frame(AVFilterLink *inlink, AVFrame *buf)
 {
     AVFilterContext  *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
@@ -332,7 +331,7 @@ static int channelmap_filter_samples(AVFilterLink *inlink, AVFilterBufferRef *bu
             uint8_t **new_extended_data =
                 av_mallocz(nch_out * sizeof(*buf->extended_data));
             if (!new_extended_data) {
-                avfilter_unref_buffer(buf);
+                av_frame_free(&buf);
                 return AVERROR(ENOMEM);
             }
             if (buf->extended_data == buf->data) {
@@ -356,7 +355,7 @@ static int channelmap_filter_samples(AVFilterLink *inlink, AVFilterBufferRef *bu
         memcpy(buf->data, buf->extended_data,
            FFMIN(FF_ARRAY_ELEMS(buf->data), nch_out) * sizeof(buf->data[0]));
 
-    return ff_filter_samples(outlink, buf);
+    return ff_filter_frame(outlink, buf);
 }
 
 static int channelmap_config_input(AVFilterLink *inlink)
@@ -390,7 +389,7 @@ static const AVFilterPad avfilter_af_channelmap_inputs[] = {
     {
         .name           = "default",
         .type           = AVMEDIA_TYPE_AUDIO,
-        .filter_samples = channelmap_filter_samples,
+        .filter_frame   = channelmap_filter_frame,
         .config_props   = channelmap_config_input
     },
     { NULL }

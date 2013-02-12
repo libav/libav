@@ -287,7 +287,7 @@ static int hls_slice_header(HEVCContext *s)
         ff_hevc_pred_init(&s->hpc, s->sps->bit_depth);
         ff_hevc_dsp_init(&s->hevcdsp, s->sps->bit_depth);
 
-        ff_dsputil_init(&s->dsp, s->avctx);
+        ff_videodsp_init(&s->vdsp, s->sps->bit_depth);
     }
 
     if (!sh->first_slice_in_pic_flag) {
@@ -1744,7 +1744,7 @@ static void luma_mc(HEVCContext *s, int16_t *dst, ptrdiff_t dststride,
     if (x_off < extra_left || x_off >= pic_width - block_w - qpel_extra_after[mx] ||
         y_off < extra_top || y_off >= pic_height - block_h - qpel_extra_after[my]) {
         int offset = extra_top * srcstride + (extra_left << s->sps->pixel_shift);
-        s->dsp.emulated_edge_mc(s->edge_emu_buffer, src - offset, srcstride,
+        s->vdsp.emulated_edge_mc(s->edge_emu_buffer, src - offset, srcstride,
                                 block_w + qpel_extra[mx], block_h + qpel_extra[my],
                                 x_off - extra_left, y_off - extra_top,
                                 pic_width, pic_height);
@@ -1787,14 +1787,14 @@ static void chroma_mc(HEVCContext *s, int16_t *dst1, int16_t *dst2, ptrdiff_t ds
         x_off < epel_extra_before || x_off >= pic_width - block_w - epel_extra_after ||
         y_off < epel_extra_after || y_off >= pic_height - block_h - epel_extra_after) {
         int offset = epel_extra_before * (srcstride + (1 << s->sps->pixel_shift));
-        s->dsp.emulated_edge_mc(s->edge_emu_buffer, src1 - offset, srcstride,
+        s->vdsp.emulated_edge_mc(s->edge_emu_buffer, src1 - offset, srcstride,
                                 block_w + epel_extra, block_h + epel_extra,
                                 x_off - epel_extra_before, y_off - epel_extra_before,
                                 pic_width, pic_height);
         src1 = s->edge_emu_buffer + offset;
         s->hevcdsp.put_hevc_epel[!!my][!!mx](dst1, dststride, src1, srcstride, block_w, block_h, mx, my);
 
-        s->dsp.emulated_edge_mc(s->edge_emu_buffer, src2 - offset, srcstride,
+        s->vdsp.emulated_edge_mc(s->edge_emu_buffer, src2 - offset, srcstride,
                                 block_w + epel_extra, block_h + epel_extra,
                                 x_off - epel_extra_before, y_off - epel_extra_before,
                                 pic_width, pic_height);

@@ -23,6 +23,7 @@
 #include "libavutil/common.h"
 #include "libavutil/intreadwrite.h"
 #include "avcodec.h"
+#include "internal.h"
 
 static av_cold int v410_decode_init(AVCodecContext *avctx)
 {
@@ -38,36 +39,24 @@ static av_cold int v410_decode_init(AVCodecContext *avctx)
         }
     }
 
-    avctx->coded_frame = avcodec_alloc_frame();
-
-    if (!avctx->coded_frame) {
-        av_log(avctx, AV_LOG_ERROR, "Could not allocate frame.\n");
-        return AVERROR(ENOMEM);
-    }
-
     return 0;
 }
 
 static int v410_decode_frame(AVCodecContext *avctx, void *data,
-                             int *data_size, AVPacket *avpkt)
+                             int *got_frame, AVPacket *avpkt)
 {
-    AVFrame *pic = avctx->coded_frame;
+    AVFrame *pic = data;
     uint8_t *src = avpkt->data;
     uint16_t *y, *u, *v;
     uint32_t val;
     int i, j;
-
-    if (pic->data[0])
-        avctx->release_buffer(avctx, pic);
 
     if (avpkt->size < 4 * avctx->height * avctx->width) {
         av_log(avctx, AV_LOG_ERROR, "Insufficient input data.\n");
         return AVERROR(EINVAL);
     }
 
-    pic->reference = 0;
-
-    if (avctx->get_buffer(avctx, pic) < 0) {
+    if (ff_get_buffer(avctx, pic, 0) < 0) {
         av_log(avctx, AV_LOG_ERROR, "Could not allocate buffer.\n");
         return AVERROR(ENOMEM);
     }
@@ -95,20 +84,9 @@ static int v410_decode_frame(AVCodecContext *avctx, void *data,
         v += pic->linesize[2] >> 1;
     }
 
-    *data_size = sizeof(AVFrame);
-    *(AVFrame *)data = *pic;
+    *got_frame = 1;
 
     return avpkt->size;
-}
-
-static av_cold int v410_decode_close(AVCodecContext *avctx)
-{
-    if (avctx->coded_frame->data[0])
-        avctx->release_buffer(avctx, avctx->coded_frame);
-
-    av_freep(&avctx->coded_frame);
-
-    return 0;
 }
 
 AVCodec ff_v410_decoder = {
@@ -117,7 +95,6 @@ AVCodec ff_v410_decoder = {
     .id           = AV_CODEC_ID_V410,
     .init         = v410_decode_init,
     .decode       = v410_decode_frame,
-    .close        = v410_decode_close,
     .capabilities = CODEC_CAP_DR1,
     .long_name    = NULL_IF_CONFIG_SMALL("Uncompressed 4:4:4 10-bit"),
 };

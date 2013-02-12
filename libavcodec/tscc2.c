@@ -28,6 +28,7 @@
 #include "avcodec.h"
 #include "get_bits.h"
 #include "bytestream.h"
+#include "internal.h"
 #include "tscc2data.h"
 
 typedef struct TSCC2Context {
@@ -173,7 +174,7 @@ static int tscc2_decode_mb(TSCC2Context *c, int *q, int vlc_set,
                 if (ac == 0x1000)
                     ac = get_bits(gb, 12);
                 bpos += ac & 0xF;
-                if (bpos >= 64)
+                if (bpos >= 16)
                     return AVERROR_INVALIDDATA;
                 val = sign_extend(ac >> 4, 8);
                 c->block[tscc2_zigzag[bpos++]] = val;
@@ -211,7 +212,7 @@ static int tscc2_decode_slice(TSCC2Context *c, int mb_y,
 }
 
 static int tscc2_decode_frame(AVCodecContext *avctx, void *data,
-                              int *data_size, AVPacket *avpkt)
+                              int *got_frame, AVPacket *avpkt)
 {
     const uint8_t *buf = avpkt->data;
     int buf_size = avpkt->size;
@@ -229,17 +230,15 @@ static int tscc2_decode_frame(AVCodecContext *avctx, void *data,
         return AVERROR_INVALIDDATA;
     }
 
-    c->pic.reference    = 3;
-    c->pic.buffer_hints = FF_BUFFER_HINTS_VALID | FF_BUFFER_HINTS_PRESERVE |
-                          FF_BUFFER_HINTS_REUSABLE;
-    if ((ret = avctx->reget_buffer(avctx, &c->pic)) < 0) {
+    if ((ret = ff_reget_buffer(avctx, &c->pic)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "reget_buffer() failed\n");
         return ret;
     }
 
     if (frame_type == 0) {
-        *data_size      = sizeof(AVFrame);
-        *(AVFrame*)data = c->pic;
+        *got_frame      = 1;
+        if ((ret = av_frame_ref(data, &c->pic)) < 0)
+            return ret;
 
         return buf_size;
     }
@@ -322,8 +321,9 @@ static int tscc2_decode_frame(AVCodecContext *avctx, void *data,
         bytestream2_skip(&gb, size);
     }
 
-    *data_size      = sizeof(AVFrame);
-    *(AVFrame*)data = c->pic;
+    *got_frame      = 1;
+    if ((ret = av_frame_ref(data, &c->pic)) < 0)
+        return ret;
 
     /* always report that the buffer was completely consumed */
     return buf_size;
@@ -352,8 +352,6 @@ static av_cold int tscc2_decode_init(AVCodecContext *avctx)
         return AVERROR(ENOMEM);
     }
 
-    avctx->coded_frame = &c->pic;
-
     return 0;
 }
 
@@ -361,8 +359,7 @@ static av_cold int tscc2_decode_end(AVCodecContext *avctx)
 {
     TSCC2Context * const c = avctx->priv_data;
 
-    if (c->pic.data[0])
-        avctx->release_buffer(avctx, &c->pic);
+    av_frame_unref(&c->pic);
     av_freep(&c->slice_quants);
     free_vlcs(c);
 

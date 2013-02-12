@@ -26,14 +26,15 @@
  */
 
 #define BITSTREAM_READER_LE
-#include "libavutil/audioconvert.h"
-#include "libavutil/lzo.h"
+#include "libavutil/channel_layout.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "avcodec.h"
 #include "get_bits.h"
 #include "acelp_vectors.h"
 #include "celp_filters.h"
 #include "g723_1_data.h"
+#include "internal.h"
 
 #define CNG_RANDOM_SEED 12345
 
@@ -1220,7 +1221,7 @@ static int g723_1_decode_frame(AVCodecContext *avctx, void *data,
     }
 
     p->frame.nb_samples = FRAME_LEN;
-    if ((ret = avctx->get_buffer(avctx, &p->frame)) < 0) {
+    if ((ret = ff_get_buffer(avctx, &p->frame, 0)) < 0) {
          av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
          return ret;
     }
@@ -1376,6 +1377,6 @@ AVCodec ff_g723_1_decoder = {
     .init           = g723_1_decode_init,
     .decode         = g723_1_decode_frame,
     .long_name      = NULL_IF_CONFIG_SMALL("G.723.1"),
-    .capabilities   = CODEC_CAP_SUBFRAMES,
+    .capabilities   = CODEC_CAP_SUBFRAMES | CODEC_CAP_DR1,
     .priv_class     = &g723_1dec_class,
 };

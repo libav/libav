@@ -118,7 +118,7 @@ static int color_config_props(AVFilterLink *inlink)
     ColorContext *color = ctx->priv;
     uint8_t rgba_color[4];
     int is_packed_rgba;
-    const AVPixFmtDescriptor *pix_desc = &av_pix_fmt_descriptors[inlink->format];
+    const AVPixFmtDescriptor *pix_desc = av_pix_fmt_desc_get(inlink->format);
 
     color->hsub = pix_desc->log2_chroma_w;
     color->vsub = pix_desc->log2_chroma_h;
@@ -146,40 +146,18 @@ static int color_config_props(AVFilterLink *inlink)
 static int color_request_frame(AVFilterLink *link)
 {
     ColorContext *color = link->src->priv;
-    AVFilterBufferRef *picref = ff_get_video_buffer(link, AV_PERM_WRITE, color->w, color->h);
-    AVFilterBufferRef *buf_out;
-    int ret;
+    AVFrame *frame = ff_get_video_buffer(link, color->w, color->h);
 
-    if (!picref)
+    if (!frame)
         return AVERROR(ENOMEM);
 
-    picref->video->pixel_aspect = (AVRational) {1, 1};
-    picref->pts                 = color->pts++;
-    picref->pos                 = -1;
+    frame->sample_aspect_ratio = (AVRational) {1, 1};
+    frame->pts                 = color->pts++;
 
-    buf_out = avfilter_ref_buffer(picref, ~0);
-    if (!buf_out) {
-        ret = AVERROR(ENOMEM);
-        goto fail;
-    }
-
-    ret = ff_start_frame(link, buf_out);
-    if (ret < 0)
-        goto fail;
-
-    ff_draw_rectangle(picref->data, picref->linesize,
+    ff_draw_rectangle(frame->data, frame->linesize,
                       color->line, color->line_step, color->hsub, color->vsub,
                       0, 0, color->w, color->h);
-    ret = ff_draw_slice(link, 0, color->h, 1);
-    if (ret < 0)
-        goto fail;
-
-    ret = ff_end_frame(link);
-
-fail:
-    avfilter_unref_buffer(picref);
-
-    return ret;
+    return ff_filter_frame(link, frame);
 }
 
 static const AVFilterPad avfilter_vsrc_color_outputs[] = {

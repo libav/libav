@@ -20,6 +20,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/channel_layout.h"
 #include "libavutil/intreadwrite.h"
 #include "swf.h"
 
@@ -99,6 +100,10 @@ static int swf_read_packet(AVFormatContext *s, AVPacket *pkt)
         tag = get_swf_tag(pb, &len);
         if (tag < 0)
             return AVERROR(EIO);
+        if (len < 0) {
+            av_log(s, AV_LOG_ERROR, "invalid tag length: %d\n", len);
+            return AVERROR_INVALIDDATA;
+        }
         if (tag == TAG_VIDEOSTREAM) {
             int ch_id = avio_rl16(pb);
             len -= 2;
@@ -139,7 +144,13 @@ static int swf_read_packet(AVFormatContext *s, AVPacket *pkt)
             if (!ast)
                 return -1;
             ast->id = -1; /* -1 to avoid clash with video stream ch_id */
-            ast->codec->channels = 1 + (v&1);
+            if (v & 1) {
+                ast->codec->channels       = 2;
+                ast->codec->channel_layout = AV_CH_LAYOUT_STEREO;
+            } else {
+                ast->codec->channels       = 1;
+                ast->codec->channel_layout = AV_CH_LAYOUT_MONO;
+            }
             ast->codec->codec_type = AVMEDIA_TYPE_AUDIO;
             ast->codec->codec_id = ff_codec_get_id(swf_audio_codec_tags, (v>>4) & 15);
             ast->need_parsing = AVSTREAM_PARSE_FULL;
@@ -154,7 +165,10 @@ static int swf_read_packet(AVFormatContext *s, AVPacket *pkt)
                 st = s->streams[i];
                 if (st->codec->codec_type == AVMEDIA_TYPE_VIDEO && st->id == ch_id) {
                     frame = avio_rl16(pb);
-                    if ((res = av_get_packet(pb, pkt, len-2)) < 0)
+                    len -= 2;
+                    if (len <= 0)
+                        goto skip;
+                    if ((res = av_get_packet(pb, pkt, len)) < 0)
                         return res;
                     pkt->pos = pos;
                     pkt->pts = frame;
@@ -166,17 +180,22 @@ static int swf_read_packet(AVFormatContext *s, AVPacket *pkt)
             for (i = 0; i < s->nb_streams; i++) {
                 st = s->streams[i];
                 if (st->codec->codec_type == AVMEDIA_TYPE_AUDIO && st->id == -1) {
-            if (st->codec->codec_id == AV_CODEC_ID_MP3) {
-                avio_skip(pb, 4);
-                if ((res = av_get_packet(pb, pkt, len-4)) < 0)
-                    return res;
-            } else { // ADPCM, PCM
-                if ((res = av_get_packet(pb, pkt, len)) < 0)
-                    return res;
-            }
-            pkt->pos = pos;
-            pkt->stream_index = st->index;
-            return pkt->size;
+                    if (st->codec->codec_id == AV_CODEC_ID_MP3) {
+                        avio_skip(pb, 4);
+                        len -= 4;
+                        if (len <= 0)
+                            goto skip;
+                        if ((res = av_get_packet(pb, pkt, len)) < 0)
+                            return res;
+                    } else { // ADPCM, PCM
+                        if (len <= 0)
+                            goto skip;
+                        if ((res = av_get_packet(pb, pkt, len)) < 0)
+                            return res;
+                    }
+                    pkt->pos          = pos;
+                    pkt->stream_index = st->index;
+                    return pkt->size;
                 }
             }
         } else if (tag == TAG_JPEG2) {
@@ -196,7 +215,10 @@ static int swf_read_packet(AVFormatContext *s, AVPacket *pkt)
                 st = vst;
             }
             avio_rl16(pb); /* BITMAP_ID */
-            if ((res = av_new_packet(pkt, len-2)) < 0)
+            len -= 2;
+            if (len < 4)
+                goto skip;
+            if ((res = av_new_packet(pkt, len)) < 0)
                 return res;
             avio_read(pb, pkt->data, 4);
             if (AV_RB32(pkt->data) == 0xffd8ffd9 ||
@@ -213,6 +235,7 @@ static int swf_read_packet(AVFormatContext *s, AVPacket *pkt)
             return pkt->size;
         }
     skip:
+        len = FFMAX(0, len);
         avio_skip(pb, len);
     }
 }

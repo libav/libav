@@ -20,13 +20,9 @@
 #include "internal.h"
 #include "libavutil/internal.h"
 
-static int start_frame(AVFilterLink *link, AVFilterBufferRef *picref)
+static int filter_frame(AVFilterLink *link, AVFrame *frame)
 {
-    return 0;
-}
-
-static int end_frame(AVFilterLink *link)
-{
+    av_frame_free(&frame);
     return 0;
 }
 
@@ -34,8 +30,7 @@ static const AVFilterPad avfilter_vsink_nullsink_inputs[] = {
     {
         .name        = "default",
         .type        = AVMEDIA_TYPE_VIDEO,
-        .start_frame = start_frame,
-        .end_frame   = end_frame,
+        .filter_frame = filter_frame,
     },
     { NULL },
 };

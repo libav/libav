@@ -32,10 +32,12 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#include "libavutil/float_dsp.h"
 #include "avcodec.h"
 #include "get_bits.h"
 #include "dsputil.h"
 #include "fft.h"
+#include "internal.h"
 #include "sinewin.h"
 
 #include "atrac.h"
@@ -80,8 +82,7 @@ typedef struct {
     DECLARE_ALIGNED(32, float, high)[512];
     float*              bands[3];
     FFTContext          mdct_ctx[3];
-    int                 channels;
-    DSPContext          dsp;
+    AVFloatDSPContext   fdsp;
 } AT1Ctx;
 
 /** size of the transform in samples in the long mode for each QMF band */
@@ -141,8 +142,8 @@ static int at1_imdct_block(AT1SUCtx* su, AT1Ctx *q)
             at1_imdct(q, &q->spec[pos], &su->spectrum[0][ref_pos + start_pos], nbits, band_num);
 
             /* overlap and window */
-            q->dsp.vector_fmul_window(&q->bands[band_num][start_pos], prev_buf,
-                                      &su->spectrum[0][ref_pos + start_pos], ff_sine_32, 16);
+            q->fdsp.vector_fmul_window(&q->bands[band_num][start_pos], prev_buf,
+                                       &su->spectrum[0][ref_pos + start_pos], ff_sine_32, 16);
 
             prev_buf = &su->spectrum[0][ref_pos+start_pos + 16];
             start_pos += block_size;
@@ -280,19 +281,19 @@ static int atrac1_decode_frame(AVCodecContext *avctx, void *data,
     GetBitContext gb;
 
 
-    if (buf_size < 212 * q->channels) {
+    if (buf_size < 212 * avctx->channels) {
         av_log(avctx, AV_LOG_ERROR, "Not enough data to decode!\n");
         return AVERROR_INVALIDDATA;
     }
 
     /* get output buffer */
     q->frame.nb_samples = AT1_SU_SAMPLES;
-    if ((ret = avctx->get_buffer(avctx, &q->frame)) < 0) {
+    if ((ret = ff_get_buffer(avctx, &q->frame, 0)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }
 
-    for (ch = 0; ch < q->channels; ch++) {
+    for (ch = 0; ch < avctx->channels; ch++) {
         AT1SUCtx* su = &q->SUs[ch];
 
         init_get_bits(&gb, &buf[212 * ch], 212 * 8);
@@ -343,7 +344,6 @@ static av_cold int atrac1_decode_init(AVCodecContext *avctx)
                avctx->channels);
         return AVERROR(EINVAL);
     }
-    q->channels = avctx->channels;
 
     /* Init the mdct transforms */
     if ((ret = ff_mdct_init(&q->mdct_ctx[0], 6, 1, -1.0/ (1 << 15))) ||
@@ -358,7 +358,7 @@ static av_cold int atrac1_decode_init(AVCodecContext *avctx)
 
     ff_atrac_generate_tables();
 
-    ff_dsputil_init(&q->dsp, avctx);
+    avpriv_float_dsp_init(&q->fdsp, avctx->flags & CODEC_FLAG_BITEXACT);
 
     q->bands[0] = q->low;
     q->bands[1] = q->mid;

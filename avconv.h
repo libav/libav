@@ -51,24 +51,24 @@
 
 /* select an input stream for an output stream */
 typedef struct StreamMap {
-    int disabled;           /** 1 is this mapping is disabled by a negative map */
+    int disabled;           /* 1 is this mapping is disabled by a negative map */
     int file_index;
     int stream_index;
     int sync_file_index;
     int sync_stream_index;
-    char *linklabel;       /** name of an output link, for mapping lavfi outputs */
+    char *linklabel;       /* name of an output link, for mapping lavfi outputs */
 } StreamMap;
 
-/**
- * select an input file for an output file
- */
+/* select an input file for an output file */
 typedef struct MetadataMap {
-    int  file;      ///< file index
-    char type;      ///< type of metadata to copy -- (g)lobal, (s)tream, (c)hapter or (p)rogram
-    int  index;     ///< stream/chapter/program number
+    int  file;      // file index
+    char type;      // type of metadata to copy -- (g)lobal, (s)tream, (c)hapter or (p)rogram
+    int  index;     // stream/chapter/program number
 } MetadataMap;
 
 typedef struct OptionsContext {
+    OptionGroup *g;
+
     /* input/output options */
     int64_t start_time;
     const char *format;
@@ -362,5 +362,7 @@ int configure_filtergraph(FilterGraph *fg);
 int configure_output_filter(FilterGraph *fg, OutputFilter *ofilter, AVFilterInOut *out);
 int ist_in_filtergraph(FilterGraph *fg, InputStream *ist);
 FilterGraph *init_simple_filtergraph(InputStream *ist, OutputStream *ost);
+
+int avconv_parse_options(int argc, char **argv);
 
 #endif /* AVCONV_H */

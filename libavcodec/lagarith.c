@@ -48,7 +48,6 @@ enum LagarithFrameType {
 
 typedef struct LagarithContext {
     AVCodecContext *avctx;
-    AVFrame picture;
     DSPContext dsp;
     int zeros;                  /**< number of consecutive zero bytes encountered */
     int zeros_rem;              /**< number of zero bytes remaining to output */
@@ -198,8 +197,8 @@ static int lag_read_prob_header(lag_rac *rac, GetBitContext *gb)
             }
             /* Comment from reference source:
              * if (b & 0x80 == 0) {     // order of operations is 'wrong'; it has been left this way
-             *                          // since the compression change is negligable and fixing it
-             *                          // breaks backwards compatibilty
+             *                          // since the compression change is negligible and fixing it
+             *                          // breaks backwards compatibility
              *      b =- (signed int)b;
              *      b &= 0xFF;
              * } else {
@@ -497,24 +496,19 @@ static int lag_decode_arith_plane(LagarithContext *l, uint8_t *dst,
  * @return number of consumed bytes on success or negative if decode fails
  */
 static int lag_decode_frame(AVCodecContext *avctx,
-                            void *data, int *data_size, AVPacket *avpkt)
+                            void *data, int *got_frame, AVPacket *avpkt)
 {
     const uint8_t *buf = avpkt->data;
     int buf_size = avpkt->size;
     LagarithContext *l = avctx->priv_data;
-    AVFrame *const p = &l->picture;
+    ThreadFrame frame = { .f = data };
+    AVFrame *const p  = data;
     uint8_t frametype = 0;
     uint32_t offset_gu = 0, offset_bv = 0, offset_ry = 9;
     uint32_t offs[4];
     uint8_t *srcs[4], *dst;
     int i, j, planes = 3;
 
-    AVFrame *picture = data;
-
-    if (p->data[0])
-        ff_thread_release_buffer(avctx, p);
-
-    p->reference = 0;
     p->key_frame = 1;
 
     frametype = buf[0];
@@ -526,7 +520,7 @@ static int lag_decode_frame(AVCodecContext *avctx,
     case FRAME_SOLID_RGBA:
         avctx->pix_fmt = AV_PIX_FMT_RGB32;
 
-        if (ff_thread_get_buffer(avctx, p) < 0) {
+        if (ff_thread_get_buffer(avctx, &frame, 0) < 0) {
             av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
             return -1;
         }
@@ -548,7 +542,7 @@ static int lag_decode_frame(AVCodecContext *avctx,
         if (frametype == FRAME_ARITH_RGB24 || frametype == FRAME_U_RGB24)
             avctx->pix_fmt = AV_PIX_FMT_RGB24;
 
-        if (ff_thread_get_buffer(avctx, p) < 0) {
+        if (ff_thread_get_buffer(avctx, &frame, 0) < 0) {
             av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
             return -1;
         }
@@ -608,7 +602,7 @@ static int lag_decode_frame(AVCodecContext *avctx,
     case FRAME_ARITH_YUY2:
         avctx->pix_fmt = AV_PIX_FMT_YUV422P;
 
-        if (ff_thread_get_buffer(avctx, p) < 0) {
+        if (ff_thread_get_buffer(avctx, &frame, 0) < 0) {
             av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
             return -1;
         }
@@ -634,7 +628,7 @@ static int lag_decode_frame(AVCodecContext *avctx,
     case FRAME_ARITH_YV12:
         avctx->pix_fmt = AV_PIX_FMT_YUV420P;
 
-        if (ff_thread_get_buffer(avctx, p) < 0) {
+        if (ff_thread_get_buffer(avctx, &frame, 0) < 0) {
             av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
             return -1;
         }
@@ -663,8 +657,7 @@ static int lag_decode_frame(AVCodecContext *avctx,
         return -1;
     }
 
-    *picture = *p;
-    *data_size = sizeof(AVFrame);
+    *got_frame = 1;
 
     return buf_size;
 }
@@ -683,8 +676,6 @@ static av_cold int lag_decode_end(AVCodecContext *avctx)
 {
     LagarithContext *l = avctx->priv_data;
 
-    if (l->picture.data[0])
-        ff_thread_release_buffer(avctx, &l->picture);
     av_freep(&l->rgb_planes);
 
     return 0;

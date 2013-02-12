@@ -104,12 +104,12 @@ you can build all libraries as DLLs.
 @section Microsoft Visual C++
 
 Libav can be built with MSVC using a C99-to-C89 conversion utility and
-wrapper. At this time, only static builds are supported.
+wrapper.
 
 You will need the following prerequisites:
 
 @itemize
-@item @uref{https://github.com/rbultje/c99-to-c89/, C99-to-C89 Converter & Wrapper}
+@item @uref{https://github.com/libav/c99-to-c89/, C99-to-C89 Converter & Wrapper}
 @item @uref{http://code.google.com/p/msinttypes/, msinttypes}
 @item @uref{http://www.mingw.org/, MSYS}
 @item @uref{http://yasm.tortall.net/, YASM}
@@ -120,13 +120,8 @@ you want to run @uref{fate.html, FATE}.
 To set up a proper MSVC environment in MSYS, you simply need to run
 @code{msys.bat} from the Visual Studio command prompt.
 
-Caveat: Run @code{which link} to see which link you are using. If it is located
-at @code{/bin/link.exe}, then you have the wrong link in your @code{PATH}.
-Either move/remove that copy, or make sure MSVC's link.exe is higher up in your
-@code{PATH} than coreutils'.
-
-Place @code{c99wrap.exe}, @code{c99conv.exe}, and @code{yasm.exe} somewhere
-in your @code{PATH}.
+Place @code{makedef}, @code{c99wrap.exe}, @code{c99conv.exe}, and @code{yasm.exe}
+somewhere in your @code{PATH}.
 
 Next, make sure @code{inttypes.h} and any other headers and libs you want to use
 are located in a spot that MSVC can see. Do so by modifying the @code{LIB} and
@@ -142,9 +137,20 @@ make
 make install
 @end example
 
+If you wish to compile static libraries, add @code{--enable-shared} to your
+configure options. Note that due to the way MSVC handles DLL imports and
+exports, you cannot compile static and shared libraries at the same time, and
+enabling shared libraries will automatically disable the static ones.
+
 Notes:
 
 @itemize
+
+@item It is possible that coreutils' @code{link.exe} conflicts with MSVC's linker.
+You can find out by running @code{which link} to see which @code{link.exe} you
+are using. If it is located at @code{/bin/link.exe}, then you have the wrong one
+in your @code{PATH}. Either move or remove that copy, or make sure MSVC's
+@code{link.exe} takes precedence in your @code{PATH} over coreutils'.
 
 @item If you wish to build with zlib support, you will have to grab a compatible
 zlib binary from somewhere, with an MSVC import lib, or if you wish to link
@@ -291,5 +297,68 @@ and for a build with shared libraries
 @example
 ./configure --target-os=mingw32 --enable-shared --disable-static --extra-cflags=-mno-cygwin --extra-libs=-mno-cygwin
 @end example
+
+@chapter Plan 9
+
+The native @uref{http://plan9.bell-labs.com/plan9/, Plan 9} compiler
+does not implement all the C99 features needed by Libav so the gcc
+port must be used.  Furthermore, a few items missing from the C
+library and shell environment need to be fixed.
+
+@itemize
+
+@item GNU awk, grep, make, and sed
+
+Working packages of these tools can be found at
+@uref{http://code.google.com/p/ports2plan9/downloads/list, ports2plan9}.
+They can be installed with @uref{http://9front.org/, 9front's} @code{pkg}
+utility by setting @code{pkgpath} to
+@code{http://ports2plan9.googlecode.com/files/}.
+
+@item Missing/broken @code{head} and @code{printf} commands
+
+Replacements adequate for building Libav can be found in the
+@code{compat/plan9} directory.  Place these somewhere they will be
+found by the shell.  These are not full implementations of the
+commands and are @emph{not} suitable for general use.
+
+@item Missing C99 @code{stdint.h} and @code{inttypes.h}
+
+Replacement headers are available from
+@url{http://code.google.com/p/plan9front/issues/detail?id=152}.
+
+@item Missing or non-standard library functions
+
+Some functions in the C library are missing or incomplete.  The
+@code{@uref{http://ports2plan9.googlecode.com/files/gcc-apelibs-1207.tbz,
+gcc-apelibs-1207}} package from
+@uref{http://code.google.com/p/ports2plan9/downloads/list, ports2plan9}
+includes an updated C library, but installing the full package gives
+unusable executables.  Instead, keep the files from @code{gccbin.tgz}
+under @code{/386/lib/gnu}.  From the @code{libc.a} archive in the
+@code{gcc-apelibs-1207} package, extract the following object files and
+turn them into a library:
+
+@itemize
+@item @code{strerror.o}
+@item @code{strtoll.o}
+@item @code{snprintf.o}
+@item @code{vsnprintf.o}
+@item @code{vfprintf.o}
+@item @code{_IO_getc.o}
+@item @code{_IO_putc.o}
+@end itemize
+
+Use the @code{--extra-libs} option of @code{configure} to inform the
+build system of this library.
+
+@item FPU exceptions enabled by default
+
+Unlike most other systems, Plan 9 enables FPU exceptions by default.
+These must be disabled before calling any Libav functions.  While the
+included tools will do this automatically, other users of the
+libraries must do it themselves.
+
+@end itemize
 
 @bye

@@ -25,6 +25,7 @@
  * @author Peter Ross <pross@xvid.org>
  */
 
+#include "libavutil/channel_layout.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/intfloat.h"
 #include "libavutil/dict.h"
@@ -220,7 +221,7 @@ static AVIOContext * wtvfile_open_sector(int first_sector, uint64_t length, int 
     }
     wf->length = length;
 
-    /* seek to intial sector */
+    /* seek to initial sector */
     wf->position = 0;
     if (avio_seek(s->pb, (int64_t)wf->sectors[0] << WTV_SECTOR_BITS, SEEK_SET) < 0) {
         av_free(wf->sectors);
@@ -618,8 +619,14 @@ static void parse_mpeg1waveformatex(AVStream *st)
 
     /* dwHeadMode */
     switch (AV_RL16(st->codec->extradata + 6)) {
-    case 1 : case 2 : case 4 : st->codec->channels = 2; break;
-    case 8 :                   st->codec->channels = 1; break;
+    case 1 :
+    case 2 :
+    case 4 : st->codec->channels       = 2;
+             st->codec->channel_layout = AV_CH_LAYOUT_STEREO;
+             break;
+    case 8 : st->codec->channels       = 1;
+             st->codec->channel_layout = AV_CH_LAYOUT_MONO;
+             break;
     }
 }
 

@@ -23,16 +23,14 @@
 #include "libavfilter/avfilter.h"
 #include "libavfilter/avfiltergraph.h"
 
-#include "libavutil/audioconvert.h"
 #include "libavutil/avassert.h"
+#include "libavutil/channel_layout.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/pixfmt.h"
 #include "libavutil/samplefmt.h"
 
-/**
- * Define a function for building a string containing a list of
- * allowed formats,
- */
+/* Define a function for building a string containing a list of
+ * allowed formats. */
 #define DEF_CHOOSE_FORMAT(type, var, supported_list, none, get_name, separator)\
 static char *choose_ ## var ## s(OutputStream *ost)                            \
 {                                                                              \
@@ -79,8 +77,7 @@ FilterGraph *init_simple_filtergraph(InputStream *ist, OutputStream *ost)
         exit(1);
     fg->index = nb_filtergraphs;
 
-    fg->outputs = grow_array(fg->outputs, sizeof(*fg->outputs), &fg->nb_outputs,
-                             fg->nb_outputs + 1);
+    GROW_ARRAY(fg->outputs, fg->nb_outputs);
     if (!(fg->outputs[0] = av_mallocz(sizeof(*fg->outputs[0]))))
         exit(1);
     fg->outputs[0]->ost   = ost;
@@ -88,19 +85,16 @@ FilterGraph *init_simple_filtergraph(InputStream *ist, OutputStream *ost)
 
     ost->filter = fg->outputs[0];
 
-    fg->inputs = grow_array(fg->inputs, sizeof(*fg->inputs), &fg->nb_inputs,
-                            fg->nb_inputs + 1);
+    GROW_ARRAY(fg->inputs, fg->nb_inputs);
     if (!(fg->inputs[0] = av_mallocz(sizeof(*fg->inputs[0]))))
         exit(1);
     fg->inputs[0]->ist   = ist;
     fg->inputs[0]->graph = fg;
 
-    ist->filters = grow_array(ist->filters, sizeof(*ist->filters),
-                              &ist->nb_filters, ist->nb_filters + 1);
+    GROW_ARRAY(ist->filters, ist->nb_filters);
     ist->filters[ist->nb_filters - 1] = fg->inputs[0];
 
-    filtergraphs = grow_array(filtergraphs, sizeof(*filtergraphs),
-                              &nb_filtergraphs, nb_filtergraphs + 1);
+    GROW_ARRAY(filtergraphs, nb_filtergraphs);
     filtergraphs[nb_filtergraphs - 1] = fg;
 
     return fg;
@@ -166,15 +160,13 @@ static void init_input_filter(FilterGraph *fg, AVFilterInOut *in)
     ist->decoding_needed = 1;
     ist->st->discard = AVDISCARD_NONE;
 
-    fg->inputs = grow_array(fg->inputs, sizeof(*fg->inputs),
-                            &fg->nb_inputs, fg->nb_inputs + 1);
+    GROW_ARRAY(fg->inputs, fg->nb_inputs);
     if (!(fg->inputs[fg->nb_inputs - 1] = av_mallocz(sizeof(*fg->inputs[0]))))
         exit(1);
     fg->inputs[fg->nb_inputs - 1]->ist   = ist;
     fg->inputs[fg->nb_inputs - 1]->graph = fg;
 
-    ist->filters = grow_array(ist->filters, sizeof(*ist->filters),
-                              &ist->nb_filters, ist->nb_filters + 1);
+    GROW_ARRAY(ist->filters, ist->nb_filters);
     ist->filters[ist->nb_filters - 1] = fg->inputs[fg->nb_inputs - 1];
 }
 
@@ -428,7 +420,6 @@ static int configure_input_audio_filter(FilterGraph *fg, InputFilter *ifilter,
 
     if (audio_sync_method > 0) {
         AVFilterContext *async;
-        char args[256];
         int  len = 0;
 
         av_log(NULL, AV_LOG_WARNING, "-async has been deprecated. Used the "
@@ -453,6 +444,29 @@ static int configure_input_audio_filter(FilterGraph *fg, InputFilter *ifilter,
             return ret;
 
         first_filter = async;
+        pad_idx = 0;
+    }
+    if (audio_volume != 256) {
+        AVFilterContext *volume;
+
+        av_log(NULL, AV_LOG_WARNING, "-vol has been deprecated. Use the volume "
+               "audio filter instead.\n");
+
+        snprintf(args, sizeof(args), "volume=%f", audio_volume / 256.0);
+
+        snprintf(name, sizeof(name), "graph %d volume for input stream %d:%d",
+                 fg->index, ist->file_index, ist->st->index);
+        ret = avfilter_graph_create_filter(&volume,
+                                           avfilter_get_by_name("volume"),
+                                           name, args, NULL, fg->graph);
+        if (ret < 0)
+            return ret;
+
+        ret = avfilter_link(volume, 0, first_filter, pad_idx);
+        if (ret < 0)
+            return ret;
+
+        first_filter = volume;
         pad_idx = 0;
     }
     if ((ret = avfilter_link(ifilter->filter, 0, first_filter, pad_idx)) < 0)
@@ -521,8 +535,7 @@ int configure_filtergraph(FilterGraph *fg)
     } else {
         /* wait until output mappings are processed */
         for (cur = outputs; cur;) {
-            fg->outputs = grow_array(fg->outputs, sizeof(*fg->outputs),
-                                     &fg->nb_outputs, fg->nb_outputs + 1);
+            GROW_ARRAY(fg->outputs, fg->nb_outputs);
             if (!(fg->outputs[fg->nb_outputs - 1] = av_mallocz(sizeof(*fg->outputs[0]))))
                 exit(1);
             fg->outputs[fg->nb_outputs - 1]->graph   = fg;

@@ -65,7 +65,6 @@ enum var_name {
     VAR_X,
     VAR_Y,
     VAR_N,
-    VAR_POS,
     VAR_T,
     VAR_VARS_NB
 };
@@ -158,7 +157,7 @@ static int config_input(AVFilterLink *link)
 {
     AVFilterContext *ctx = link->dst;
     CropContext *crop = ctx->priv;
-    const AVPixFmtDescriptor *pix_desc = &av_pix_fmt_descriptors[link->format];
+    const AVPixFmtDescriptor *pix_desc = av_pix_fmt_desc_get(link->format);
     int ret;
     const char *expr;
     double res;
@@ -174,11 +173,10 @@ static int config_input(AVFilterLink *link)
     crop->var_values[VAR_OUT_H] = crop->var_values[VAR_OH] = NAN;
     crop->var_values[VAR_N]     = 0;
     crop->var_values[VAR_T]     = NAN;
-    crop->var_values[VAR_POS]   = NAN;
 
     av_image_fill_max_pixsteps(crop->max_step, NULL, pix_desc);
-    crop->hsub = av_pix_fmt_descriptors[link->format].log2_chroma_w;
-    crop->vsub = av_pix_fmt_descriptors[link->format].log2_chroma_h;
+    crop->hsub = pix_desc->log2_chroma_w;
+    crop->vsub = pix_desc->log2_chroma_h;
 
     if ((ret = av_expr_parse_and_eval(&res, (expr = crop->ow_expr),
                                       var_names, crop->var_values,
@@ -243,23 +241,18 @@ static int config_output(AVFilterLink *link)
     return 0;
 }
 
-static int start_frame(AVFilterLink *link, AVFilterBufferRef *picref)
+static int filter_frame(AVFilterLink *link, AVFrame *frame)
 {
     AVFilterContext *ctx = link->dst;
     CropContext *crop = ctx->priv;
-    AVFilterBufferRef *ref2;
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(link->format);
     int i;
 
-    ref2 = avfilter_ref_buffer(picref, ~0);
-    if (!ref2)
-        return AVERROR(ENOMEM);
+    frame->width  = crop->w;
+    frame->height = crop->h;
 
-    ref2->video->w = crop->w;
-    ref2->video->h = crop->h;
-
-    crop->var_values[VAR_T] = picref->pts == AV_NOPTS_VALUE ?
-        NAN : picref->pts * av_q2d(link->time_base);
-    crop->var_values[VAR_POS] = picref->pos == -1 ? NAN : picref->pos;
+    crop->var_values[VAR_T] = frame->pts == AV_NOPTS_VALUE ?
+        NAN : frame->pts * av_q2d(link->time_base);
     crop->var_values[VAR_X] = av_expr_eval(crop->x_pexpr, crop->var_values, NULL);
     crop->var_values[VAR_Y] = av_expr_eval(crop->y_pexpr, crop->var_values, NULL);
     crop->var_values[VAR_X] = av_expr_eval(crop->x_pexpr, crop->var_values, NULL);
@@ -278,61 +271,34 @@ static int start_frame(AVFilterLink *link, AVFilterBufferRef *picref)
             (int)crop->var_values[VAR_N], crop->var_values[VAR_T], crop->x,
             crop->y, crop->x+crop->w, crop->y+crop->h);
 
-    ref2->data[0] += crop->y * ref2->linesize[0];
-    ref2->data[0] += crop->x * crop->max_step[0];
+    frame->data[0] += crop->y * frame->linesize[0];
+    frame->data[0] += crop->x * crop->max_step[0];
 
-    if (!(av_pix_fmt_descriptors[link->format].flags & PIX_FMT_PAL ||
-          av_pix_fmt_descriptors[link->format].flags & PIX_FMT_PSEUDOPAL)) {
+    if (!(desc->flags & PIX_FMT_PAL || desc->flags & PIX_FMT_PSEUDOPAL)) {
         for (i = 1; i < 3; i ++) {
-            if (ref2->data[i]) {
-                ref2->data[i] += (crop->y >> crop->vsub) * ref2->linesize[i];
-                ref2->data[i] += (crop->x * crop->max_step[i]) >> crop->hsub;
+            if (frame->data[i]) {
+                frame->data[i] += (crop->y >> crop->vsub) * frame->linesize[i];
+                frame->data[i] += (crop->x * crop->max_step[i]) >> crop->hsub;
             }
         }
     }
 
     /* alpha plane */
-    if (ref2->data[3]) {
-        ref2->data[3] += crop->y * ref2->linesize[3];
-        ref2->data[3] += crop->x * crop->max_step[3];
+    if (frame->data[3]) {
+        frame->data[3] += crop->y * frame->linesize[3];
+        frame->data[3] += crop->x * crop->max_step[3];
     }
-
-    return ff_start_frame(link->dst->outputs[0], ref2);
-}
-
-static int draw_slice(AVFilterLink *link, int y, int h, int slice_dir)
-{
-    AVFilterContext *ctx = link->dst;
-    CropContext *crop = ctx->priv;
-
-    if (y >= crop->y + crop->h || y + h <= crop->y)
-        return 0;
-
-    if (y < crop->y) {
-        h -= crop->y - y;
-        y  = crop->y;
-    }
-    if (y + h > crop->y + crop->h)
-        h = crop->y + crop->h - y;
-
-    return ff_draw_slice(ctx->outputs[0], y - crop->y, h, slice_dir);
-}
-
-static int end_frame(AVFilterLink *link)
-{
-    CropContext *crop = link->dst->priv;
 
     crop->var_values[VAR_N] += 1.0;
-    return ff_end_frame(link->dst->outputs[0]);
+
+    return ff_filter_frame(link->dst->outputs[0], frame);
 }
 
 static const AVFilterPad avfilter_vf_crop_inputs[] = {
     {
         .name             = "default",
         .type             = AVMEDIA_TYPE_VIDEO,
-        .start_frame      = start_frame,
-        .draw_slice       = draw_slice,
-        .end_frame        = end_frame,
+        .filter_frame     = filter_frame,
         .get_video_buffer = ff_null_get_video_buffer,
         .config_props     = config_input,
     },

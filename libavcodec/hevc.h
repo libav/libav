@@ -25,7 +25,7 @@
 
 #include "avcodec.h"
 #include "cabac.h"
-#include "dsputil.h"
+#include "videodsp.h"
 #include "get_bits.h"
 #include "hevcpred.h"
 #include "hevcdsp.h"
@@ -650,7 +650,7 @@ typedef struct HEVCContext {
 
     HEVCPredContext hpc;
     HEVCDSPContext hevcdsp;
-    DSPContext dsp;
+    VideoDSPContext vdsp;
 
     GetBitContext gb;
     CABACContext cc;

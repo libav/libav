@@ -19,11 +19,13 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/channel_layout.h"
 #include "libavutil/float_dsp.h"
 #include "avcodec.h"
 #include "get_bits.h"
 #include "dsputil.h"
 #include "fft.h"
+#include "internal.h"
 #include "lsp.h"
 #include "sinewin.h"
 
@@ -648,11 +650,10 @@ static void imdct_and_window(TwinContext *tctx, enum FrameType ftype, int wtype,
 
         mdct->imdct_half(mdct, buf1 + bsize*j, in + bsize*j);
 
-        tctx->dsp.vector_fmul_window(out2,
-                                     prev_buf + (bsize-wsize)/2,
-                                     buf1 + bsize*j,
-                                     ff_sine_windows[av_log2(wsize)],
-                                     wsize/2);
+        tctx->fdsp.vector_fmul_window(out2, prev_buf + (bsize-wsize) / 2,
+                                      buf1 + bsize * j,
+                                      ff_sine_windows[av_log2(wsize)],
+                                      wsize / 2);
         out2 += wsize;
 
         memcpy(out2, buf1 + bsize*j + wsize/2, (bsize - wsize/2)*sizeof(float));
@@ -833,7 +834,7 @@ static int twin_decode_frame(AVCodecContext * avctx, void *data,
     /* get output buffer */
     if (tctx->discarded_packets >= 2) {
         tctx->frame.nb_samples = mtab->size;
-        if ((ret = avctx->get_buffer(avctx, &tctx->frame)) < 0) {
+        if ((ret = ff_get_buffer(avctx, &tctx->frame, 0)) < 0) {
             av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
             return ret;
         }
@@ -1119,6 +1120,11 @@ static av_cold int twin_decode_init(AVCodecContext *avctx)
     avctx->channels = AV_RB32(avctx->extradata    ) + 1;
     avctx->bit_rate = AV_RB32(avctx->extradata + 4) * 1000;
     isampf          = AV_RB32(avctx->extradata + 8);
+
+    if (isampf < 8 || isampf > 44) {
+        av_log(avctx, AV_LOG_ERROR, "Unsupported sample rate\n");
+        return AVERROR_INVALIDDATA;
+    }
     switch (isampf) {
     case 44: avctx->sample_rate = 44100;         break;
     case 22: avctx->sample_rate = 22050;         break;
@@ -1126,11 +1132,14 @@ static av_cold int twin_decode_init(AVCodecContext *avctx)
     default: avctx->sample_rate = isampf * 1000; break;
     }
 
-    if (avctx->channels > CHANNELS_MAX) {
+    if (avctx->channels <= 0 || avctx->channels > CHANNELS_MAX) {
         av_log(avctx, AV_LOG_ERROR, "Unsupported number of channels: %i\n",
                avctx->channels);
         return -1;
     }
+    avctx->channel_layout = avctx->channels == 1 ? AV_CH_LAYOUT_MONO :
+                                                   AV_CH_LAYOUT_STEREO;
+
     ibps = avctx->bit_rate / (1000 * avctx->channels);
 
     switch ((isampf << 8) +  ibps) {

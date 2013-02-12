@@ -41,10 +41,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "libavutil/mem.h"
 #include "avcodec.h"
 #include "bytestream.h"
+#include "internal.h"
 #include "lcl.h"
-#include "libavutil/lzo.h"
 
 #if CONFIG_ZLIB_DECODER
 #include <zlib.h>
@@ -54,8 +55,6 @@
  * Decoder context
  */
 typedef struct LclDecContext {
-    AVFrame pic;
-
     // Image type
     int imgtype;
     // Compression type
@@ -131,7 +130,7 @@ static int zlib_decomp(AVCodecContext *avctx, const uint8_t *src, int src_len, i
     int zret = inflateReset(&c->zstream);
     if (zret != Z_OK) {
         av_log(avctx, AV_LOG_ERROR, "Inflate reset error: %d\n", zret);
-        return -1;
+        return AVERROR_UNKNOWN;
     }
     c->zstream.next_in = src;
     c->zstream.avail_in = src_len;
@@ -140,12 +139,12 @@ static int zlib_decomp(AVCodecContext *avctx, const uint8_t *src, int src_len, i
     zret = inflate(&c->zstream, Z_FINISH);
     if (zret != Z_OK && zret != Z_STREAM_END) {
         av_log(avctx, AV_LOG_ERROR, "Inflate error: %d\n", zret);
-        return -1;
+        return AVERROR_UNKNOWN;
     }
     if (expected != (unsigned int)c->zstream.total_out) {
         av_log(avctx, AV_LOG_ERROR, "Decoded size differs (%d != %lu)\n",
                expected, c->zstream.total_out);
-        return -1;
+        return AVERROR_UNKNOWN;
     }
     return c->zstream.total_out;
 }
@@ -157,8 +156,9 @@ static int zlib_decomp(AVCodecContext *avctx, const uint8_t *src, int src_len, i
  * Decode a frame
  *
  */
-static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPacket *avpkt)
+static int decode_frame(AVCodecContext *avctx, void *data, int *got_frame, AVPacket *avpkt)
 {
+    AVFrame *frame = data;
     const uint8_t *buf = avpkt->data;
     int buf_size = avpkt->size;
     LclDecContext * const c = avctx->priv_data;
@@ -171,21 +171,16 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
     unsigned int height = avctx->height; // Real image height
     unsigned int mszh_dlen;
     unsigned char yq, y1q, uq, vq;
-    int uqvq;
+    int uqvq, ret;
     unsigned int mthread_inlen, mthread_outlen;
     unsigned int len = buf_size;
 
-    if(c->pic.data[0])
-        avctx->release_buffer(avctx, &c->pic);
-
-    c->pic.reference = 0;
-    c->pic.buffer_hints = FF_BUFFER_HINTS_VALID;
-    if(avctx->get_buffer(avctx, &c->pic) < 0){
+    if ((ret = ff_get_buffer(avctx, frame, 0)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
-        return -1;
+        return ret;
     }
 
-    outptr = c->pic.data[0]; // Output image pointer
+    outptr = frame->data[0]; // Output image pointer
 
     /* Decompress frame */
     switch (avctx->codec_id) {
@@ -201,14 +196,14 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
                 if (mthread_outlen != mszh_dlen) {
                     av_log(avctx, AV_LOG_ERROR, "Mthread1 decoded size differs (%d != %d)\n",
                            mthread_outlen, mszh_dlen);
-                    return -1;
+                    return AVERROR_INVALIDDATA;
                 }
                 mszh_dlen = mszh_decomp(encoded + 8 + mthread_inlen, len - 8 - mthread_inlen,
                                         c->decomp_buf + mthread_outlen, c->decomp_size - mthread_outlen);
                 if (mthread_outlen != mszh_dlen) {
                     av_log(avctx, AV_LOG_ERROR, "Mthread2 decoded size differs (%d != %d)\n",
                            mthread_outlen, mszh_dlen);
-                    return -1;
+                    return AVERROR_INVALIDDATA;
                 }
                 encoded = c->decomp_buf;
                 len = c->decomp_size;
@@ -217,7 +212,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
                 if (c->decomp_size != mszh_dlen) {
                     av_log(avctx, AV_LOG_ERROR, "Decoded size differs (%d != %d)\n",
                            c->decomp_size, mszh_dlen);
-                    return -1;
+                    return AVERROR_INVALIDDATA;
                 }
                 encoded = c->decomp_buf;
                 len = mszh_dlen;
@@ -248,7 +243,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
         }
         default:
             av_log(avctx, AV_LOG_ERROR, "BUG! Unknown MSZH compression in frame decoder.\n");
-            return -1;
+            return AVERROR_INVALIDDATA;
         }
         break;
 #if CONFIG_ZLIB_DECODER
@@ -265,7 +260,6 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
                 break;
             }
         } else if (c->flags & FLAG_MULTITHREAD) {
-            int ret;
             mthread_inlen = AV_RL32(encoded);
             mthread_inlen = FFMIN(mthread_inlen, len - 8);
             mthread_outlen = AV_RL32(encoded+4);
@@ -285,7 +279,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
 #endif
     default:
         av_log(avctx, AV_LOG_ERROR, "BUG! Unknown codec in frame decoder compression switch.\n");
-        return -1;
+        return AVERROR_INVALIDDATA;
     }
 
 
@@ -369,14 +363,14 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
             break;
         default:
             av_log(avctx, AV_LOG_ERROR, "BUG! Unknown imagetype in pngfilter switch.\n");
-            return -1;
+            return AVERROR_INVALIDDATA;
         }
     }
 
     /* Convert colorspace */
-    y_out = c->pic.data[0] + (height - 1) * c->pic.linesize[0];
-    u_out = c->pic.data[1] + (height - 1) * c->pic.linesize[1];
-    v_out = c->pic.data[2] + (height - 1) * c->pic.linesize[2];
+    y_out = frame->data[0] + (height - 1) * frame->linesize[0];
+    u_out = frame->data[1] + (height - 1) * frame->linesize[1];
+    v_out = frame->data[2] + (height - 1) * frame->linesize[2];
     switch (c->imgtype) {
     case IMGTYPE_YUV111:
         for (row = 0; row < height; row++) {
@@ -385,9 +379,9 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
                 u_out[col] = *encoded++ + 128;
                 v_out[col] = *encoded++ + 128;
             }
-            y_out -= c->pic.linesize[0];
-            u_out -= c->pic.linesize[1];
-            v_out -= c->pic.linesize[2];
+            y_out -= frame->linesize[0];
+            u_out -= frame->linesize[1];
+            v_out -= frame->linesize[2];
         }
         break;
     case IMGTYPE_YUV422:
@@ -400,14 +394,14 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
                 v_out[ col >> 1     ] = *encoded++ + 128;
                 v_out[(col >> 1) + 1] = *encoded++ + 128;
             }
-            y_out -= c->pic.linesize[0];
-            u_out -= c->pic.linesize[1];
-            v_out -= c->pic.linesize[2];
+            y_out -= frame->linesize[0];
+            u_out -= frame->linesize[1];
+            v_out -= frame->linesize[2];
         }
         break;
     case IMGTYPE_RGB24:
         for (row = height - 1; row >= 0; row--) {
-            pixel_ptr = row * c->pic.linesize[0];
+            pixel_ptr = row * frame->linesize[0];
             memcpy(outptr + pixel_ptr, encoded, 3 * width);
             encoded += 3 * width;
         }
@@ -420,9 +414,9 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
                 u_out[col >> 2] = *encoded++ + 128;
                 v_out[col >> 2] = *encoded++ + 128;
             }
-            y_out -= c->pic.linesize[0];
-            u_out -= c->pic.linesize[1];
-            v_out -= c->pic.linesize[2];
+            y_out -= frame->linesize[0];
+            u_out -= frame->linesize[1];
+            v_out -= frame->linesize[2];
         }
         break;
     case IMGTYPE_YUV211:
@@ -433,35 +427,34 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
                 u_out[col >> 1] = *encoded++ + 128;
                 v_out[col >> 1] = *encoded++ + 128;
             }
-            y_out -= c->pic.linesize[0];
-            u_out -= c->pic.linesize[1];
-            v_out -= c->pic.linesize[2];
+            y_out -= frame->linesize[0];
+            u_out -= frame->linesize[1];
+            v_out -= frame->linesize[2];
         }
         break;
     case IMGTYPE_YUV420:
-        u_out = c->pic.data[1] + ((height >> 1) - 1) * c->pic.linesize[1];
-        v_out = c->pic.data[2] + ((height >> 1) - 1) * c->pic.linesize[2];
+        u_out = frame->data[1] + ((height >> 1) - 1) * frame->linesize[1];
+        v_out = frame->data[2] + ((height >> 1) - 1) * frame->linesize[2];
         for (row = 0; row < height - 1; row += 2) {
             for (col = 0; col < width - 1; col += 2) {
                 memcpy(y_out + col, encoded, 2);
                 encoded += 2;
-                memcpy(y_out + col - c->pic.linesize[0], encoded, 2);
+                memcpy(y_out + col - frame->linesize[0], encoded, 2);
                 encoded += 2;
                 u_out[col >> 1] = *encoded++ + 128;
                 v_out[col >> 1] = *encoded++ + 128;
             }
-            y_out -= c->pic.linesize[0] << 1;
-            u_out -= c->pic.linesize[1];
-            v_out -= c->pic.linesize[2];
+            y_out -= frame->linesize[0] << 1;
+            u_out -= frame->linesize[1];
+            v_out -= frame->linesize[2];
         }
         break;
     default:
         av_log(avctx, AV_LOG_ERROR, "BUG! Unknown imagetype in image decoder.\n");
-        return -1;
+        return AVERROR_INVALIDDATA;
     }
 
-    *data_size = sizeof(AVFrame);
-    *(AVFrame*)data = c->pic;
+    *got_frame = 1;
 
     /* always report that the buffer was completely consumed */
     return buf_size;
@@ -476,7 +469,8 @@ static av_cold int decode_init(AVCodecContext *avctx)
 {
     LclDecContext * const c = avctx->priv_data;
     unsigned int basesize = avctx->width * avctx->height;
-    unsigned int max_basesize = FFALIGN(avctx->width, 4) * FFALIGN(avctx->height, 4) + AV_LZO_OUTPUT_PADDING;
+    unsigned int max_basesize = FFALIGN(avctx->width,  4) *
+                                FFALIGN(avctx->height, 4);
     unsigned int max_decomp_size;
 
     if (avctx->extradata_size < 8) {
@@ -624,8 +618,6 @@ static av_cold int decode_end(AVCodecContext *avctx)
     LclDecContext * const c = avctx->priv_data;
 
     av_freep(&c->decomp_buf);
-    if (c->pic.data[0])
-        avctx->release_buffer(avctx, &c->pic);
 #if CONFIG_ZLIB_DECODER
     if (avctx->codec_id == AV_CODEC_ID_ZLIB)
         inflateEnd(&c->zstream);

@@ -1,0 +1,73 @@
+/*
+ * Copyright (c) 2012 Ronald S. Bultje <rsbultje@gmail.com>
+ *
+ * This file is part of Libav.
+ *
+ * Libav is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * Libav is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with Libav; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ */
+
+#ifndef AVUTIL_ATOMIC_H
+#define AVUTIL_ATOMIC_H
+
+#include "config.h"
+
+#if HAVE_MEMORYBARRIER
+#include "atomic_win32.h"
+#elif HAVE_SYNC_SYNCHRONIZE
+#include "atomic_gcc.h"
+#else
+
+/**
+ * Loads the current value stored in an atomic integer.
+ *
+ * @param ptr atomic integer
+ * @return the current value of the atomic integer
+ * @note this acts as a memory barrier
+ */
+int av_atomic_int_get(volatile int *ptr);
+
+/**
+ * Stores a new value in an atomic integer.
+ *
+ * @param ptr atomic integer
+ * @param val the value to store in the atomic integer
+ * @note this acts as a memory barrier
+ */
+void av_atomic_int_set(volatile int *ptr, int val);
+
+/**
+ * Adds up a value to an atomic integer.
+ *
+ * @param ptr atomic integer
+ * @param inc the value to add up to the atomic integer (may be
+ *            negative)
+ * @return the new value of the atomic integer.
+ * @note this does NOT act as a memory barrier. This is primarily
+ *       intended for reference counting.
+ */
+int av_atomic_int_add_and_fetch(volatile int *ptr, int inc);
+
+/**
+ * Atomic pointer compare and swap.
+ *
+ * @param ptr pointer to the pointer to operate on
+ * @param oldval do the swap if the current value of *ptr equals to oldval
+ * @param newval value to replace *ptr with
+ * @return the value of *ptr before comparison
+ */
+void *av_atomic_ptr_cas(void * volatile *ptr, void *oldval, void *newval);
+
+#endif
+#endif /* AVUTIL_ATOMIC_H */

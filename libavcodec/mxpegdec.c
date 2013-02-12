@@ -25,6 +25,7 @@
  * MxPEG decoder
  */
 
+#include "internal.h"
 #include "mjpeg.h"
 #include "mjpegdec.h"
 
@@ -45,7 +46,6 @@ static av_cold int mxpeg_decode_init(AVCodecContext *avctx)
 {
     MXpegDecodeContext *s = avctx->priv_data;
 
-    s->picture[0].reference = s->picture[1].reference = 3;
     s->jpg.picture_ptr      = &s->picture[0];
     return ff_mjpeg_decode_init(avctx);
 }
@@ -155,7 +155,7 @@ static int mxpeg_check_dimensions(MXpegDecodeContext *s, MJpegDecodeContext *jpg
 }
 
 static int mxpeg_decode_frame(AVCodecContext *avctx,
-                          void *data, int *data_size,
+                          void *data, int *got_frame,
                           AVPacket *avpkt)
 {
     const uint8_t *buf = avpkt->data;
@@ -166,7 +166,6 @@ static int mxpeg_decode_frame(AVCodecContext *avctx,
     const uint8_t *unescaped_buf_ptr;
     int unescaped_buf_size;
     int start_code;
-    AVFrame *picture = data;
     int ret;
 
     buf_ptr = buf;
@@ -247,9 +246,9 @@ static int mxpeg_decode_frame(AVCodecContext *avctx,
                         break;
                     }
                     /* use stored SOF data to allocate current picture */
-                    if (jpg->picture_ptr->data[0])
-                        avctx->release_buffer(avctx, jpg->picture_ptr);
-                    if (avctx->get_buffer(avctx, jpg->picture_ptr) < 0) {
+                    av_frame_unref(jpg->picture_ptr);
+                    if (ff_get_buffer(avctx, jpg->picture_ptr,
+                                      AV_GET_BUFFER_FLAG_REF) < 0) {
                         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
                         return AVERROR(ENOMEM);
                     }
@@ -268,7 +267,8 @@ static int mxpeg_decode_frame(AVCodecContext *avctx,
 
                     /* allocate dummy reference picture if needed */
                     if (!reference_ptr->data[0] &&
-                        avctx->get_buffer(avctx, reference_ptr) < 0) {
+                        ff_get_buffer(avctx, reference_ptr,
+                                      AV_GET_BUFFER_FLAG_REF) < 0) {
                         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
                         return AVERROR(ENOMEM);
                     }
@@ -292,8 +292,11 @@ static int mxpeg_decode_frame(AVCodecContext *avctx,
 
 the_end:
     if (jpg->got_picture) {
-        *data_size = sizeof(AVFrame);
-        *picture = *jpg->picture_ptr;
+        int ret = av_frame_ref(data, jpg->picture_ptr);
+        if (ret < 0)
+            return ret;
+        *got_frame = 1;
+
         s->picture_index ^= 1;
         jpg->picture_ptr = &s->picture[s->picture_index];
 
@@ -301,7 +304,7 @@ the_end:
             if (!s->got_mxm_bitmask)
                 s->has_complete_frame = 1;
             else
-                *data_size = 0;
+                *got_frame = 0;
         }
     }
 
@@ -317,10 +320,8 @@ static av_cold int mxpeg_decode_end(AVCodecContext *avctx)
     jpg->picture_ptr = NULL;
     ff_mjpeg_decode_end(avctx);
 
-    for (i = 0; i < 2; ++i) {
-        if (s->picture[i].data[0])
-            avctx->release_buffer(avctx, &s->picture[i]);
-    }
+    for (i = 0; i < 2; ++i)
+        av_frame_unref(&s->picture[i]);
 
     av_freep(&s->mxm_bitmask);
     av_freep(&s->completion_bitmask);

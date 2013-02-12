@@ -23,21 +23,13 @@
 #include "libavutil/imgutils.h"
 #include "avcodec.h"
 #include "bytestream.h"
+#include "internal.h"
 #include "xwd.h"
 
-static av_cold int xwd_decode_init(AVCodecContext *avctx)
-{
-    avctx->coded_frame = avcodec_alloc_frame();
-    if (!avctx->coded_frame)
-        return AVERROR(ENOMEM);
-
-    return 0;
-}
-
 static int xwd_decode_frame(AVCodecContext *avctx, void *data,
-                            int *data_size, AVPacket *avpkt)
+                            int *got_frame, AVPacket *avpkt)
 {
-    AVFrame *p = avctx->coded_frame;
+    AVFrame *p = data;
     const uint8_t *buf = avpkt->data;
     int i, ret, buf_size = avpkt->size;
     uint32_t version, header_size, vclass, ncolors;
@@ -204,11 +196,7 @@ static int xwd_decode_frame(AVCodecContext *avctx, void *data,
         return AVERROR_PATCHWELCOME;
     }
 
-    if (p->data[0])
-        avctx->release_buffer(avctx, p);
-
-    p->reference = 0;
-    if ((ret = avctx->get_buffer(avctx, p)) < 0) {
+    if ((ret = ff_get_buffer(avctx, p, 0)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }
@@ -241,28 +229,15 @@ static int xwd_decode_frame(AVCodecContext *avctx, void *data,
         ptr += p->linesize[0];
     }
 
-    *data_size = sizeof(AVFrame);
-    *(AVFrame *)data = *p;
+    *got_frame       = 1;
 
     return buf_size;
-}
-
-static av_cold int xwd_decode_close(AVCodecContext *avctx)
-{
-    if (avctx->coded_frame->data[0])
-        avctx->release_buffer(avctx, avctx->coded_frame);
-
-    av_freep(&avctx->coded_frame);
-
-    return 0;
 }
 
 AVCodec ff_xwd_decoder = {
     .name           = "xwd",
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_XWD,
-    .init           = xwd_decode_init,
-    .close          = xwd_decode_close,
     .decode         = xwd_decode_frame,
     .capabilities   = CODEC_CAP_DR1,
     .long_name      = NULL_IF_CONFIG_SMALL("XWD (X Window Dump) image"),

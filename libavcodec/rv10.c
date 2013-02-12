@@ -638,13 +638,13 @@ static int get_slice_offset(AVCodecContext *avctx, const uint8_t *buf, int n)
 }
 
 static int rv10_decode_frame(AVCodecContext *avctx,
-                             void *data, int *data_size,
+                             void *data, int *got_frame,
                              AVPacket *avpkt)
 {
     const uint8_t *buf = avpkt->data;
     int buf_size = avpkt->size;
     MpegEncContext *s = avctx->priv_data;
-    int i;
+    int i, ret;
     AVFrame *pict = data;
     int slice_count;
     const uint8_t *slices_hdr = NULL;
@@ -697,16 +697,19 @@ static int rv10_decode_frame(AVCodecContext *avctx,
         ff_MPV_frame_end(s);
 
         if (s->pict_type == AV_PICTURE_TYPE_B || s->low_delay) {
-            *pict = s->current_picture_ptr->f;
+            if ((ret = av_frame_ref(pict, &s->current_picture_ptr->f)) < 0)
+                return ret;
+            ff_print_debug_info(s, s->current_picture_ptr, pict);
         } else if (s->last_picture_ptr != NULL) {
-            *pict = s->last_picture_ptr->f;
+            if ((ret = av_frame_ref(pict, &s->last_picture_ptr->f)) < 0)
+                return ret;
+            ff_print_debug_info(s, s->last_picture_ptr, pict);
         }
 
         if(s->last_picture_ptr || s->low_delay){
-            *data_size = sizeof(AVFrame);
-            ff_print_debug_info(s, pict);
+            *got_frame = 1;
         }
-        s->current_picture_ptr= NULL; //so we can detect if frame_end wasnt called (find some nicer solution...)
+        s->current_picture_ptr= NULL; // so we can detect if frame_end was not called (find some nicer solution...)
     }
 
     return avpkt->size;

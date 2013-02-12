@@ -340,7 +340,7 @@ static int decode_slice(MpegEncContext *s){
 }
 
 int ff_h263_decode_frame(AVCodecContext *avctx,
-                             void *data, int *data_size,
+                             void *data, int *got_frame,
                              AVPacket *avpkt)
 {
     const uint8_t *buf = avpkt->data;
@@ -359,10 +359,11 @@ uint64_t time= rdtsc();
     if (buf_size == 0) {
         /* special case for last picture */
         if (s->low_delay==0 && s->next_picture_ptr) {
-            *pict = s->next_picture_ptr->f;
+            if ((ret = av_frame_ref(pict, &s->next_picture_ptr->f)) < 0)
+                return ret;
             s->next_picture_ptr= NULL;
 
-            *data_size = sizeof(AVFrame);
+            *got_frame = 1;
         }
 
         return 0;
@@ -441,7 +442,7 @@ retry:
     if(s->xvid_build==-1 && s->divx_version==-1 && s->lavc_build==-1){
         if(s->stream_codec_tag == AV_RL32("XVID") ||
            s->codec_tag == AV_RL32("XVID") || s->codec_tag == AV_RL32("XVIX") ||
-           s->codec_tag == AV_RL32("RMP4") ||
+           s->codec_tag == AV_RL32("RMP4") || s->codec_tag == AV_RL32("ZMP4") ||
            s->codec_tag == AV_RL32("SIPP")
            )
             s->xvid_build= 0;
@@ -600,7 +601,9 @@ retry:
     s->current_picture.f.key_frame = s->pict_type == AV_PICTURE_TYPE_I;
 
     /* skip B-frames if we don't have reference frames */
-    if(s->last_picture_ptr==NULL && (s->pict_type==AV_PICTURE_TYPE_B || s->dropable)) return get_consumed_bytes(s, buf_size);
+    if (s->last_picture_ptr == NULL &&
+        (s->pict_type == AV_PICTURE_TYPE_B || s->droppable))
+        return get_consumed_bytes(s, buf_size);
     if(   (avctx->skip_frame >= AVDISCARD_NONREF && s->pict_type==AV_PICTURE_TYPE_B)
        || (avctx->skip_frame >= AVDISCARD_NONKEY && s->pict_type!=AV_PICTURE_TYPE_I)
        ||  avctx->skip_frame >= AVDISCARD_ALL)
@@ -723,14 +726,17 @@ intrax8_decoded:
     assert(s->current_picture.f.pict_type == s->current_picture_ptr->f.pict_type);
     assert(s->current_picture.f.pict_type == s->pict_type);
     if (s->pict_type == AV_PICTURE_TYPE_B || s->low_delay) {
-        *pict = s->current_picture_ptr->f;
+        if ((ret = av_frame_ref(pict, &s->current_picture_ptr->f)) < 0)
+            return ret;
+        ff_print_debug_info(s, s->current_picture_ptr, pict);
     } else if (s->last_picture_ptr != NULL) {
-        *pict = s->last_picture_ptr->f;
+        if ((ret = av_frame_ref(pict, &s->last_picture_ptr->f)) < 0)
+            return ret;
+        ff_print_debug_info(s, s->last_picture_ptr, pict);
     }
 
     if(s->last_picture_ptr || s->low_delay){
-        *data_size = sizeof(AVFrame);
-        ff_print_debug_info(s, pict);
+        *got_frame = 1;
     }
 
 #ifdef PRINT_FRAME_TIME

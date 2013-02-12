@@ -34,6 +34,7 @@
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mem.h"
 #include "avcodec.h"
+#include "internal.h"
 #include "libschroedinger.h"
 
 #undef NDEBUG
@@ -69,9 +70,6 @@ typedef struct SchroDecoderParams {
 
     /** end of sequence pulled */
     int eos_pulled;
-
-    /** decoded picture */
-    AVFrame dec_frame;
 } SchroDecoderParams;
 
 typedef struct SchroParseUnitContext {
@@ -206,7 +204,7 @@ static void libschroedinger_handle_first_access_unit(AVCodecContext *avccontext)
 }
 
 static int libschroedinger_decode_frame(AVCodecContext *avccontext,
-                                        void *data, int *data_size,
+                                        void *data, int *got_frame,
                                         AVPacket *avpkt)
 {
     const uint8_t *buf = avpkt->data;
@@ -218,13 +216,14 @@ static int libschroedinger_decode_frame(AVCodecContext *avccontext,
     SchroDecoder *decoder = p_schro_params->decoder;
     SchroBuffer *enc_buf;
     SchroFrame* frame;
+    AVFrame *avframe = data;
     int state;
     int go = 1;
     int outer = 1;
     SchroParseUnitContext parse_ctx;
     LibSchroFrameContext *framewithpts = NULL;
 
-    *data_size = 0;
+    *got_frame = 0;
 
     parse_context_init(&parse_ctx, buf, buf_size);
     if (!buf_size) {
@@ -311,43 +310,37 @@ static int libschroedinger_decode_frame(AVCodecContext *avccontext,
     framewithpts = ff_schro_queue_pop(&p_schro_params->dec_frame_queue);
 
     if (framewithpts && framewithpts->frame) {
-        if (p_schro_params->dec_frame.data[0])
-            avccontext->release_buffer(avccontext, &p_schro_params->dec_frame);
-        if (avccontext->get_buffer(avccontext, &p_schro_params->dec_frame) < 0) {
+        if (ff_get_buffer(avccontext, avframe, 0) < 0) {
             av_log(avccontext, AV_LOG_ERROR, "Unable to allocate buffer\n");
             return AVERROR(ENOMEM);
         }
 
-        memcpy(p_schro_params->dec_frame.data[0],
+        memcpy(avframe->data[0],
                framewithpts->frame->components[0].data,
                framewithpts->frame->components[0].length);
 
-        memcpy(p_schro_params->dec_frame.data[1],
+        memcpy(avframe->data[1],
                framewithpts->frame->components[1].data,
                framewithpts->frame->components[1].length);
 
-        memcpy(p_schro_params->dec_frame.data[2],
+        memcpy(avframe->data[2],
                framewithpts->frame->components[2].data,
                framewithpts->frame->components[2].length);
 
         /* Fill frame with current buffer data from Schroedinger. */
-        p_schro_params->dec_frame.format  = -1; /* Unknown -1 */
-        p_schro_params->dec_frame.width   = framewithpts->frame->width;
-        p_schro_params->dec_frame.height  = framewithpts->frame->height;
-        p_schro_params->dec_frame.pkt_pts = framewithpts->pts;
-        p_schro_params->dec_frame.linesize[0] = framewithpts->frame->components[0].stride;
-        p_schro_params->dec_frame.linesize[1] = framewithpts->frame->components[1].stride;
-        p_schro_params->dec_frame.linesize[2] = framewithpts->frame->components[2].stride;
+        avframe->pkt_pts = framewithpts->pts;
+        avframe->linesize[0] = framewithpts->frame->components[0].stride;
+        avframe->linesize[1] = framewithpts->frame->components[1].stride;
+        avframe->linesize[2] = framewithpts->frame->components[2].stride;
 
-        *(AVFrame*)data = p_schro_params->dec_frame;
-        *data_size      = sizeof(AVFrame);
+        *got_frame      = 1;
 
         /* Now free the frame resources. */
         libschroedinger_decode_frame_free(framewithpts->frame);
         av_free(framewithpts);
     } else {
         data       = NULL;
-        *data_size = 0;
+        *got_frame = 0;
     }
     return buf_size;
 }
@@ -359,9 +352,6 @@ static av_cold int libschroedinger_decode_close(AVCodecContext *avccontext)
     /* Free the decoder. */
     schro_decoder_free(p_schro_params->decoder);
     av_freep(&p_schro_params->format);
-
-    if (p_schro_params->dec_frame.data[0])
-        avccontext->release_buffer(avccontext, &p_schro_params->dec_frame);
 
     /* Free data in the output frame queue. */
     ff_schro_queue_free(&p_schro_params->dec_frame_queue,

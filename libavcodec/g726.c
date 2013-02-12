@@ -22,7 +22,9 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 #include <limits.h>
+
 #include "libavutil/avassert.h"
+#include "libavutil/channel_layout.h"
 #include "libavutil/opt.h"
 #include "avcodec.h"
 #include "internal.h"
@@ -32,7 +34,7 @@
 /**
  * G.726 11bit float.
  * G.726 Standard uses rather odd 11bit floating point arithmentic for
- * numerous occasions. It's a mistery to me why they did it this way
+ * numerous occasions. It's a mystery to me why they did it this way
  * instead of simply using 32bit integer arithmetic.
  */
 typedef struct Float11 {
@@ -420,18 +422,8 @@ static av_cold int g726_decode_init(AVCodecContext *avctx)
 {
     G726Context* c = avctx->priv_data;
 
-    if (avctx->strict_std_compliance >= FF_COMPLIANCE_STRICT &&
-        avctx->sample_rate != 8000) {
-        av_log(avctx, AV_LOG_ERROR, "Only 8kHz sample rate is allowed when "
-               "the compliance level is strict. Reduce the compliance level "
-               "if you wish to decode the stream anyway.\n");
-        return AVERROR(EINVAL);
-    }
-
-    if(avctx->channels != 1){
-        av_log(avctx, AV_LOG_ERROR, "Only mono is supported\n");
-        return AVERROR(EINVAL);
-    }
+    avctx->channels       = 1;
+    avctx->channel_layout = AV_CH_LAYOUT_MONO;
 
     c->code_size = avctx->bits_per_coded_sample;
     if (c->code_size < 2 || c->code_size > 5) {
@@ -462,7 +454,7 @@ static int g726_decode_frame(AVCodecContext *avctx, void *data,
 
     /* get output buffer */
     c->frame.nb_samples = out_samples;
-    if ((ret = avctx->get_buffer(avctx, &c->frame)) < 0) {
+    if ((ret = ff_get_buffer(avctx, &c->frame, 0)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }

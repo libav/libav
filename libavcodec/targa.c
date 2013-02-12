@@ -23,10 +23,10 @@
 #include "libavutil/imgutils.h"
 #include "avcodec.h"
 #include "bytestream.h"
+#include "internal.h"
 #include "targa.h"
 
 typedef struct TargaContext {
-    AVFrame picture;
     GetByteContext gb;
 
     int color_type;
@@ -94,15 +94,14 @@ static int targa_decode_rle(AVCodecContext *avctx, TargaContext *s,
 }
 
 static int decode_frame(AVCodecContext *avctx,
-                        void *data, int *data_size,
+                        void *data, int *got_frame,
                         AVPacket *avpkt)
 {
     TargaContext * const s = avctx->priv_data;
-    AVFrame *picture = data;
-    AVFrame * const p = &s->picture;
+    AVFrame * const p = data;
     uint8_t *dst;
     int stride;
-    int idlen, compr, y, w, h, bpp, flags;
+    int idlen, compr, y, w, h, bpp, flags, ret;
     int first_clr, colors, csize;
 
     bytestream2_init(&s->gb, avpkt->data, avpkt->size);
@@ -140,19 +139,16 @@ static int decode_frame(AVCodecContext *avctx,
         break;
     default:
         av_log(avctx, AV_LOG_ERROR, "Bit depth %i is not supported\n", bpp);
-        return -1;
+        return AVERROR_INVALIDDATA;
     }
 
-    if(s->picture.data[0])
-        avctx->release_buffer(avctx, &s->picture);
-
-    if(av_image_check_size(w, h, 0, avctx))
-        return -1;
+    if ((ret = av_image_check_size(w, h, 0, avctx)) < 0)
+        return ret;
     if(w != avctx->width || h != avctx->height)
         avcodec_set_dimensions(avctx, w, h);
-    if(avctx->get_buffer(avctx, p) < 0){
+    if ((ret = ff_get_buffer(avctx, p, 0)) < 0){
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
-        return -1;
+        return ret;
     }
     if(flags & 0x20){
         dst = p->data[0];
@@ -166,7 +162,7 @@ static int decode_frame(AVCodecContext *avctx,
         int pal_size, pal_sample_size;
         if((colors + first_clr) > 256){
             av_log(avctx, AV_LOG_ERROR, "Incorrect palette: %i colors with offset %i\n", colors, first_clr);
-            return -1;
+            return AVERROR_INVALIDDATA;
         }
         switch (csize) {
         case 24: pal_sample_size = 3; break;
@@ -174,7 +170,7 @@ static int decode_frame(AVCodecContext *avctx,
         case 15: pal_sample_size = 2; break;
         default:
             av_log(avctx, AV_LOG_ERROR, "Palette entry size %i bits is not supported\n", csize);
-            return -1;
+            return AVERROR_INVALIDDATA;
         }
         pal_size = colors * pal_sample_size;
         if(avctx->pix_fmt != AV_PIX_FMT_PAL8)//should not occur but skip palette anyway
@@ -231,28 +227,9 @@ static int decode_frame(AVCodecContext *avctx,
         }
     }
 
-    *picture   = s->picture;
-    *data_size = sizeof(AVPicture);
+    *got_frame = 1;
 
     return avpkt->size;
-}
-
-static av_cold int targa_init(AVCodecContext *avctx){
-    TargaContext *s = avctx->priv_data;
-
-    avcodec_get_frame_defaults(&s->picture);
-    avctx->coded_frame = &s->picture;
-
-    return 0;
-}
-
-static av_cold int targa_end(AVCodecContext *avctx){
-    TargaContext *s = avctx->priv_data;
-
-    if(s->picture.data[0])
-        avctx->release_buffer(avctx, &s->picture);
-
-    return 0;
 }
 
 AVCodec ff_targa_decoder = {
@@ -260,8 +237,6 @@ AVCodec ff_targa_decoder = {
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_TARGA,
     .priv_data_size = sizeof(TargaContext),
-    .init           = targa_init,
-    .close          = targa_end,
     .decode         = decode_frame,
     .capabilities   = CODEC_CAP_DR1,
     .long_name      = NULL_IF_CONFIG_SMALL("Truevision Targa image"),

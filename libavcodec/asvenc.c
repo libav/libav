@@ -23,15 +23,16 @@
  * ASUS V1/V2 encoder.
  */
 
-#include "libavutil/common.h"
+#include "libavutil/attributes.h"
 #include "libavutil/mem.h"
 
 #include "asv.h"
 #include "avcodec.h"
+#include "mathops.h"
 #include "mpeg12data.h"
 
 static inline void asv2_put_bits(PutBitContext *pb, int n, int v){
-    put_bits(pb, n, av_reverse[ v << (8-n) ]);
+    put_bits(pb, n, ff_reverse[ v << (8-n) ]);
 }
 
 static inline void asv1_put_level(PutBitContext *pb, int level){
@@ -226,7 +227,7 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     else{
         int i;
         for(i=0; i<4*size; i++)
-            pkt->data[i] = av_reverse[pkt->data[i]];
+            pkt->data[i] = ff_reverse[pkt->data[i]];
     }
 
     pkt->size   = size*4;
@@ -268,7 +269,8 @@ AVCodec ff_asv1_encoder = {
     .priv_data_size = sizeof(ASV1Context),
     .init           = encode_init,
     .encode2        = encode_frame,
-    .pix_fmts       = (const enum PixelFormat[]){ AV_PIX_FMT_YUV420P, AV_PIX_FMT_NONE },
+    .pix_fmts       = (const enum AVPixelFormat[]){ AV_PIX_FMT_YUV420P,
+                                                    AV_PIX_FMT_NONE },
     .long_name      = NULL_IF_CONFIG_SMALL("ASUS V1"),
 };
 #endif
@@ -281,7 +283,8 @@ AVCodec ff_asv2_encoder = {
     .priv_data_size = sizeof(ASV1Context),
     .init           = encode_init,
     .encode2        = encode_frame,
-    .pix_fmts       = (const enum PixelFormat[]){ AV_PIX_FMT_YUV420P, AV_PIX_FMT_NONE },
+    .pix_fmts       = (const enum AVPixelFormat[]){ AV_PIX_FMT_YUV420P,
+                                                    AV_PIX_FMT_NONE },
     .long_name      = NULL_IF_CONFIG_SMALL("ASUS V2"),
 };
 #endif

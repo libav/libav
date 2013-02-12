@@ -19,24 +19,29 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "avcodec.h"
 #include "libavutil/avstring.h"
+#include "libavutil/channel_layout.h"
 #include "libavutil/common.h"
 #include "libavutil/opt.h"
+#include "avcodec.h"
 #include "audio_frame_queue.h"
 #include "internal.h"
 
-static void amr_decode_fix_avctx(AVCodecContext *avctx)
+static int amr_decode_fix_avctx(AVCodecContext *avctx)
 {
     const int is_amr_wb = 1 + (avctx->codec_id == AV_CODEC_ID_AMR_WB);
 
-    if (!avctx->sample_rate)
-        avctx->sample_rate = 8000 * is_amr_wb;
+    avctx->sample_rate = 8000 * is_amr_wb;
 
-    if (!avctx->channels)
-        avctx->channels = 1;
+    if (avctx->channels > 1) {
+        av_log_missing_feature(avctx, "multi-channel AMR", 0);
+        return AVERROR_PATCHWELCOME;
+    }
 
-    avctx->sample_fmt = AV_SAMPLE_FMT_S16;
+    avctx->channels       = 1;
+    avctx->channel_layout = AV_CH_LAYOUT_MONO;
+    avctx->sample_fmt     = AV_SAMPLE_FMT_S16;
+    return 0;
 }
 
 #if CONFIG_LIBOPENCORE_AMRNB
@@ -103,18 +108,15 @@ static const AVClass class = {
 static av_cold int amr_nb_decode_init(AVCodecContext *avctx)
 {
     AMRContext *s  = avctx->priv_data;
+    int ret;
+
+    if ((ret = amr_decode_fix_avctx(avctx)) < 0)
+        return ret;
 
     s->dec_state   = Decoder_Interface_init();
     if (!s->dec_state) {
         av_log(avctx, AV_LOG_ERROR, "Decoder_Interface_init error\n");
         return -1;
-    }
-
-    amr_decode_fix_avctx(avctx);
-
-    if (avctx->channels > 1) {
-        av_log(avctx, AV_LOG_ERROR, "amr_nb: multichannel decoding not supported\n");
-        return AVERROR(ENOSYS);
     }
 
     avcodec_get_frame_defaults(&s->frame);
@@ -147,7 +149,7 @@ static int amr_nb_decode_frame(AVCodecContext *avctx, void *data,
 
     /* get output buffer */
     s->frame.nb_samples = 160;
-    if ((ret = avctx->get_buffer(avctx, &s->frame)) < 0) {
+    if ((ret = ff_get_buffer(avctx, &s->frame)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }
@@ -260,7 +262,7 @@ static int amr_nb_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
             if (frame->nb_samples < avctx->frame_size - avctx->delay)
                 s->enc_last_frame = -1;
         }
-        if ((ret = ff_af_queue_add(&s->afq, frame) < 0)) {
+        if ((ret = ff_af_queue_add(&s->afq, frame)) < 0) {
             av_freep(&flush_buf);
             return ret;
         }
@@ -320,15 +322,12 @@ typedef struct AMRWBContext {
 static av_cold int amr_wb_decode_init(AVCodecContext *avctx)
 {
     AMRWBContext *s = avctx->priv_data;
+    int ret;
+
+    if ((ret = amr_decode_fix_avctx(avctx)) < 0)
+        return ret;
 
     s->state        = D_IF_init();
-
-    amr_decode_fix_avctx(avctx);
-
-    if (avctx->channels > 1) {
-        av_log(avctx, AV_LOG_ERROR, "amr_wb: multichannel decoding not supported\n");
-        return AVERROR(ENOSYS);
-    }
 
     avcodec_get_frame_defaults(&s->frame);
     avctx->coded_frame = &s->frame;
@@ -348,7 +347,7 @@ static int amr_wb_decode_frame(AVCodecContext *avctx, void *data,
 
     /* get output buffer */
     s->frame.nb_samples = 320;
-    if ((ret = avctx->get_buffer(avctx, &s->frame)) < 0) {
+    if ((ret = ff_get_buffer(avctx, &s->frame)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }

@@ -23,6 +23,7 @@
 #include "libavutil/imgutils.h"
 #include "avcodec.h"
 #include "get_bits.h"
+#include "internal.h"
 
 #define BIT_PLANAR   0x00
 #define BYTE_PLANAR  0x20
@@ -48,7 +49,6 @@ static av_cold int cdxl_decode_init(AVCodecContext *avctx)
 {
     CDXLVideoContext *c = avctx->priv_data;
 
-    avcodec_get_frame_defaults(&c->frame);
     c->new_video_size = 0;
     c->avctx          = avctx;
 
@@ -112,15 +112,15 @@ static void import_format(CDXLVideoContext *c, int linesize, uint8_t *out)
     }
 }
 
-static void cdxl_decode_rgb(CDXLVideoContext *c)
+static void cdxl_decode_rgb(CDXLVideoContext *c, AVFrame *frame)
 {
-    uint32_t *new_palette = (uint32_t *)c->frame.data[1];
+    uint32_t *new_palette = (uint32_t *)frame->data[1];
 
     import_palette(c, new_palette);
-    import_format(c, c->frame.linesize[0], c->frame.data[0]);
+    import_format(c, frame->linesize[0], frame->data[0]);
 }
 
-static void cdxl_decode_ham6(CDXLVideoContext *c)
+static void cdxl_decode_ham6(CDXLVideoContext *c, AVFrame *frame)
 {
     AVCodecContext *avctx = c->avctx;
     uint32_t new_palette[16], r, g, b;
@@ -128,7 +128,7 @@ static void cdxl_decode_ham6(CDXLVideoContext *c)
     int x, y;
 
     ptr = c->new_video;
-    out = c->frame.data[0];
+    out = frame->data[0];
 
     import_palette(c, new_palette);
     import_format(c, avctx->width, c->new_video);
@@ -159,11 +159,11 @@ static void cdxl_decode_ham6(CDXLVideoContext *c)
             }
             AV_WL24(out + x * 3, r | g | b);
         }
-        out += c->frame.linesize[0];
+        out += frame->linesize[0];
     }
 }
 
-static void cdxl_decode_ham8(CDXLVideoContext *c)
+static void cdxl_decode_ham8(CDXLVideoContext *c, AVFrame *frame)
 {
     AVCodecContext *avctx = c->avctx;
     uint32_t new_palette[64], r, g, b;
@@ -171,7 +171,7 @@ static void cdxl_decode_ham8(CDXLVideoContext *c)
     int x, y;
 
     ptr = c->new_video;
-    out = c->frame.data[0];
+    out = frame->data[0];
 
     import_palette(c, new_palette);
     import_format(c, avctx->width, c->new_video);
@@ -202,15 +202,15 @@ static void cdxl_decode_ham8(CDXLVideoContext *c)
             }
             AV_WL24(out + x * 3, r | g | b);
         }
-        out += c->frame.linesize[0];
+        out += frame->linesize[0];
     }
 }
 
 static int cdxl_decode_frame(AVCodecContext *avctx, void *data,
-                             int *data_size, AVPacket *pkt)
+                             int *got_frame, AVPacket *pkt)
 {
     CDXLVideoContext *c = avctx->priv_data;
-    AVFrame * const p = &c->frame;
+    AVFrame * const p = data;
     int ret, w, h, encoding, aligned_width, buf_size = pkt->size;
     const uint8_t *buf = pkt->data;
 
@@ -258,11 +258,7 @@ static int cdxl_decode_frame(AVCodecContext *avctx, void *data,
         return AVERROR_PATCHWELCOME;
     }
 
-    if (p->data[0])
-        avctx->release_buffer(avctx, p);
-
-    p->reference = 0;
-    if ((ret = avctx->get_buffer(avctx, p)) < 0) {
+    if ((ret = ff_get_buffer(avctx, p, 0)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }
@@ -274,14 +270,13 @@ static int cdxl_decode_frame(AVCodecContext *avctx, void *data,
         if (!c->new_video)
             return AVERROR(ENOMEM);
         if (c->bpp == 8)
-            cdxl_decode_ham8(c);
+            cdxl_decode_ham8(c, p);
         else
-            cdxl_decode_ham6(c);
+            cdxl_decode_ham6(c, p);
     } else {
-        cdxl_decode_rgb(c);
+        cdxl_decode_rgb(c, p);
     }
-    *data_size      = sizeof(AVFrame);
-    *(AVFrame*)data = c->frame;
+    *got_frame = 1;
 
     return buf_size;
 }
@@ -291,8 +286,6 @@ static av_cold int cdxl_decode_end(AVCodecContext *avctx)
     CDXLVideoContext *c = avctx->priv_data;
 
     av_free(c->new_video);
-    if (c->frame.data[0])
-        avctx->release_buffer(avctx, &c->frame);
 
     return 0;
 }

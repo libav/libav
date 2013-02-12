@@ -106,7 +106,6 @@ typedef struct {
     uint8_t *line[4];
     int      line_step[4];
     int hsub, vsub;         ///< chroma subsampling values
-    int needs_copy;
 } PadContext;
 
 static av_cold int init(AVFilterContext *ctx, const char *args)
@@ -144,7 +143,7 @@ static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
     PadContext *pad = ctx->priv;
-    const AVPixFmtDescriptor *pix_desc = &av_pix_fmt_descriptors[inlink->format];
+    const AVPixFmtDescriptor *pix_desc = av_pix_fmt_desc_get(inlink->format);
     uint8_t rgba_color[4];
     int ret, is_packed_rgba;
     double var_values[VARS_NB], res;
@@ -254,184 +253,164 @@ static int config_output(AVFilterLink *outlink)
     return 0;
 }
 
-static AVFilterBufferRef *get_video_buffer(AVFilterLink *inlink, int perms, int w, int h)
+static AVFrame *get_video_buffer(AVFilterLink *inlink, int w, int h)
 {
     PadContext *pad = inlink->dst->priv;
 
-    AVFilterBufferRef *picref = ff_get_video_buffer(inlink->dst->outputs[0], perms,
-                                                    w + (pad->w - pad->in_w),
-                                                    h + (pad->h - pad->in_h));
+    AVFrame *frame = ff_get_video_buffer(inlink->dst->outputs[0],
+                                         w + (pad->w - pad->in_w),
+                                         h + (pad->h - pad->in_h));
     int plane;
 
-    if (!picref)
+    if (!frame)
         return NULL;
 
-    picref->video->w = w;
-    picref->video->h = h;
+    frame->width  = w;
+    frame->height = h;
 
-    for (plane = 0; plane < 4 && picref->data[plane]; plane++) {
+    for (plane = 0; plane < 4 && frame->data[plane]; plane++) {
         int hsub = (plane == 1 || plane == 2) ? pad->hsub : 0;
         int vsub = (plane == 1 || plane == 2) ? pad->vsub : 0;
 
-        picref->data[plane] += (pad->x >> hsub) * pad->line_step[plane] +
-            (pad->y >> vsub) * picref->linesize[plane];
+        frame->data[plane] += (pad->x >> hsub) * pad->line_step[plane] +
+            (pad->y >> vsub) * frame->linesize[plane];
     }
 
-    return picref;
+    return frame;
 }
 
-static int does_clip(PadContext *pad, AVFilterBufferRef *outpicref, int plane, int hsub, int vsub, int x, int y)
+/* check whether each plane in this buffer can be padded without copying */
+static int buffer_needs_copy(PadContext *s, AVFrame *frame, AVBufferRef *buf)
 {
-    int64_t x_in_buf, y_in_buf;
+    int planes[4] = { -1, -1, -1, -1}, *p = planes;
+    int i, j;
 
-    x_in_buf =  outpicref->data[plane] - outpicref->buf->data[plane]
-             +  (x >> hsub) * pad      ->line_step[plane]
-             +  (y >> vsub) * outpicref->linesize [plane];
+    /* get all planes in this buffer */
+    for (i = 0; i < FF_ARRAY_ELEMS(planes) && frame->data[i]; i++) {
+        if (av_frame_get_plane_buffer(frame, i) == buf)
+            *p++ = i;
+    }
 
-    if(x_in_buf < 0 || x_in_buf % pad->line_step[plane])
-        return 1;
-    x_in_buf /= pad->line_step[plane];
+    /* for each plane in this buffer, check that it can be padded without
+     * going over buffer bounds or other planes */
+    for (i = 0; i < FF_ARRAY_ELEMS(planes) && planes[i] >= 0; i++) {
+        int hsub = (planes[i] == 1 || planes[i] == 2) ? s->hsub : 0;
+        int vsub = (planes[i] == 1 || planes[i] == 2) ? s->vsub : 0;
 
-    av_assert0(outpicref->buf->linesize[plane]>0); //while reference can use negative linesize the main buffer should not
+        uint8_t *start = frame->data[planes[i]];
+        uint8_t *end   = start + (frame->height >> hsub) *
+                                 frame->linesize[planes[i]];
 
-    y_in_buf = x_in_buf / outpicref->buf->linesize[plane];
-    x_in_buf %= outpicref->buf->linesize[plane];
+        /* amount of free space needed before the start and after the end
+         * of the plane */
+        ptrdiff_t req_start = (s->x >> hsub) * s->line_step[planes[i]] +
+                              (s->y >> vsub) * frame->linesize[planes[i]];
+        ptrdiff_t req_end   = ((s->w - s->x - frame->width) >> hsub) *
+                              s->line_step[planes[i]] +
+                              (s->y >> vsub) * frame->linesize[planes[i]];
 
-    if(   y_in_buf<<vsub >= outpicref->buf->h
-       || x_in_buf<<hsub >= outpicref->buf->w)
-        return 1;
+        if (frame->linesize[planes[i]] < (s->w >> hsub) * s->line_step[planes[i]])
+            return 1;
+        if (start - buf->data < req_start ||
+            (buf->data + buf->size) - end < req_end)
+            return 1;
+
+#define SIGN(x) ((x) > 0 ? 1 : -1)
+        for (j = 0; j < FF_ARRAY_ELEMS(planes) & planes[j] >= 0; j++) {
+            int hsub1 = (planes[j] == 1 || planes[j] == 2) ? s->hsub : 0;
+            uint8_t *start1 = frame->data[planes[j]];
+            uint8_t *end1   = start1 + (frame->height >> hsub1) *
+                                       frame->linesize[planes[j]];
+            if (i == j)
+                continue;
+
+            if (SIGN(start - end1) != SIGN(start - end1 - req_start) ||
+                SIGN(end - start1) != SIGN(end - start1 + req_end))
+                return 1;
+        }
+    }
+
     return 0;
 }
 
-static int start_frame(AVFilterLink *inlink, AVFilterBufferRef *inpicref)
+static int frame_needs_copy(PadContext *s, AVFrame *frame)
+{
+    int i;
+
+    if (!av_frame_is_writable(frame))
+        return 1;
+
+    for (i = 0; i < FF_ARRAY_ELEMS(frame->buf) && frame->buf[i]; i++)
+        if (buffer_needs_copy(s, frame, frame->buf[i]))
+            return 1;
+    return 0;
+}
+
+static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     PadContext *pad = inlink->dst->priv;
-    AVFilterBufferRef *outpicref = avfilter_ref_buffer(inpicref, ~0);
-    AVFilterBufferRef *for_next_filter;
-    int plane, ret = 0;
+    AVFrame *out;
+    int needs_copy = frame_needs_copy(pad, in);
 
-    if (!outpicref)
-        return AVERROR(ENOMEM);
-
-    for (plane = 0; plane < 4 && outpicref->data[plane]; plane++) {
-        int hsub = (plane == 1 || plane == 2) ? pad->hsub : 0;
-        int vsub = (plane == 1 || plane == 2) ? pad->vsub : 0;
-
-        av_assert0(outpicref->buf->w>0 && outpicref->buf->h>0);
-
-        if(outpicref->format != outpicref->buf->format) //unsupported currently
-            break;
-
-        outpicref->data[plane] -=   (pad->x  >> hsub) * pad      ->line_step[plane]
-                                  + (pad->y  >> vsub) * outpicref->linesize [plane];
-
-        if(   does_clip(pad, outpicref, plane, hsub, vsub, 0, 0)
-           || does_clip(pad, outpicref, plane, hsub, vsub, 0, pad->h-1)
-           || does_clip(pad, outpicref, plane, hsub, vsub, pad->w-1, 0)
-           || does_clip(pad, outpicref, plane, hsub, vsub, pad->w-1, pad->h-1)
-          )
-            break;
-    }
-    pad->needs_copy= plane < 4 && outpicref->data[plane];
-    if(pad->needs_copy){
+    if (needs_copy) {
         av_log(inlink->dst, AV_LOG_DEBUG, "Direct padding impossible allocating new frame\n");
-        avfilter_unref_buffer(outpicref);
-        outpicref = ff_get_video_buffer(inlink->dst->outputs[0], AV_PERM_WRITE | AV_PERM_NEG_LINESIZES,
-                                        FFMAX(inlink->w, pad->w),
-                                        FFMAX(inlink->h, pad->h));
-        if (!outpicref)
+        out = ff_get_video_buffer(inlink->dst->outputs[0],
+                                  FFMAX(inlink->w, pad->w),
+                                  FFMAX(inlink->h, pad->h));
+        if (!out) {
+            av_frame_free(&in);
             return AVERROR(ENOMEM);
+        }
 
-        avfilter_copy_buffer_ref_props(outpicref, inpicref);
+        av_frame_copy_props(out, in);
+    } else {
+        int i;
+
+        out = in;
+        for (i = 0; i < FF_ARRAY_ELEMS(out->data) && out->data[i]; i++) {
+            int hsub = (i == 1 || i == 2) ? pad->hsub : 0;
+            int vsub = (i == 1 || i == 2) ? pad->vsub : 0;
+            out->data[i] -= (pad->x >> hsub) * pad->line_step[i] +
+                            (pad->y >> vsub) * out->linesize[i];
+        }
     }
 
-    outpicref->video->w = pad->w;
-    outpicref->video->h = pad->h;
-
-    for_next_filter = avfilter_ref_buffer(outpicref, ~0);
-    if (!for_next_filter) {
-        ret = AVERROR(ENOMEM);
-        goto fail;
-    }
-
-    ret = ff_start_frame(inlink->dst->outputs[0], for_next_filter);
-    if (ret < 0)
-        goto fail;
-
-    inlink->dst->outputs[0]->out_buf = outpicref;
-    return 0;
-
-fail:
-    avfilter_unref_bufferp(&outpicref);
-    return ret;
-}
-
-static int end_frame(AVFilterLink *link)
-{
-    return ff_end_frame(link->dst->outputs[0]);
-}
-
-static int draw_send_bar_slice(AVFilterLink *link, int y, int h, int slice_dir, int before_slice)
-{
-    PadContext *pad = link->dst->priv;
-    int bar_y, bar_h = 0, ret = 0;
-
-    if        (slice_dir * before_slice ==  1 && y == pad->y) {
-        /* top bar */
-        bar_y = 0;
-        bar_h = pad->y;
-    } else if (slice_dir * before_slice == -1 && (y + h) == (pad->y + pad->in_h)) {
-        /* bottom bar */
-        bar_y = pad->y + pad->in_h;
-        bar_h = pad->h - pad->in_h - pad->y;
-    }
-
-    if (bar_h) {
-        ff_draw_rectangle(link->dst->outputs[0]->out_buf->data,
-                          link->dst->outputs[0]->out_buf->linesize,
+    /* top bar */
+    if (pad->y) {
+        ff_draw_rectangle(out->data, out->linesize,
                           pad->line, pad->line_step, pad->hsub, pad->vsub,
-                          0, bar_y, pad->w, bar_h);
-        ret = ff_draw_slice(link->dst->outputs[0], bar_y, bar_h, slice_dir);
+                          0, 0, pad->w, pad->y);
     }
-    return ret;
-}
 
-static int draw_slice(AVFilterLink *link, int y, int h, int slice_dir)
-{
-    PadContext *pad = link->dst->priv;
-    AVFilterBufferRef *outpic = link->dst->outputs[0]->out_buf;
-    AVFilterBufferRef *inpic = link->cur_buf;
-    int ret;
-
-    y += pad->y;
-
-    y &= ~((1 << pad->vsub) - 1);
-    h &= ~((1 << pad->vsub) - 1);
-
-    if (!h)
-        return 0;
-    draw_send_bar_slice(link, y, h, slice_dir, 1);
+    /* bottom bar */
+    if (pad->h > pad->y + pad->in_h) {
+        ff_draw_rectangle(out->data, out->linesize,
+                          pad->line, pad->line_step, pad->hsub, pad->vsub,
+                          0, pad->y + pad->in_h, pad->w, pad->h - pad->y - pad->in_h);
+    }
 
     /* left border */
-    ff_draw_rectangle(outpic->data, outpic->linesize, pad->line, pad->line_step,
-                      pad->hsub, pad->vsub, 0, y, pad->x, h);
+    ff_draw_rectangle(out->data, out->linesize, pad->line, pad->line_step,
+                      pad->hsub, pad->vsub, 0, pad->y, pad->x, in->height);
 
-    if(pad->needs_copy){
-        ff_copy_rectangle(outpic->data, outpic->linesize,
-                          inpic->data, inpic->linesize, pad->line_step,
-                          pad->hsub, pad->vsub,
-                          pad->x, y, y-pad->y, inpic->video->w, h);
+    if (needs_copy) {
+        ff_copy_rectangle(out->data, out->linesize, in->data, in->linesize,
+                          pad->line_step, pad->hsub, pad->vsub,
+                          pad->x, pad->y, 0, in->width, in->height);
     }
 
     /* right border */
-    ff_draw_rectangle(outpic->data, outpic->linesize,
+    ff_draw_rectangle(out->data, out->linesize,
                       pad->line, pad->line_step, pad->hsub, pad->vsub,
-                      pad->x + pad->in_w, y, pad->w - pad->x - pad->in_w, h);
-    ret = ff_draw_slice(link->dst->outputs[0], y, h, slice_dir);
-    if (ret < 0)
-        return ret;
+                      pad->x + pad->in_w, pad->y, pad->w - pad->x - pad->in_w,
+                      in->height);
 
-    return draw_send_bar_slice(link, y, h, slice_dir, -1);
+    out->width  = pad->w;
+    out->height = pad->h;
+
+    if (in != out)
+        av_frame_free(&in);
+    return ff_filter_frame(inlink->dst->outputs[0], out);
 }
 
 static const AVFilterPad avfilter_vf_pad_inputs[] = {
@@ -440,9 +419,7 @@ static const AVFilterPad avfilter_vf_pad_inputs[] = {
         .type             = AVMEDIA_TYPE_VIDEO,
         .config_props     = config_input,
         .get_video_buffer = get_video_buffer,
-        .start_frame      = start_frame,
-        .draw_slice       = draw_slice,
-        .end_frame        = end_frame,
+        .filter_frame     = filter_frame,
     },
     { NULL }
 };

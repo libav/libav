@@ -189,7 +189,7 @@ static int set_params(AVFilterContext *ctx, const char *params)
         case F0R_PARAM_POSITION:
             v = &pos;
             frei0r->get_param_value(frei0r->instance, v, i);
-            av_log(ctx, AV_LOG_DEBUG, "%lf/%lf", pos.x, pos.y);
+            av_log(ctx, AV_LOG_DEBUG, "%f/%f", pos.x, pos.y);
             break;
         default: /* F0R_PARAM_STRING */
             v = s;
@@ -346,36 +346,34 @@ static int query_formats(AVFilterContext *ctx)
     return 0;
 }
 
-static int null_draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
-{
-    return 0;
-}
-
-static int end_frame(AVFilterLink *inlink)
+static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     Frei0rContext *frei0r = inlink->dst->priv;
     AVFilterLink *outlink = inlink->dst->outputs[0];
-    AVFilterBufferRef  *inpicref =  inlink->cur_buf;
-    AVFilterBufferRef *outpicref = outlink->out_buf;
-    int ret;
+    AVFrame *out;
 
-    frei0r->update(frei0r->instance, inpicref->pts * av_q2d(inlink->time_base) * 1000,
-                   (const uint32_t *)inpicref->data[0],
-                   (uint32_t *)outpicref->data[0]);
-    if ((ret = ff_draw_slice(outlink, 0, outlink->h, 1)) ||
-        (ret = ff_end_frame(outlink)) < 0)
-        return ret;
-    return 0;
+    out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+    if (!out) {
+        av_frame_free(&in);
+        return AVERROR(ENOMEM);
+    }
+    av_frame_copy_props(out, in);
+
+    frei0r->update(frei0r->instance, in->pts * av_q2d(inlink->time_base) * 1000,
+                   (const uint32_t *)in->data[0],
+                   (uint32_t *)out->data[0]);
+
+    av_frame_free(&in);
+
+    return ff_filter_frame(outlink, out);
 }
 
 static const AVFilterPad avfilter_vf_frei0r_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
-        .draw_slice   = null_draw_slice,
         .config_props = config_input_props,
-        .end_frame    = end_frame,
-        .min_perms    = AV_PERM_READ
+        .filter_frame = filter_frame,
     },
     { NULL }
 };
@@ -455,39 +453,18 @@ static int source_config_props(AVFilterLink *outlink)
 static int source_request_frame(AVFilterLink *outlink)
 {
     Frei0rContext *frei0r = outlink->src->priv;
-    AVFilterBufferRef *picref = ff_get_video_buffer(outlink, AV_PERM_WRITE, outlink->w, outlink->h);
-    AVFilterBufferRef *buf_out;
-    int ret;
+    AVFrame *frame = ff_get_video_buffer(outlink, outlink->w, outlink->h);
 
-    if (!picref)
+    if (!frame)
         return AVERROR(ENOMEM);
 
-    picref->video->pixel_aspect = (AVRational) {1, 1};
-    picref->pts = frei0r->pts++;
-    picref->pos = -1;
+    frame->sample_aspect_ratio = (AVRational) {1, 1};
+    frame->pts = frei0r->pts++;
 
-    buf_out = avfilter_ref_buffer(picref, ~0);
-    if (!buf_out) {
-        ret = AVERROR(ENOMEM);
-        goto fail;
-    }
+    frei0r->update(frei0r->instance, av_rescale_q(frame->pts, frei0r->time_base, (AVRational){1,1000}),
+                   NULL, (uint32_t *)frame->data[0]);
 
-    ret = ff_start_frame(outlink, buf_out);
-    if (ret < 0)
-        goto fail;
-
-    frei0r->update(frei0r->instance, av_rescale_q(picref->pts, frei0r->time_base, (AVRational){1,1000}),
-                   NULL, (uint32_t *)picref->data[0]);
-    ret = ff_draw_slice(outlink, 0, outlink->h, 1);
-    if (ret < 0)
-        goto fail;
-
-    ret = ff_end_frame(outlink);
-
-fail:
-    avfilter_unref_buffer(picref);
-
-    return ret;
+    return ff_filter_frame(outlink, frame);
 }
 
 static const AVFilterPad avfilter_vsrc_frei0r_src_outputs[] = {

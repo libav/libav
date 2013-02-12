@@ -6,17 +6,51 @@ libavcodec:    2012-01-27
 libavdevice:   2011-04-18
 libavfilter:   2012-06-22
 libavformat:   2012-01-27
-libavresample: 2012-04-24
+libavresample: 2012-10-05
 libswscale:    2011-06-20
-libavutil:     2011-04-18
+libavutil:     2012-10-22
 
 
 API changes, most recent first:
 
-2012-10-xx - xxxxxxx - lavf 54.18.0 - avio.h
+2013-01-xx - xxxxxxx - lavu 52.5.0 - hmac.h
+  Add AVHMAC.
+
+2013-01-13 - xxxxxxx - lavc 54.36.0 - vdpau.h
+  Add AVVDPAUContext struct for VDPAU hardware-accelerated decoding.
+
+2013-01-12 - 169fb94 - lavu 52.4.0 - pixdesc.h
+  Add AV_PIX_FMT_VDPAU flag.
+
+2013-01-07 - 074a00d - lavr 1.1.0
+  Add avresample_set_channel_mapping() for input channel reordering,
+  duplication, and silencing.
+
+2012-12-29 - d8fd06c - lavu 52.3.0 - avstring.h
+  Add av_basename() and av_dirname().
+
+2012-11-11 - 5980f5d - lavu 52.2.0 - audioconvert.h
+  Rename audioconvert.h to channel_layout.h. audioconvert.h is now deprecated.
+
+2012-11-05 - dfde8a3 - lavu 52.1.0 - intmath.h
+  Add av_ctz() for trailing zero bit count
+
+2012-10-21 - a893655 - lavu 51.45.0 - error.h
+  Add AVERROR_EXPERIMENTAL
+
+2012-10-12 - d2fcb35 - lavu 51.44.0 - pixdesc.h
+  Add functions for accessing pixel format descriptors.
+  Accessing the av_pix_fmt_descriptors array directly is now
+  deprecated.
+
+2012-10-11 - 9a92aea - lavu 51.43.0 - aes.h, md5.h, sha.h, tree.h
+  Add functions for allocating the opaque contexts for the algorithms,
+  deprecate the context size variables.
+
+2012-10-10 - b522000 - lavf 54.18.0 - avio.h
   Add avio_closep to complement avio_close.
 
-2012-10-xx - xxxxxxx - lavu 51.42.0 - pixfmt.h
+2012-10-08 - 78071a1 - lavu 51.42.0 - pixfmt.h
   Rename PixelFormat to AVPixelFormat and all PIX_FMT_* to AV_PIX_FMT_*.
   To provide backwards compatibility, PixelFormat is now #defined as
   AVPixelFormat.
@@ -163,6 +197,10 @@ API changes, most recent first:
 
 2012-04-05 - 5cc51a5 - lavu 51.26.0 - audioconvert.h
   Add av_get_default_channel_layout()
+
+2012-03-20 - 3c90cc2 - lavfo 54.2.0
+  Deprecate av_read_packet(), use av_read_frame() with
+  AVFMT_FLAG_NOPARSE | AVFMT_FLAG_NOFILLIN in AVFormatContext.flags
 
 2012-03-06 - 4d851f8 - lavu 51.25.0 - cpu.h
   Add av_set_cpu_flags_mask().

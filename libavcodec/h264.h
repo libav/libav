@@ -95,12 +95,6 @@
 #define IS_REF0(a)         ((a) & MB_TYPE_REF0)
 #define IS_8x8DCT(a)       ((a) & MB_TYPE_8x8DCT)
 
-/**
- * Value of Picture.reference when Picture is not a reference picture, but
- * is held for delayed output.
- */
-#define DELAYED_PIC_REF 4
-
 #define QP_MAX_NUM (51 + 2 * 6)           // The maximum supported qp
 
 /* NAL unit types */
@@ -118,7 +112,8 @@ enum {
     NAL_END_STREAM,
     NAL_FILLER_DATA,
     NAL_SPS_EXT,
-    NAL_AUXILIARY_SLICE = 19
+    NAL_AUXILIARY_SLICE = 19,
+    NAL_FF_IGNORE       = 0xff0f001,
 };
 
 /**
@@ -203,6 +198,7 @@ typedef struct SPS {
     int bit_depth_chroma;                 ///< bit_depth_chroma_minus8 + 8
     int residual_color_transform_flag;    ///< residual_colour_transform_flag
     int constraint_set_flags;             ///< constraint_set[0-3]_flag
+    int new;                              ///< flag to keep track if the decoder context needs re-init due to changed SPS
 } SPS;
 
 /**
@@ -329,6 +325,7 @@ typedef struct H264Context {
     int emu_edge_width;
     int emu_edge_height;
 
+    unsigned current_sps_id; ///< id of the current SPS
     SPS sps; ///< current sps
 
     /**
@@ -367,7 +364,7 @@ typedef struct H264Context {
     int direct_spatial_mv_pred;
     int col_parity;
     int col_fieldoff;
-    int dist_scale_factor[16];
+    int dist_scale_factor[32];
     int dist_scale_factor_field[2][32];
     int map_col_to_list0[2][16 + 32];
     int map_col_to_list0_field[2][2][16 + 32];
@@ -451,6 +448,8 @@ typedef struct H264Context {
     int nal_length_size;  ///< Number of bytes used for nal length (1, 2 or 4)
     int got_first;        ///< this flag is != 0 if we've parsed a frame
 
+    int context_reinitialized;
+
     SPS *sps_buffers[MAX_SPS_COUNT];
     PPS *pps_buffers[MAX_PPS_COUNT];
 
@@ -482,9 +481,9 @@ typedef struct H264Context {
 
     int redundant_pic_count;
 
+    Picture default_ref_list[2][32]; ///< base reference list for all slices of a coded picture
     Picture *short_ref[32];
     Picture *long_ref[32];
-    Picture default_ref_list[2][32]; ///< base reference list for all slices of a coded picture
     Picture *delayed_pic[MAX_DELAYED_PIC_COUNT + 2]; // FIXME size?
     int last_pocs[MAX_DELAYED_PIC_COUNT];
     Picture *next_output_pic;
@@ -578,6 +577,7 @@ typedef struct H264Context {
     int initial_cpb_removal_delay[32];  ///< Initial timestamps for CPBs
 
     int cur_chroma_format_idc;
+    uint8_t *bipred_scratchpad;
 } H264Context;
 
 extern const uint8_t ff_h264_chroma_qp[3][QP_MAX_NUM + 1]; ///< One chroma qp table for each supported bit depth (8, 9, 10).
@@ -645,9 +645,10 @@ void ff_h264_remove_all_refs(H264Context *h);
  */
 int ff_h264_execute_ref_pic_marking(H264Context *h, MMCO *mmco, int mmco_count);
 
-int ff_h264_decode_ref_pic_marking(H264Context *h, GetBitContext *gb);
+int ff_h264_decode_ref_pic_marking(H264Context *h, GetBitContext *gb,
+                                   int first_slice);
 
-void ff_generate_sliding_window_mmcos(H264Context *h);
+int ff_generate_sliding_window_mmcos(H264Context *h, int first_slice);
 
 /**
  * Check if the top & left blocks are available if needed & change the
@@ -833,7 +834,7 @@ static av_always_inline void write_back_motion_list(H264Context *h,
                                                     int b_xy, int b8_xy,
                                                     int mb_type, int list)
 {
-    int16_t(*mv_dst)[2] = &s->current_picture.f.motion_val[list][b_xy];
+    int16_t(*mv_dst)[2] = &s->current_picture.motion_val[list][b_xy];
     int16_t(*mv_src)[2] = &h->mv_cache[list][scan8[0]];
     AV_COPY128(mv_dst + 0 * b_stride, mv_src + 8 * 0);
     AV_COPY128(mv_dst + 1 * b_stride, mv_src + 8 * 1);
@@ -854,7 +855,7 @@ static av_always_inline void write_back_motion_list(H264Context *h,
     }
 
     {
-        int8_t *ref_index = &s->current_picture.f.ref_index[list][b8_xy];
+        int8_t *ref_index = &s->current_picture.ref_index[list][b8_xy];
         int8_t *ref_cache = h->ref_cache[list];
         ref_index[0 + 0 * 2] = ref_cache[scan8[0]];
         ref_index[1 + 0 * 2] = ref_cache[scan8[4]];
@@ -873,7 +874,7 @@ static av_always_inline void write_back_motion(H264Context *h, int mb_type)
     if (USES_LIST(mb_type, 0)) {
         write_back_motion_list(h, s, b_stride, b_xy, b8_xy, mb_type, 0);
     } else {
-        fill_rectangle(&s->current_picture.f.ref_index[0][b8_xy],
+        fill_rectangle(&s->current_picture.ref_index[0][b8_xy],
                        2, 2, 2, (uint8_t)LIST_NOT_USED, 1);
     }
     if (USES_LIST(mb_type, 1))

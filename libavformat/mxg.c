@@ -19,6 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/channel_layout.h"
 #include "libavutil/intreadwrite.h"
 #include "libavcodec/mjpeg.h"
 #include "avformat.h"
@@ -56,6 +57,7 @@ static int mxg_read_header(AVFormatContext *s)
     audio_st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
     audio_st->codec->codec_id = AV_CODEC_ID_PCM_ALAW;
     audio_st->codec->channels = 1;
+    audio_st->codec->channel_layout = AV_CH_LAYOUT_MONO;
     audio_st->codec->sample_rate = 8000;
     audio_st->codec->bits_per_coded_sample = 8;
     audio_st->codec->block_align = 1;
@@ -166,7 +168,10 @@ static int mxg_read_packet(AVFormatContext *s, AVPacket *pkt)
 
                 pkt->pts = pkt->dts = mxg->dts;
                 pkt->stream_index = 0;
+#if FF_API_DESTRUCT_PACKET
                 pkt->destruct = NULL;
+#endif
+                pkt->buf  = NULL;
                 pkt->size = mxg->buffer_ptr - mxg->soi_ptr;
                 pkt->data = mxg->soi_ptr;
 
@@ -204,7 +209,10 @@ static int mxg_read_packet(AVFormatContext *s, AVPacket *pkt)
                     /* time (GMT) of first sample in usec since 1970, little-endian */
                     pkt->pts = pkt->dts = AV_RL64(startmarker_ptr + 8);
                     pkt->stream_index = 1;
+#if FF_API_DESTRUCT_PACKET
                     pkt->destruct = NULL;
+#endif
+                    pkt->buf  = NULL;
                     pkt->size = size - 14;
                     pkt->data = startmarker_ptr + 16;
 

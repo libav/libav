@@ -20,11 +20,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/channel_layout.h"
 #include "libavutil/intreadwrite.h"
 #include "avformat.h"
 #include "internal.h"
 #include "pcm.h"
-#include "riff.h"
 #include "rso.h"
 
 static int rso_read_header(AVFormatContext *s)
@@ -50,7 +50,7 @@ static int rso_read_header(AVFormatContext *s)
     bps = av_get_bits_per_sample(codec);
     if (!bps) {
         av_log_ask_for_sample(s, "could not determine bits per sample\n");
-        return AVERROR_INVALIDDATA;
+        return AVERROR_PATCHWELCOME;
     }
 
     /* now we are ready: build format streams */
@@ -63,6 +63,7 @@ static int rso_read_header(AVFormatContext *s)
     st->codec->codec_tag    = id;
     st->codec->codec_id     = codec;
     st->codec->channels     = 1;
+    st->codec->channel_layout = AV_CH_LAYOUT_MONO;
     st->codec->sample_rate  = rate;
 
     avpriv_set_pts_info(st, 64, 1, rate);
