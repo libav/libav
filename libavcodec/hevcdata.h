@@ -23,9 +23,9 @@
 #ifndef AVCODEC_HEVCDATA_H
 #define AVCODEC_HEVCDATA_H
 
-static const uint8_t qpel_extra_before[3] = { 3, 3, 2 };
-static const uint8_t qpel_extra_after[3] = { 3, 4, 4 };
-static const uint8_t qpel_extra[3] = { 6, 7, 6 };
+static const uint8_t qpel_extra_before[4] = { 0, 3, 3, 2 };
+static const uint8_t qpel_extra_after[4] = { 0, 3, 4, 4 };
+static const uint8_t qpel_extra[4] = { 0, 6, 7, 6 };
 
 static const int epel_extra_before = 1;
 static const int epel_extra_after = 2;
@@ -283,6 +283,20 @@ static const int8_t transform[32][32] = {
      -9, 25, -43, 57, -70, 80, -87, 90, -90, 87, -80, 70, -57, 43, -25, 9 },
     { 4, -13, 22, -31, 38, -46, 54, -61, 67, -73, 78, -82, 85, -88, 90, -90,
      90, -90, 88, -85, 82, -78, 73, -67, 61, -54, 46, -38, 31, -22, 13, -4 },
+};
+
+static const uint8_t tctable[54] =
+{
+     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, // QP  0...18
+     1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, // QP 19...37
+     5, 5, 6, 6, 7, 8, 9,10,11,13,14,16,18,20,22,24           // QP 38...53
+};
+
+static const uint8_t betatable[52] =
+{
+     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6, 7, 8, // QP 0...18
+     9,10,11,12,13,14,15,16,17,18,20,22,24,26,28,30,32,34,36, // QP 19...37
+    38,40,42,44,46,48,50,52,54,56,58,60,62,64                 // QP 38...51
 };
 
 #endif /* AVCODEC_HEVCDATA_H */
