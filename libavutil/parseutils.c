@@ -107,8 +107,7 @@ int av_parse_video_size(int *width_ptr, int *height_ptr, const char *str)
         }
     }
     if (i == n) {
-        p = str;
-        width = strtol(p, &p, 10);
+        width = strtol(str, &p, 10);
         if (*p)
             p++;
         height = strtol(p, &p, 10);
@@ -499,7 +498,6 @@ int av_parse_time(int64_t *timeval, const char *timestr, int duration)
     char lastch;
     int negative = 0;
 
-#undef time
     time_t now = time(0);
 
     len = strlen(timestr);
@@ -644,14 +642,12 @@ int av_find_info_tag(char *arg, int arg_size, const char *tag1, const char *info
 
 #ifdef TEST
 
-#undef printf
-
 int main(void)
 {
     printf("Testing av_parse_video_rate()\n");
     {
         int i;
-        const char *rates[] = {
+        static const char *const rates[] = {
             "-inf",
             "inf",
             "nan",
@@ -681,8 +677,8 @@ int main(void)
 
         for (i = 0; i < FF_ARRAY_ELEMS(rates); i++) {
             int ret;
-            AVRational q = (AVRational){0, 0};
-            ret = av_parse_video_rate(&q, rates[i]),
+            AVRational q = { 0, 0 };
+            ret = av_parse_video_rate(&q, rates[i]);
             printf("'%s' -> %d/%d %s\n",
                    rates[i], q.num, q.den, ret ? "ERROR" : "OK");
         }
@@ -692,7 +688,7 @@ int main(void)
     {
         int i;
         uint8_t rgba[4];
-        const char *color_names[] = {
+        static const char *const color_names[] = {
             "foo",
             "red",
             "Red ",
@@ -733,7 +729,8 @@ int main(void)
 
         for (i = 0;  i < FF_ARRAY_ELEMS(color_names); i++) {
             if (av_parse_color(rgba, color_names[i], -1, NULL) >= 0)
-                printf("%s -> R(%d) G(%d) B(%d) A(%d)\n", color_names[i], rgba[0], rgba[1], rgba[2], rgba[3]);
+                printf("%s -> R(%d) G(%d) B(%d) A(%d)\n",
+                       color_names[i], rgba[0], rgba[1], rgba[2], rgba[3]);
         }
     }
 

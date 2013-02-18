@@ -34,10 +34,12 @@
  *       respectively of each byte are ignored.
  */
 
+#include "libavutil/channel_layout.h"
+#include "libavutil/opt.h"
 #include "avcodec.h"
 #include "get_bits.h"
 #include "g722.h"
-#include "libavutil/opt.h"
+#include "internal.h"
 
 #define OFFSET(x) offsetof(G722Context, x)
 #define AD AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_DECODING_PARAM
@@ -57,11 +59,9 @@ static av_cold int g722_decode_init(AVCodecContext * avctx)
 {
     G722Context *c = avctx->priv_data;
 
-    if (avctx->channels != 1) {
-        av_log(avctx, AV_LOG_ERROR, "Only mono tracks are allowed.\n");
-        return AVERROR_INVALIDDATA;
-    }
-    avctx->sample_fmt = AV_SAMPLE_FMT_S16;
+    avctx->channels       = 1;
+    avctx->channel_layout = AV_CH_LAYOUT_MONO;
+    avctx->sample_fmt     = AV_SAMPLE_FMT_S16;
 
     c->band[0].scale_factor = 8;
     c->band[1].scale_factor = 2;
@@ -96,7 +96,7 @@ static int g722_decode_frame(AVCodecContext *avctx, void *data,
 
     /* get output buffer */
     c->frame.nb_samples = avpkt->size * 2;
-    if ((ret = avctx->get_buffer(avctx, &c->frame)) < 0) {
+    if ((ret = ff_get_buffer(avctx, &c->frame, 0)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }

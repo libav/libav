@@ -37,6 +37,7 @@
 
 #include "avcodec.h"
 #include "bytestream.h"
+#include "internal.h"
 
 typedef struct QtrleContext {
     AVCodecContext *avctx;
@@ -382,21 +383,19 @@ static av_cold int qtrle_decode_init(AVCodecContext *avctx)
 }
 
 static int qtrle_decode_frame(AVCodecContext *avctx,
-                              void *data, int *data_size,
+                              void *data, int *got_frame,
                               AVPacket *avpkt)
 {
     QtrleContext *s = avctx->priv_data;
     int header, start_line;
     int height, row_ptr;
     int has_palette = 0;
+    int ret;
 
     bytestream2_init(&s->g, avpkt->data, avpkt->size);
-    s->frame.reference = 1;
-    s->frame.buffer_hints = FF_BUFFER_HINTS_VALID | FF_BUFFER_HINTS_PRESERVE |
-                            FF_BUFFER_HINTS_REUSABLE | FF_BUFFER_HINTS_READABLE;
-    if (avctx->reget_buffer(avctx, &s->frame)) {
+    if ((ret = ff_reget_buffer(avctx, &s->frame)) < 0) {
         av_log (s->avctx, AV_LOG_ERROR, "reget_buffer() failed\n");
-        return -1;
+        return ret;
     }
 
     /* check if this frame is even supposed to change */
@@ -478,8 +477,9 @@ static int qtrle_decode_frame(AVCodecContext *avctx,
     }
 
 done:
-    *data_size = sizeof(AVFrame);
-    *(AVFrame*)data = s->frame;
+    if ((ret = av_frame_ref(data, &s->frame)) < 0)
+        return ret;
+    *got_frame      = 1;
 
     /* always report that the buffer was completely consumed */
     return avpkt->size;
@@ -489,8 +489,7 @@ static av_cold int qtrle_decode_end(AVCodecContext *avctx)
 {
     QtrleContext *s = avctx->priv_data;
 
-    if (s->frame.data[0])
-        avctx->release_buffer(avctx, &s->frame);
+    av_frame_unref(&s->frame);
 
     return 0;
 }

@@ -23,7 +23,6 @@
 #include "libavutil/mathematics.h"
 #include "avformat.h"
 #include "internal.h"
-#include "riff.h"
 #include "libavutil/dict.h"
 
 //#define DEBUG_DUMP_INDEX // XXX dumbdriving-271.nsv breaks with it commented!!
@@ -253,7 +252,7 @@ static int nsv_resync(AVFormatContext *s)
             nsv->state = NSV_FOUND_BEEF;
             return 0;
         }
-        /* we read as big endian, thus the MK*BE* */
+        /* we read as big-endian, thus the MK*BE* */
         if (v == TB_NSVF) { /* NSVf */
             av_dlog(s, "NSV resynced on NSVf after %d bytes\n", i+1);
             nsv->state = NSV_FOUND_NSVF;

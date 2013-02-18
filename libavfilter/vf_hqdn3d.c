@@ -236,7 +236,7 @@ static int init(AVFilterContext *ctx, const char *args)
     hqdn3d->strength[2] = chrom_spac;
     hqdn3d->strength[3] = chrom_tmp;
 
-    av_log(ctx, AV_LOG_VERBOSE, "ls:%lf cs:%lf lt:%lf ct:%lf\n",
+    av_log(ctx, AV_LOG_VERBOSE, "ls:%f cs:%f lt:%f ct:%f\n",
            lum_spac, chrom_spac, lum_tmp, chrom_tmp);
     if (lum_spac < 0 || chrom_spac < 0 || isnan(chrom_tmp)) {
         av_log(ctx, AV_LOG_ERROR,
@@ -295,11 +295,12 @@ static int query_formats(AVFilterContext *ctx)
 static int config_input(AVFilterLink *inlink)
 {
     HQDN3DContext *hqdn3d = inlink->dst->priv;
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(inlink->format);
     int i;
 
-    hqdn3d->hsub = av_pix_fmt_descriptors[inlink->format].log2_chroma_w;
-    hqdn3d->vsub = av_pix_fmt_descriptors[inlink->format].log2_chroma_h;
-    hqdn3d->depth = av_pix_fmt_descriptors[inlink->format].comp[0].depth_minus1+1;
+    hqdn3d->hsub  = desc->log2_chroma_w;
+    hqdn3d->vsub  = desc->log2_chroma_h;
+    hqdn3d->depth = desc->comp[0].depth_minus1+1;
 
     hqdn3d->line = av_malloc(inlink->w * sizeof(*hqdn3d->line));
     if (!hqdn3d->line)
@@ -321,42 +322,49 @@ static int config_input(AVFilterLink *inlink)
     return 0;
 }
 
-static int null_draw_slice(AVFilterLink *link, int y, int h, int slice_dir)
-{
-    return 0;
-}
-
-static int end_frame(AVFilterLink *inlink)
+static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     HQDN3DContext *hqdn3d = inlink->dst->priv;
     AVFilterLink *outlink = inlink->dst->outputs[0];
-    AVFilterBufferRef *inpic  = inlink ->cur_buf;
-    AVFilterBufferRef *outpic = outlink->out_buf;
-    int ret, c;
+    AVFrame *out;
+    int direct, c;
+
+    if (av_frame_is_writable(in)) {
+        direct = 1;
+        out = in;
+    } else {
+        out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+        if (!out) {
+            av_frame_free(&in);
+            return AVERROR(ENOMEM);
+        }
+
+        av_frame_copy_props(out, in);
+        out->width  = outlink->w;
+        out->height = outlink->h;
+    }
 
     for (c = 0; c < 3; c++) {
-        denoise(hqdn3d, inpic->data[c], outpic->data[c],
+        denoise(hqdn3d, in->data[c], out->data[c],
                 hqdn3d->line, &hqdn3d->frame_prev[c],
-                inpic->video->w >> (!!c * hqdn3d->hsub),
-                inpic->video->h >> (!!c * hqdn3d->vsub),
-                inpic->linesize[c], outpic->linesize[c],
+                in->width  >> (!!c * hqdn3d->hsub),
+                in->height >> (!!c * hqdn3d->vsub),
+                in->linesize[c], out->linesize[c],
                 hqdn3d->coefs[c?2:0], hqdn3d->coefs[c?3:1]);
     }
 
-    if ((ret = ff_draw_slice(outlink, 0, inpic->video->h, 1)) < 0 ||
-        (ret = ff_end_frame(outlink)) < 0)
-        return ret;
-    return 0;
+    if (!direct)
+        av_frame_free(&in);
+
+    return ff_filter_frame(outlink, out);
 }
 
 static const AVFilterPad avfilter_vf_hqdn3d_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
-        .start_frame  = ff_inplace_start_frame,
-        .draw_slice   = null_draw_slice,
         .config_props = config_input,
-        .end_frame    = end_frame
+        .filter_frame = filter_frame,
     },
     { NULL }
 };

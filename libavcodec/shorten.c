@@ -31,6 +31,7 @@
 #include "bytestream.h"
 #include "get_bits.h"
 #include "golomb.h"
+#include "internal.h"
 
 #define MAX_CHANNELS 8
 #define MAX_BLOCKSIZE 65535
@@ -112,7 +113,7 @@ static av_cold int shorten_decode_init(AVCodecContext * avctx)
 {
     ShortenContext *s = avctx->priv_data;
     s->avctx = avctx;
-    avctx->sample_fmt = AV_SAMPLE_FMT_S16;
+    avctx->sample_fmt = AV_SAMPLE_FMT_S16P;
 
     avcodec_get_frame_defaults(&s->frame);
     avctx->coded_frame = &s->frame;
@@ -259,13 +260,16 @@ static int decode_wave_header(AVCodecContext *avctx, const uint8_t *header,
     return 0;
 }
 
-static void interleave_buffer(int16_t *samples, int nchan, int blocksize,
-                              int32_t **buffer)
+static void output_buffer(int16_t **samples, int nchan, int blocksize,
+                          int32_t **buffer)
 {
-    int i, chan;
-    for (i=0; i<blocksize; i++)
-        for (chan=0; chan < nchan; chan++)
-            *samples++ = av_clip_int16(buffer[chan][i]);
+    int i, ch;
+    for (ch = 0; ch < nchan; ch++) {
+        int32_t *in  = buffer[ch];
+        int16_t *out = samples[ch];
+        for (i = 0; i < blocksize; i++)
+            out[i] = av_clip_int16(in[i]);
+    }
 }
 
 static const int fixed_coeffs[3][3] = {
@@ -339,7 +343,7 @@ static int read_header(ShortenContext *s)
     s->internal_ftype = get_uint(s, TYPESIZE);
 
     s->channels = get_uint(s, CHANSIZE);
-    if (s->channels > MAX_CHANNELS) {
+    if (s->channels <= 0 || s->channels > MAX_CHANNELS) {
         av_log(s->avctx, AV_LOG_ERROR, "too many channels: %d\n", s->channels);
         return -1;
     }
@@ -524,7 +528,8 @@ static int shorten_decode_frame(AVCodecContext *avctx, void *data,
             /* get Rice code for residual decoding */
             if (cmd != FN_ZERO) {
                 residual_size = get_ur_golomb_shorten(&s->gb, ENERGYSIZE);
-                /* this is a hack as version 0 differed in defintion of get_sr_golomb_shorten */
+                /* This is a hack as version 0 differed in the definition
+                 * of get_sr_golomb_shorten(). */
                 if (s->version == 0)
                     residual_size--;
             }
@@ -578,13 +583,13 @@ static int shorten_decode_frame(AVCodecContext *avctx, void *data,
             if (s->cur_chan == s->channels) {
                 /* get output buffer */
                 s->frame.nb_samples = s->blocksize;
-                if ((ret = avctx->get_buffer(avctx, &s->frame)) < 0) {
+                if ((ret = ff_get_buffer(avctx, &s->frame, 0)) < 0) {
                     av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
                     return ret;
                 }
                 /* interleave output */
-                interleave_buffer((int16_t *)s->frame.data[0], s->channels,
-                                  s->blocksize, s->decoded);
+                output_buffer((int16_t **)s->frame.extended_data, s->channels,
+                              s->blocksize, s->decoded);
 
                 *got_frame_ptr   = 1;
                 *(AVFrame *)data = s->frame;
@@ -637,4 +642,6 @@ AVCodec ff_shorten_decoder = {
     .decode         = shorten_decode_frame,
     .capabilities   = CODEC_CAP_DELAY | CODEC_CAP_DR1,
     .long_name      = NULL_IF_CONFIG_SMALL("Shorten"),
+    .sample_fmts    = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_S16P,
+                                                      AV_SAMPLE_FMT_NONE },
 };

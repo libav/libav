@@ -70,12 +70,10 @@ static void xiph_free_context(PayloadContext * data)
     av_free(data);
 }
 
-static int xiph_handle_packet(AVFormatContext * ctx,
-                              PayloadContext * data,
-                              AVStream * st,
-                              AVPacket * pkt,
-                              uint32_t * timestamp,
-                              const uint8_t * buf, int len, int flags)
+static int xiph_handle_packet(AVFormatContext *ctx, PayloadContext *data,
+                              AVStream *st, AVPacket *pkt, uint32_t *timestamp,
+                              const uint8_t *buf, int len, uint16_t seq,
+                              int flags)
 {
 
     int ident, fragmented, tdt, num_pkts, pkt_len;
@@ -202,19 +200,12 @@ static int xiph_handle_packet(AVFormatContext * ctx,
 
         if (fragmented == 3) {
             // end of xiph data packet
-            av_init_packet(pkt);
-            pkt->size = avio_close_dyn_buf(data->fragment, &pkt->data);
-
-            if (pkt->size < 0) {
+            int ret = ff_rtp_finalize_packet(pkt, &data->fragment, st->index);
+            if (ret < 0) {
                 av_log(ctx, AV_LOG_ERROR,
                        "Error occurred when getting fragment buffer.");
-                return pkt->size;
+                return ret;
             }
-
-            pkt->stream_index = st->index;
-            pkt->destruct = av_destruct_packet;
-
-            data->fragment = NULL;
 
             return 0;
         }
@@ -243,7 +234,7 @@ static int get_base128(const uint8_t ** buf, const uint8_t * buf_end)
 /**
  * Based off parse_packed_headers in Vorbis RTP
  */
-static unsigned int
+static int
 parse_packed_headers(const uint8_t * packed_headers,
                      const uint8_t * packed_headers_end,
                      AVCodecContext * codec, PayloadContext * xiph_data)

@@ -89,7 +89,7 @@ static inline int get_block_rate(MpegEncContext * s, DCTELEM block[64], int bloc
  * @param[in,out] block MB coefficients, these will be restored
  * @param[in] dir ac prediction direction for each 8x8 block
  * @param[out] st scantable for each 8x8 block
- * @param[in] zigzag_last_index index refering to the last non zero coefficient in zigzag order
+ * @param[in] zigzag_last_index index referring to the last non zero coefficient in zigzag order
  */
 static inline void restore_ac_coeffs(MpegEncContext * s, DCTELEM block[6][64], const int dir[6], uint8_t *st[6], const int zigzag_last_index[6])
 {
@@ -120,13 +120,13 @@ static inline void restore_ac_coeffs(MpegEncContext * s, DCTELEM block[6][64], c
  * @param[in,out] block MB coefficients, these will be updated if 1 is returned
  * @param[in] dir ac prediction direction for each 8x8 block
  * @param[out] st scantable for each 8x8 block
- * @param[out] zigzag_last_index index refering to the last non zero coefficient in zigzag order
+ * @param[out] zigzag_last_index index referring to the last non zero coefficient in zigzag order
  */
 static inline int decide_ac_pred(MpegEncContext * s, DCTELEM block[6][64], const int dir[6], uint8_t *st[6], int zigzag_last_index[6])
 {
     int score= 0;
     int i, n;
-    int8_t * const qscale_table = s->current_picture.f.qscale_table;
+    int8_t * const qscale_table = s->current_picture.qscale_table;
 
     memcpy(zigzag_last_index, s->block_last_index, sizeof(int)*6);
 
@@ -203,7 +203,7 @@ static inline int decide_ac_pred(MpegEncContext * s, DCTELEM block[6][64], const
  */
 void ff_clean_mpeg4_qscales(MpegEncContext *s){
     int i;
-    int8_t * const qscale_table = s->current_picture.f.qscale_table;
+    int8_t * const qscale_table = s->current_picture.qscale_table;
 
     ff_clean_h263_qscales(s);
 
@@ -499,7 +499,7 @@ void ff_mpeg4_encode_mb(MpegEncContext * s,
             assert(mb_type>=0);
 
             /* nothing to do if this MB was skipped in the next P Frame */
-            if (s->next_picture.f.mbskip_table[s->mb_y * s->mb_stride + s->mb_x]) { //FIXME avoid DCT & ...
+            if (s->next_picture.mbskip_table[s->mb_y * s->mb_stride + s->mb_x]) { //FIXME avoid DCT & ...
                 s->skip_count++;
                 s->mv[0][0][0]=
                 s->mv[0][0][1]=
@@ -643,7 +643,7 @@ void ff_mpeg4_encode_mb(MpegEncContext * s,
                             break;
 
                         b_pic = pic->f.data[0] + offset;
-                        if (pic->f.type != FF_BUFFER_TYPE_SHARED)
+                        if (!pic->shared)
                             b_pic+= INPLACE_OFFSET;
                         diff= s->dsp.sad[0](NULL, p_pic, b_pic, s->linesize, 16);
                         if(diff>s->qscale*70){ //FIXME check that 70 is optimal
@@ -747,8 +747,8 @@ void ff_mpeg4_encode_mb(MpegEncContext * s,
                     /* motion vectors: 8x8 mode*/
                     ff_h263_pred_motion(s, i, 0, &pred_x, &pred_y);
 
-                    ff_h263_encode_motion_vector(s, s->current_picture.f.motion_val[0][ s->block_index[i] ][0] - pred_x,
-                                                    s->current_picture.f.motion_val[0][ s->block_index[i] ][1] - pred_y, s->f_code);
+                    ff_h263_encode_motion_vector(s, s->current_picture.motion_val[0][ s->block_index[i] ][0] - pred_x,
+                                                    s->current_picture.motion_val[0][ s->block_index[i] ][1] - pred_y, s->f_code);
                 }
             }
 

@@ -26,7 +26,7 @@
 //#include "libavutil/adler32.h"
 //#include "libavcodec/mpegaudio.h"
 #include "avformat.h"
-#include "riff.h"
+#include "internal.h"
 #include "metadata.h"
 
 #define      MAIN_STARTCODE (0x7A561F5F04ADULL + (((uint64_t)('N'<<8) + 'M')<<48))
@@ -105,6 +105,10 @@ typedef struct NUTContext {
 
 extern const AVCodecTag ff_nut_subtitle_tags[];
 extern const AVCodecTag ff_nut_video_tags[];
+extern const AVCodecTag ff_nut_audio_tags[];
+extern const AVCodecTag ff_nut_data_tags[];
+
+extern const AVCodecTag * const ff_nut_codec_tags[];
 
 typedef struct Dispositions {
     char str[9];

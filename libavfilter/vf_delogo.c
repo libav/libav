@@ -80,11 +80,11 @@ static void apply_delogo(uint8_t *dst, int dst_linesize,
     topright = src+logo_y1     * src_linesize+logo_x2-1;
     botleft  = src+(logo_y2-1) * src_linesize+logo_x1;
 
-    dst += (logo_y1+1)*dst_linesize;
-    src += (logo_y1+1)*src_linesize;
-
     if (!direct)
         av_image_copy_plane(dst, dst_linesize, src, src_linesize, w, h);
+
+    dst += (logo_y1 + 1) * dst_linesize;
+    src += (logo_y1 + 1) * src_linesize;
 
     for (y = logo_y1+1; y < logo_y2-1; y++) {
         for (x = logo_x1+1,
@@ -215,29 +215,38 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
     return 0;
 }
 
-static int null_draw_slice(AVFilterLink *link, int y, int h, int slice_dir)
-{
-    return 0;
-}
-
-static int end_frame(AVFilterLink *inlink)
+static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     DelogoContext *delogo = inlink->dst->priv;
     AVFilterLink *outlink = inlink->dst->outputs[0];
-    AVFilterBufferRef *inpicref  = inlink ->cur_buf;
-    AVFilterBufferRef *outpicref = outlink->out_buf;
-    int direct = inpicref->buf == outpicref->buf;
-    int hsub0 = av_pix_fmt_descriptors[inlink->format].log2_chroma_w;
-    int vsub0 = av_pix_fmt_descriptors[inlink->format].log2_chroma_h;
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(inlink->format);
+    AVFrame *out;
+    int hsub0 = desc->log2_chroma_w;
+    int vsub0 = desc->log2_chroma_h;
+    int direct = 0;
     int plane;
-    int ret;
 
-    for (plane = 0; plane < 4 && inpicref->data[plane]; plane++) {
+    if (av_frame_is_writable(in)) {
+        direct = 1;
+        out = in;
+    } else {
+        out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+        if (!out) {
+            av_frame_free(&in);
+            return AVERROR(ENOMEM);
+        }
+
+        av_frame_copy_props(out, in);
+        out->width  = outlink->w;
+        out->height = outlink->h;
+    }
+
+    for (plane = 0; plane < 4 && in->data[plane]; plane++) {
         int hsub = plane == 1 || plane == 2 ? hsub0 : 0;
         int vsub = plane == 1 || plane == 2 ? vsub0 : 0;
 
-        apply_delogo(outpicref->data[plane], outpicref->linesize[plane],
-                     inpicref ->data[plane], inpicref ->linesize[plane],
+        apply_delogo(out->data[plane], out->linesize[plane],
+                     in ->data[plane], in ->linesize[plane],
                      inlink->w>>hsub, inlink->h>>vsub,
                      delogo->x>>hsub, delogo->y>>vsub,
                      delogo->w>>hsub, delogo->h>>vsub,
@@ -245,10 +254,10 @@ static int end_frame(AVFilterLink *inlink)
                      delogo->show, direct);
     }
 
-    if ((ret = ff_draw_slice(outlink, 0, inlink->h, 1)) < 0 ||
-        (ret = ff_end_frame(outlink)) < 0)
-        return ret;
-    return 0;
+    if (!direct)
+        av_frame_free(&in);
+
+    return ff_filter_frame(outlink, out);
 }
 
 static const AVFilterPad avfilter_vf_delogo_inputs[] = {
@@ -256,11 +265,7 @@ static const AVFilterPad avfilter_vf_delogo_inputs[] = {
         .name             = "default",
         .type             = AVMEDIA_TYPE_VIDEO,
         .get_video_buffer = ff_null_get_video_buffer,
-        .start_frame      = ff_inplace_start_frame,
-        .draw_slice       = null_draw_slice,
-        .end_frame        = end_frame,
-        .min_perms        = AV_PERM_WRITE | AV_PERM_READ,
-        .rej_perms        = AV_PERM_PRESERVE
+        .filter_frame     = filter_frame,
     },
     { NULL }
 };

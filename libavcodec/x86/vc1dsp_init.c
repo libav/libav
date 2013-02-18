@@ -49,7 +49,7 @@ static void vc1_h_loop_filter16_ ## EXT(uint8_t *src, int stride, int pq) \
 }
 
 #if HAVE_YASM
-LOOP_FILTER(mmx2)
+LOOP_FILTER(mmxext)
 LOOP_FILTER(sse2)
 LOOP_FILTER(ssse3)
 
@@ -62,15 +62,15 @@ static void vc1_h_loop_filter16_sse4(uint8_t *src, int stride, int pq)
 }
 #endif /* HAVE_YASM */
 
-void ff_put_vc1_chroma_mc8_mmx_nornd  (uint8_t *dst, uint8_t *src,
+void ff_put_vc1_chroma_mc8_nornd_mmx  (uint8_t *dst, uint8_t *src,
                                        int stride, int h, int x, int y);
-void ff_avg_vc1_chroma_mc8_mmx2_nornd (uint8_t *dst, uint8_t *src,
+void ff_avg_vc1_chroma_mc8_nornd_mmxext(uint8_t *dst, uint8_t *src,
+                                        int stride, int h, int x, int y);
+void ff_avg_vc1_chroma_mc8_nornd_3dnow(uint8_t *dst, uint8_t *src,
                                        int stride, int h, int x, int y);
-void ff_avg_vc1_chroma_mc8_3dnow_nornd(uint8_t *dst, uint8_t *src,
+void ff_put_vc1_chroma_mc8_nornd_ssse3(uint8_t *dst, uint8_t *src,
                                        int stride, int h, int x, int y);
-void ff_put_vc1_chroma_mc8_ssse3_nornd(uint8_t *dst, uint8_t *src,
-                                       int stride, int h, int x, int y);
-void ff_avg_vc1_chroma_mc8_ssse3_nornd(uint8_t *dst, uint8_t *src,
+void ff_avg_vc1_chroma_mc8_nornd_ssse3(uint8_t *dst, uint8_t *src,
                                        int stride, int h, int x, int y);
 
 
@@ -94,14 +94,14 @@ av_cold void ff_vc1dsp_init_x86(VC1DSPContext *dsp)
 
 #if HAVE_YASM
     if (mm_flags & AV_CPU_FLAG_MMX) {
-        dsp->put_no_rnd_vc1_chroma_pixels_tab[0]= ff_put_vc1_chroma_mc8_mmx_nornd;
+        dsp->put_no_rnd_vc1_chroma_pixels_tab[0] = ff_put_vc1_chroma_mc8_nornd_mmx;
     }
 
     if (mm_flags & AV_CPU_FLAG_MMXEXT) {
-        ASSIGN_LF(mmx2);
-        dsp->avg_no_rnd_vc1_chroma_pixels_tab[0]= ff_avg_vc1_chroma_mc8_mmx2_nornd;
+        ASSIGN_LF(mmxext);
+        dsp->avg_no_rnd_vc1_chroma_pixels_tab[0] = ff_avg_vc1_chroma_mc8_nornd_mmxext;
     } else if (mm_flags & AV_CPU_FLAG_3DNOW) {
-        dsp->avg_no_rnd_vc1_chroma_pixels_tab[0]= ff_avg_vc1_chroma_mc8_3dnow_nornd;
+        dsp->avg_no_rnd_vc1_chroma_pixels_tab[0] = ff_avg_vc1_chroma_mc8_nornd_3dnow;
     }
 
     if (mm_flags & AV_CPU_FLAG_SSE2) {
@@ -112,8 +112,8 @@ av_cold void ff_vc1dsp_init_x86(VC1DSPContext *dsp)
     }
     if (mm_flags & AV_CPU_FLAG_SSSE3) {
         ASSIGN_LF(ssse3);
-        dsp->put_no_rnd_vc1_chroma_pixels_tab[0]= ff_put_vc1_chroma_mc8_ssse3_nornd;
-        dsp->avg_no_rnd_vc1_chroma_pixels_tab[0]= ff_avg_vc1_chroma_mc8_ssse3_nornd;
+        dsp->put_no_rnd_vc1_chroma_pixels_tab[0] = ff_put_vc1_chroma_mc8_nornd_ssse3;
+        dsp->avg_no_rnd_vc1_chroma_pixels_tab[0] = ff_avg_vc1_chroma_mc8_nornd_ssse3;
     }
     if (mm_flags & AV_CPU_FLAG_SSE4) {
         dsp->vc1_h_loop_filter8  = ff_vc1_h_loop_filter8_sse4;

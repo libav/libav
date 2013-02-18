@@ -25,7 +25,7 @@
 
 #include "avcodec.h"
 #include "cabac.h"
-#include "dsputil.h"
+#include "videodsp.h"
 #include "get_bits.h"
 #include "hevcpred.h"
 #include "hevcdsp.h"
@@ -645,12 +645,12 @@ typedef struct SAOParams {
 
 typedef struct HEVCContext {
     AVCodecContext *avctx;
-    AVFrame frame;
-    AVFrame sao_frame;
+    AVFrame *frame;
+    AVFrame *sao_frame;
 
     HEVCPredContext hpc;
     HEVCDSPContext hevcdsp;
-    DSPContext dsp;
+    VideoDSPContext vdsp;
 
     GetBitContext gb;
     CABACContext cc;

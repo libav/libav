@@ -33,6 +33,7 @@
 /* Libav includes */
 #include "libavutil/common.h"
 #include "libavutil/intreadwrite.h"
+#include "libavutil/pixdesc.h"
 #include "libavutil/log.h"
 #include "libavutil/base64.h"
 #include "avcodec.h"
@@ -197,7 +198,8 @@ static av_cold int encode_init(AVCodecContext* avc_context)
         av_log(avc_context, AV_LOG_ERROR, "Unsupported pix_fmt\n");
         return -1;
     }
-    avcodec_get_chroma_sub_sample(avc_context->pix_fmt, &h->uv_hshift, &h->uv_vshift);
+    av_pix_fmt_get_chroma_sub_sample(avc_context->pix_fmt,
+                                     &h->uv_hshift, &h->uv_vshift);
 
     if (avc_context->flags & CODEC_FLAG_QSCALE) {
         /* to be constant with the libvorbis implementation, clip global_quality to 0 - 10
@@ -205,7 +207,7 @@ static av_cold int encode_init(AVCodecContext* avc_context)
                 * 0 <= p <=63
                 * an int value
          */
-        t_info.quality        = av_clip(avc_context->global_quality / (float)FF_QP2LAMBDA, 0, 10) * 6.3;
+        t_info.quality        = av_clipf(avc_context->global_quality / (float)FF_QP2LAMBDA, 0, 10) * 6.3;
         t_info.target_bitrate = 0;
     } else {
         t_info.target_bitrate = avc_context->bit_rate;
@@ -336,7 +338,7 @@ static int encode_frame(AVCodecContext* avc_context, AVPacket *pkt,
     memcpy(pkt->data, o_packet.packet, o_packet.bytes);
 
     // HACK: assumes no encoder delay, this is true until libtheora becomes
-    // multithreaded (which will be disabled unless explictly requested)
+    // multithreaded (which will be disabled unless explicitly requested)
     pkt->pts = pkt->dts = frame->pts;
     avc_context->coded_frame->key_frame = !(o_packet.granulepos & h->keyframe_mask);
     if (avc_context->coded_frame->key_frame)

@@ -21,10 +21,8 @@ do_video_filter() {
 }
 
 do_lavfi() {
-    vfilters="slicify=random,$2"
-
     if [ $test = $1 ] ; then
-        do_video_filter $test "$vfilters"
+        do_video_filter $test "$2"
     fi
 }
 
@@ -49,12 +47,12 @@ do_lavfi_pixfmts(){
     out_fmts=${outfile}${1}_out_fmts
 
     # exclude pixel formats which are not supported as input
-    $avconv -pix_fmts list 2>/dev/null | sed -ne '9,$p' | grep '^\..\.' | cut -d' ' -f2 | sort >$exclude_fmts
+    $avconv -pix_fmts list 2>/dev/null | awk 'NR > 8 && /^\..\./ { print $2 }' | sort >$exclude_fmts
     $showfiltfmts scale | awk -F '[ \r]' '/^OUTPUT/{ print $3 }' | sort | comm -23 - $exclude_fmts >$out_fmts
 
     pix_fmts=$($showfiltfmts $filter | awk -F '[ \r]' '/^INPUT/{ print $3 }' | sort | comm -12 - $out_fmts)
     for pix_fmt in $pix_fmts; do
-        do_video_filter $pix_fmt "slicify=random,format=$pix_fmt,$filter=$filter_args" -pix_fmt $pix_fmt
+        do_video_filter $pix_fmt "format=$pix_fmt,$filter=$filter_args" -pix_fmt $pix_fmt
     done
 
     rm $exclude_fmts $out_fmts
@@ -70,9 +68,9 @@ do_lavfi_pixfmts "scale"   "200:100"
 do_lavfi_pixfmts "vflip"   ""
 
 if [ -n "$do_pixdesc" ]; then
-    pix_fmts="$($avconv -pix_fmts list 2>/dev/null | sed -ne '9,$p' | grep '^IO' | cut -d' ' -f2 | sort)"
+    pix_fmts="$($avconv -pix_fmts list 2>/dev/null | awk 'NR > 8 && /^IO/ { print $2 }' | sort)"
     for pix_fmt in $pix_fmts; do
-        do_video_filter $pix_fmt "slicify=random,format=$pix_fmt,pixdesctest" -pix_fmt $pix_fmt
+        do_video_filter $pix_fmt "format=$pix_fmt,pixdesctest" -pix_fmt $pix_fmt
     done
 fi
 

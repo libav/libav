@@ -23,7 +23,7 @@
  * Split an audio stream into per-channel streams.
  */
 
-#include "libavutil/audioconvert.h"
+#include "libavutil/channel_layout.h"
 #include "libavutil/internal.h"
 #include "libavutil/opt.h"
 
@@ -111,13 +111,13 @@ static int query_formats(AVFilterContext *ctx)
     return 0;
 }
 
-static int filter_samples(AVFilterLink *inlink, AVFilterBufferRef *buf)
+static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
 {
     AVFilterContext *ctx = inlink->dst;
     int i, ret = 0;
 
     for (i = 0; i < ctx->nb_outputs; i++) {
-        AVFilterBufferRef *buf_out = avfilter_ref_buffer(buf, ~AV_PERM_WRITE);
+        AVFrame *buf_out = av_frame_clone(buf);
 
         if (!buf_out) {
             ret = AVERROR(ENOMEM);
@@ -125,14 +125,14 @@ static int filter_samples(AVFilterLink *inlink, AVFilterBufferRef *buf)
         }
 
         buf_out->data[0] = buf_out->extended_data[0] = buf_out->extended_data[i];
-        buf_out->audio->channel_layout =
-            av_channel_layout_extract_channel(buf->audio->channel_layout, i);
+        buf_out->channel_layout =
+            av_channel_layout_extract_channel(buf->channel_layout, i);
 
-        ret = ff_filter_samples(ctx->outputs[i], buf_out);
+        ret = ff_filter_frame(ctx->outputs[i], buf_out);
         if (ret < 0)
             break;
     }
-    avfilter_unref_buffer(buf);
+    av_frame_free(&buf);
     return ret;
 }
 
@@ -140,7 +140,7 @@ static const AVFilterPad avfilter_af_channelsplit_inputs[] = {
     {
         .name           = "default",
         .type           = AVMEDIA_TYPE_AUDIO,
-        .filter_samples = filter_samples,
+        .filter_frame   = filter_frame,
     },
     { NULL }
 };

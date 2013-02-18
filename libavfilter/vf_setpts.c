@@ -39,7 +39,6 @@ static const char *const var_names[] = {
     "N",           ///< frame number (starting at zero)
     "PHI",         ///< golden ratio
     "PI",          ///< greek pi
-    "POS",         ///< original position in the file of the frame
     "PREV_INPTS",  ///< previous  input PTS
     "PREV_OUTPTS", ///< previous output PTS
     "PTS",         ///< original pts in the file of the frame
@@ -54,7 +53,6 @@ enum var_name {
     VAR_N,
     VAR_PHI,
     VAR_PI,
-    VAR_POS,
     VAR_PREV_INPTS,
     VAR_PREV_OUTPTS,
     VAR_PTS,
@@ -102,39 +100,35 @@ static int config_input(AVFilterLink *inlink)
 #define D2TS(d)  (isnan(d) ? AV_NOPTS_VALUE : (int64_t)(d))
 #define TS2D(ts) ((ts) == AV_NOPTS_VALUE ? NAN : (double)(ts))
 
-static int start_frame(AVFilterLink *inlink, AVFilterBufferRef *inpicref)
+static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
 {
     SetPTSContext *setpts = inlink->dst->priv;
+    int64_t in_pts = frame->pts;
     double d;
-    AVFilterBufferRef *outpicref = avfilter_ref_buffer(inpicref, ~0);
-
-    if (!outpicref)
-        return AVERROR(ENOMEM);
 
     if (isnan(setpts->var_values[VAR_STARTPTS]))
-        setpts->var_values[VAR_STARTPTS] = TS2D(inpicref->pts);
+        setpts->var_values[VAR_STARTPTS] = TS2D(frame->pts);
 
-    setpts->var_values[VAR_INTERLACED] = inpicref->video->interlaced;
-    setpts->var_values[VAR_PTS       ] = TS2D(inpicref->pts);
-    setpts->var_values[VAR_POS       ] = inpicref->pos == -1 ? NAN : inpicref->pos;
+    setpts->var_values[VAR_INTERLACED] = frame->interlaced_frame;
+    setpts->var_values[VAR_PTS       ] = TS2D(frame->pts);
 
     d = av_expr_eval(setpts->expr, setpts->var_values, NULL);
-    outpicref->pts = D2TS(d);
+    frame->pts = D2TS(d);
 
 #ifdef DEBUG
     av_log(inlink->dst, AV_LOG_DEBUG,
-           "n:%"PRId64" interlaced:%d pos:%"PRId64" pts:%"PRId64" t:%f -> pts:%"PRId64" t:%f\n",
+           "n:%"PRId64" interlaced:%d pts:%"PRId64" t:%f -> pts:%"PRId64" t:%f\n",
            (int64_t)setpts->var_values[VAR_N],
            (int)setpts->var_values[VAR_INTERLACED],
-           inpicref ->pos,
-           inpicref ->pts, inpicref ->pts * av_q2d(inlink->time_base),
-           outpicref->pts, outpicref->pts * av_q2d(inlink->time_base));
+           in_pts, in_pts * av_q2d(inlink->time_base),
+           frame->pts, frame->pts * av_q2d(inlink->time_base));
 #endif
 
+
     setpts->var_values[VAR_N] += 1.0;
-    setpts->var_values[VAR_PREV_INPTS ] = TS2D(inpicref ->pts);
-    setpts->var_values[VAR_PREV_OUTPTS] = TS2D(outpicref->pts);
-    return ff_start_frame(inlink->dst->outputs[0], outpicref);
+    setpts->var_values[VAR_PREV_INPTS ] = TS2D(in_pts);
+    setpts->var_values[VAR_PREV_OUTPTS] = TS2D(frame->pts);
+    return ff_filter_frame(inlink->dst->outputs[0], frame);
 }
 
 static av_cold void uninit(AVFilterContext *ctx)
@@ -150,7 +144,7 @@ static const AVFilterPad avfilter_vf_setpts_inputs[] = {
         .type             = AVMEDIA_TYPE_VIDEO,
         .get_video_buffer = ff_null_get_video_buffer,
         .config_props     = config_input,
-        .start_frame      = start_frame,
+        .filter_frame     = filter_frame,
     },
     { NULL }
 };

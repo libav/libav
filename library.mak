@@ -6,6 +6,8 @@ LIBVERSION := $(lib$(NAME)_VERSION)
 LIBMAJOR   := $(lib$(NAME)_VERSION_MAJOR)
 INCINSTDIR := $(INCDIR)/lib$(NAME)
 
+INSTHEADERS := $(INSTHEADERS) $(HEADERS:%=$(SUBDIR)%)
+
 all-$(CONFIG_STATIC): $(SUBDIR)$(LIBNAME)
 all-$(CONFIG_SHARED): $(SUBDIR)$(SLIBNAME)
 
@@ -15,12 +17,19 @@ $(SUBDIR)%-test.o: $(SUBDIR)%-test.c
 $(SUBDIR)%-test.o: $(SUBDIR)%.c
 	$(COMPILE_C)
 
+$(SUBDIR)%-test.i: $(SUBDIR)%-test.c
+	$(CC) $(CCFLAGS) $(CC_E) $<
+
+$(SUBDIR)%-test.i: $(SUBDIR)%.c
+	$(CC) $(CCFLAGS) $(CC_E) $<
+
 $(SUBDIR)x86/%.o: $(SUBDIR)x86/%.asm
 	$(DEPYASM) $(YASMFLAGS) -I $(<D)/ -M -o $@ $< > $(@:.o=.d)
 	$(YASM) $(YASMFLAGS) -I $(<D)/ -o $@ $<
 
-$(OBJS) $(SUBDIR)%.h.o $(TESTOBJS): CPPFLAGS += -DHAVE_AV_CONFIG_H
-$(TESTOBJS): CPPFLAGS += -DTEST
+LIBOBJS := $(OBJS) $(SUBDIR)%.h.o $(TESTOBJS)
+$(LIBOBJS) $(LIBOBJS:.o=.i):   CPPFLAGS += -DHAVE_AV_CONFIG_H
+$(TESTOBJS) $(TESTOBJS:.o=.i): CPPFLAGS += -DTEST
 
 $(SUBDIR)$(LIBNAME): $(OBJS)
 	$(RM) $@
@@ -36,7 +45,7 @@ define RULES
 $(EXAMPLES) $(TOOLS): THISLIB = $(FULLNAME:%=$(LD_LIB))
 $(TESTPROGS):         THISLIB = $(SUBDIR)$(LIBNAME)
 
-$(EXAMPLES) $(TESTPROGS) $(TOOLS): %$(EXESUF): %.o
+$(EXAMPLES) $(TESTPROGS) $(TOOLS): %$(EXESUF): %.o $(EXEOBJS)
 	$$(LD) $(LDFLAGS) $$(LD_O) $$(filter %.o,$$^) $$(THISLIB) $(FFEXTRALIBS) $$(ELIBS)
 
 $(SUBDIR)$(SLIBNAME): $(SUBDIR)$(SLIBNAME_WITH_MAJOR)
@@ -49,7 +58,7 @@ $(SUBDIR)$(SLIBNAME_WITH_MAJOR): $(OBJS) $(SUBDIR)lib$(NAME).ver $(DEP_LIBS)
 
 clean::
 	$(RM) $(addprefix $(SUBDIR),*-example$(EXESUF) *-test$(EXESUF) $(CLEANFILES) $(CLEANSUFFIXES) $(LIBSUFFIXES)) \
-	    $(CLEANSUFFIXES:%=$(SUBDIR)$(ARCH)/%) $(HOSTOBJS) $(HOSTPROGS)
+	    $(CLEANSUFFIXES:%=$(SUBDIR)$(ARCH)/%)
 
 distclean:: clean
 	$(RM) $(DISTCLEANSUFFIXES:%=$(SUBDIR)%) $(DISTCLEANSUFFIXES:%=$(SUBDIR)$(ARCH)/%)

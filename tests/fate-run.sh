@@ -78,7 +78,7 @@ avconv(){
     dec_opts="-threads $threads -thread_type $thread_type"
     avconv_args="-nostats -cpuflags $cpuflags"
     for arg in $@; do
-        [ ${arg} = -i ] && avconv_args="${avconv_args} ${dec_opts}"
+        [ x${arg} = x-i ] && avconv_args="${avconv_args} ${dec_opts}"
         avconv_args="${avconv_args} ${arg}"
     done
     run avconv ${avconv_args}
@@ -158,21 +158,6 @@ lavftest(){
 lavfitest(){
     cleanfiles="tests/data/lavfi/${test#lavfi-}.nut"
     regtest lavfi lavfi tests/vsynth1
-}
-
-seektest(){
-    t="${test#seek-}"
-    ref=${base}/ref/seek/$t
-    case $t in
-        image_*) file="tests/data/images/${t#image_}/%02d.${t#image_}" ;;
-        *)       file=$(echo $t | tr _ '?')
-                 for d in fate/acodec- fate/vsynth2- lavf/; do
-                     test -f tests/data/$d$file && break
-                 done
-                 file=$(echo tests/data/$d$file)
-                 ;;
-    esac
-    run libavformat/seek-test $target_path/$file
 }
 
 mkdir -p "$outdir"

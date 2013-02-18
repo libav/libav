@@ -46,10 +46,10 @@ typedef struct YADIFContext {
      */
     int auto_enable;
 
-    AVFilterBufferRef *cur;
-    AVFilterBufferRef *next;
-    AVFilterBufferRef *prev;
-    AVFilterBufferRef *out;
+    AVFrame *cur;
+    AVFrame *next;
+    AVFrame *prev;
+    AVFrame *out;
     void (*filter_line)(uint8_t *dst,
                         uint8_t *prev, uint8_t *cur, uint8_t *next,
                         int w, int prefs, int mrefs, int parity, int mode);

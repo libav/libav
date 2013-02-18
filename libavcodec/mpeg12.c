@@ -746,19 +746,19 @@ static int mpeg_decode_mb(MpegEncContext *s, DCTELEM block[12][64])
     if (s->mb_skip_run-- != 0) {
         if (s->pict_type == AV_PICTURE_TYPE_P) {
             s->mb_skipped = 1;
-            s->current_picture.f.mb_type[s->mb_x + s->mb_y * s->mb_stride] = MB_TYPE_SKIP | MB_TYPE_L0 | MB_TYPE_16x16;
+            s->current_picture.mb_type[s->mb_x + s->mb_y * s->mb_stride] = MB_TYPE_SKIP | MB_TYPE_L0 | MB_TYPE_16x16;
         } else {
             int mb_type;
 
             if (s->mb_x)
-                mb_type = s->current_picture.f.mb_type[s->mb_x + s->mb_y * s->mb_stride - 1];
+                mb_type = s->current_picture.mb_type[s->mb_x + s->mb_y * s->mb_stride - 1];
             else
-                mb_type = s->current_picture.f.mb_type[s->mb_width + (s->mb_y - 1) * s->mb_stride - 1]; // FIXME not sure if this is allowed in MPEG at all
+                mb_type = s->current_picture.mb_type[s->mb_width + (s->mb_y - 1) * s->mb_stride - 1]; // FIXME not sure if this is allowed in MPEG at all
             if (IS_INTRA(mb_type))
                 return -1;
-            s->current_picture.f.mb_type[s->mb_x + s->mb_y*s->mb_stride] =
+            s->current_picture.mb_type[s->mb_x + s->mb_y*s->mb_stride] =
                 mb_type | MB_TYPE_SKIP;
-//            assert(s->current_picture.f.mb_type[s->mb_x + s->mb_y * s->mb_stride - 1] & (MB_TYPE_16x16 | MB_TYPE_16x8));
+//            assert(s->current_picture.mb_type[s->mb_x + s->mb_y * s->mb_stride - 1] & (MB_TYPE_16x16 | MB_TYPE_16x8));
 
             if ((s->mv[0][0][0] | s->mv[0][0][1] | s->mv[1][0][0] | s->mv[1][0][1]) == 0)
                 s->mb_skipped = 1;
@@ -1101,7 +1101,7 @@ static int mpeg_decode_mb(MpegEncContext *s, DCTELEM block[12][64])
         }
     }
 
-    s->current_picture.f.mb_type[s->mb_x + s->mb_y * s->mb_stride] = mb_type;
+    s->current_picture.mb_type[s->mb_x + s->mb_y * s->mb_stride] = mb_type;
 
     return 0;
 }
@@ -1239,8 +1239,8 @@ static int mpeg_decode_postinit(AVCodecContext *avctx)
 
         if (avctx->codec_id == AV_CODEC_ID_MPEG1VIDEO) {
             //MPEG-1 fps
-            avctx->time_base.den = avpriv_frame_rate_tab[s->frame_rate_index].num;
-            avctx->time_base.num = avpriv_frame_rate_tab[s->frame_rate_index].den;
+            avctx->time_base.den = ff_mpeg12_frame_rate_tab[s->frame_rate_index].num;
+            avctx->time_base.num = ff_mpeg12_frame_rate_tab[s->frame_rate_index].den;
             //MPEG-1 aspect
             avctx->sample_aspect_ratio = av_d2q(1.0/ff_mpeg1_aspect[s->aspect_ratio_info], 255);
             avctx->ticks_per_frame=1;
@@ -1248,8 +1248,8 @@ static int mpeg_decode_postinit(AVCodecContext *avctx)
         //MPEG-2 fps
             av_reduce(&s->avctx->time_base.den,
                       &s->avctx->time_base.num,
-                      avpriv_frame_rate_tab[s->frame_rate_index].num * s1->frame_rate_ext.num*2,
-                      avpriv_frame_rate_tab[s->frame_rate_index].den * s1->frame_rate_ext.den,
+                      ff_mpeg12_frame_rate_tab[s->frame_rate_index].num * s1->frame_rate_ext.num*2,
+                      ff_mpeg12_frame_rate_tab[s->frame_rate_index].den * s1->frame_rate_ext.den,
                       1 << 30);
             avctx->ticks_per_frame = 2;
             //MPEG-2 aspect
@@ -1562,6 +1562,8 @@ static int mpeg_field_start(MpegEncContext *s, const uint8_t *buf, int buf_size)
 
     /* start frame decoding */
     if (s->first_field || s->picture_structure == PICT_FRAME) {
+        AVFrameSideData *pan_scan;
+
         if (ff_MPV_frame_start(s, avctx) < 0)
             return -1;
 
@@ -1580,7 +1582,12 @@ static int mpeg_field_start(MpegEncContext *s, const uint8_t *buf, int buf_size)
             }
         }
 
-        *s->current_picture_ptr->f.pan_scan = s1->pan_scan;
+        pan_scan = av_frame_new_side_data(&s->current_picture_ptr->f,
+                                          AV_FRAME_DATA_PANSCAN,
+                                          sizeof(s1->pan_scan));
+        if (!pan_scan)
+            return AVERROR(ENOMEM);
+        memcpy(pan_scan->data, &s1->pan_scan, sizeof(s1->pan_scan));
 
         if (HAVE_THREADS && (avctx->active_thread_type & FF_THREAD_FRAME))
             ff_thread_finish_setup(avctx);
@@ -1722,7 +1729,7 @@ static int mpeg_decode_slice(MpegEncContext *s, int mb_y,
         if (mpeg_decode_mb(s, s->block) < 0)
             return -1;
 
-        if (s->current_picture.f.motion_val[0] && !s->encoding) { // note motion_val is normally NULL unless we want to extract the MVs
+        if (s->current_picture.motion_val[0] && !s->encoding) { // note motion_val is normally NULL unless we want to extract the MVs
             const int wrap = s->b8_stride;
             int xy         = s->mb_x * 2 + s->mb_y * 2 * wrap;
             int b8_xy      = 4 * (s->mb_x + s->mb_y * s->mb_stride);
@@ -1740,12 +1747,12 @@ static int mpeg_decode_slice(MpegEncContext *s, int mb_y,
                         motion_y = s->mv[dir][i][1];
                     }
 
-                    s->current_picture.f.motion_val[dir][xy    ][0] = motion_x;
-                    s->current_picture.f.motion_val[dir][xy    ][1] = motion_y;
-                    s->current_picture.f.motion_val[dir][xy + 1][0] = motion_x;
-                    s->current_picture.f.motion_val[dir][xy + 1][1] = motion_y;
-                    s->current_picture.f.ref_index [dir][b8_xy    ] =
-                    s->current_picture.f.ref_index [dir][b8_xy + 1] = s->field_select[dir][i];
+                    s->current_picture.motion_val[dir][xy    ][0] = motion_x;
+                    s->current_picture.motion_val[dir][xy    ][1] = motion_y;
+                    s->current_picture.motion_val[dir][xy + 1][0] = motion_x;
+                    s->current_picture.motion_val[dir][xy + 1][1] = motion_y;
+                    s->current_picture.ref_index [dir][b8_xy    ] =
+                    s->current_picture.ref_index [dir][b8_xy + 1] = s->field_select[dir][i];
                     assert(s->field_select[dir][i] == 0 || s->field_select[dir][i] == 1);
                 }
                 xy += wrap;
@@ -1913,23 +1920,25 @@ static int slice_end(AVCodecContext *avctx, AVFrame *pict)
     if (/*s->mb_y << field_pic == s->mb_height &&*/ !s->first_field) {
         /* end of image */
 
-        s->current_picture_ptr->f.qscale_type = FF_QSCALE_TYPE_MPEG2;
-
         ff_er_frame_end(s);
 
         ff_MPV_frame_end(s);
 
         if (s->pict_type == AV_PICTURE_TYPE_B || s->low_delay) {
-            *pict = s->current_picture_ptr->f;
-            ff_print_debug_info(s, pict);
+            int ret = av_frame_ref(pict, &s->current_picture_ptr->f);
+            if (ret < 0)
+                return ret;
+            ff_print_debug_info(s, s->current_picture_ptr, pict);
         } else {
             if (avctx->active_thread_type & FF_THREAD_FRAME)
                 s->picture_number++;
             /* latency of 1 frame for I- and P-frames */
             /* XXX: use another variable than picture_number */
             if (s->last_picture_ptr != NULL) {
-                *pict = s->last_picture_ptr->f;
-                 ff_print_debug_info(s, pict);
+                int ret = av_frame_ref(pict, &s->last_picture_ptr->f);
+                if (ret < 0)
+                    return ret;
+                 ff_print_debug_info(s, s->last_picture_ptr, pict);
             }
         }
 
@@ -2216,7 +2225,10 @@ static int decode_chunks(AVCodecContext *avctx,
                 if (CONFIG_MPEG_VDPAU_DECODER && avctx->codec->capabilities & CODEC_CAP_HWACCEL_VDPAU)
                     ff_vdpau_mpeg_picture_complete(s2, buf, buf_size, s->slice_count);
 
-                if (slice_end(avctx, picture)) {
+                ret = slice_end(avctx, picture);
+                if (ret < 0)
+                    return ret;
+                else if (ret) {
                     if (s2->last_picture_ptr || s2->low_delay) //FIXME merge with the stuff in mpeg_decode_slice
                         *got_output = 1;
                 }
@@ -2394,7 +2406,10 @@ static int decode_chunks(AVCodecContext *avctx,
                         thread_context->end_mb_y   = s2->mb_height;
                         if (s->slice_count) {
                             s2->thread_context[s->slice_count-1]->end_mb_y = mb_y;
-                            ff_update_duplicate_context(thread_context, s2);
+                            ret = ff_update_duplicate_context(thread_context,
+                                                              s2);
+                            if (ret < 0)
+                                return ret;
                         }
                         init_get_bits(&thread_context->gb, buf_ptr, input_size*8);
                         s->slice_count++;
@@ -2433,7 +2448,10 @@ static int mpeg_decode_frame(AVCodecContext *avctx,
     if (buf_size == 0 || (buf_size == 4 && AV_RB32(buf) == SEQ_END_CODE)) {
         /* special case for last picture */
         if (s2->low_delay == 0 && s2->next_picture_ptr) {
-            *picture = s2->next_picture_ptr->f;
+            int ret = av_frame_ref(picture, &s2->next_picture_ptr->f);
+            if (ret < 0)
+                return ret;
+
             s2->next_picture_ptr = NULL;
 
             *got_output = 1;
@@ -2453,8 +2471,9 @@ static int mpeg_decode_frame(AVCodecContext *avctx,
 
     s->slice_count = 0;
 
-    if (avctx->extradata && !avctx->frame_number) {
+    if (avctx->extradata && !s->extradata_decoded) {
         int ret = decode_chunks(avctx, picture, got_output, avctx->extradata, avctx->extradata_size);
+        s->extradata_decoded = 1;
         if (ret < 0 && (avctx->err_recognition & AV_EF_EXPLODE))
             return ret;
     }

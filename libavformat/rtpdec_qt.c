@@ -42,7 +42,7 @@ struct PayloadContext {
 static int qt_rtp_parse_packet(AVFormatContext *s, PayloadContext *qt,
                                AVStream *st, AVPacket *pkt,
                                uint32_t *timestamp, const uint8_t *buf,
-                               int len, int flags)
+                               int len, uint16_t seq, int flags)
 {
     AVIOContext pb;
     GetBitContext gb;
@@ -99,7 +99,7 @@ static int qt_rtp_parse_packet(AVFormatContext *s, PayloadContext *qt,
         if (!is_start || !is_finish) {
             av_log_missing_feature(s, "RTP-X-QT with payload description "
                                       "split over several packets", 1);
-            return AVERROR(ENOSYS);
+            return AVERROR_PATCHWELCOME;
         }
         skip_bits(&gb, 12); // reserved
         data_len = get_bits(&gb, 16);
@@ -162,7 +162,7 @@ static int qt_rtp_parse_packet(AVFormatContext *s, PayloadContext *qt,
 
     if (has_packet_info) {
         av_log_missing_feature(s, "RTP-X-QT with packet specific info", 1);
-        return AVERROR(ENOSYS);
+        return AVERROR_PATCHWELCOME;
     }
 
     alen = len - avio_tell(&pb);
@@ -186,12 +186,15 @@ static int qt_rtp_parse_packet(AVFormatContext *s, PayloadContext *qt,
         memcpy(qt->pkt.data + qt->pkt.size, buf + avio_tell(&pb), alen);
         qt->pkt.size += alen;
         if (has_marker_bit) {
-            *pkt = qt->pkt;
+            int ret = av_packet_from_data(pkt, qt->pkt.data, qt->pkt.size +
+                                          FF_INPUT_BUFFER_PADDING_SIZE);
+            if (ret < 0)
+                return ret;
+
             qt->pkt.size = 0;
             qt->pkt.data = NULL;
             pkt->flags        = flags & RTP_FLAG_KEY ? AV_PKT_FLAG_KEY : 0;
             pkt->stream_index = st->index;
-            pkt->destruct     = av_destruct_packet;
             memset(pkt->data + pkt->size, 0, FF_INPUT_BUFFER_PADDING_SIZE);
             return 0;
         }
@@ -225,7 +228,7 @@ static int qt_rtp_parse_packet(AVFormatContext *s, PayloadContext *qt,
 
     default:  /* unimplemented */
         av_log_missing_feature(NULL, "RTP-X-QT with packing scheme 2", 1);
-        return AVERROR(ENOSYS);
+        return AVERROR_PATCHWELCOME;
     }
 }
 

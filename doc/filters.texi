@@ -175,6 +175,47 @@ stream ends. The default value is 2 seconds.
 
 Pass the audio source unchanged to the output.
 
+@section ashowinfo
+
+Show a line containing various information for each input audio frame.
+The input audio is not modified.
+
+The shown line contains a sequence of key/value pairs of the form
+@var{key}:@var{value}.
+
+A description of each shown parameter follows:
+
+@table @option
+@item n
+sequential number of the input frame, starting from 0
+
+@item pts
+Presentation timestamp of the input frame, in time base units; the time base
+depends on the filter input pad, and is usually 1/@var{sample_rate}.
+
+@item pts_time
+presentation timestamp of the input frame in seconds
+
+@item fmt
+sample format
+
+@item chlayout
+channel layout
+
+@item rate
+sample rate for the audio frame
+
+@item nb_samples
+number of samples (per channel) in the frame
+
+@item checksum
+Adler-32 checksum (printed in hexadecimal) of the audio data. For planar audio
+the data is treated as if all the planes were concatenated.
+
+@item plane_checksums
+A list of Adler-32 checksums for each data plane.
+@end table
+
 @section asplit
 
 Split input audio into several identical outputs.
@@ -209,11 +250,12 @@ Maximum compensation in samples per second. Relevant only with compensate=1.
 Default value 500.
 
 @item first_pts
-Assume the first pts should be this value.
+Assume the first pts should be this value. The time base is 1 / sample rate.
 This allows for padding/trimming at the start of stream. By default, no
 assumption is made about the first frame's expected pts, so no padding or
 trimming is done. For example, this could be set to 0 to pad the beginning with
-silence if an audio stream starts after the video stream.
+silence if an audio stream starts after the video stream or to trim any samples
+with a negative pts due to encoder delay.
 
 @end table
 
@@ -318,6 +360,59 @@ not meant to be used directly, it is inserted automatically by libavfilter
 whenever conversion is needed. Use the @var{aformat} filter to force a specific
 conversion.
 
+@section volume
+
+Adjust the input audio volume.
+
+The filter accepts the following named parameters:
+@table @option
+
+@item volume
+Expresses how the audio volume will be increased or decreased.
+
+Output values are clipped to the maximum value.
+
+The output audio volume is given by the relation:
+@example
+@var{output_volume} = @var{volume} * @var{input_volume}
+@end example
+
+Default value for @var{volume} is 1.0.
+
+@item precision
+Mathematical precision.
+
+This determines which input sample formats will be allowed, which affects the
+precision of the volume scaling.
+
+@table @option
+@item fixed
+8-bit fixed-point; limits input sample format to U8, S16, and S32.
+@item float
+32-bit floating-point; limits input sample format to FLT. (default)
+@item double
+64-bit floating-point; limits input sample format to DBL.
+@end table
+@end table
+
+@subsection Examples
+
+@itemize
+@item
+Halve the input audio volume:
+@example
+volume=volume=0.5
+volume=volume=1/2
+volume=volume=-6.0206dB
+@end example
+
+@item
+Increase input audio power by 6 decibels using fixed-point precision:
+@example
+volume=volume=6dB:precision=fixed
+@end example
+@end itemize
+
 @c man end AUDIO FILTERS
 
 @chapter Audio Sources
@@ -340,7 +435,7 @@ integer or a string representing a channel layout. The default value
 of @var{channel_layout} is 3, which corresponds to CH_LAYOUT_STEREO.
 
 Check the channel_layout_map definition in
-@file{libavcodec/audioconvert.c} for the mapping between strings and
+@file{libavutil/channel_layout.c} for the mapping between strings and
 channel layout values.
 
 Follow some examples:
@@ -526,9 +621,6 @@ same as @var{out_w} and @var{out_h}
 
 @item n
 the number of input frame, starting from 0
-
-@item pos
-the position in the file of the input frame, NAN if unknown
 
 @item t
 timestamp expressed in seconds, NAN if the input timestamp is unknown
@@ -1665,9 +1757,6 @@ the frame is bottom-field-first
 @item key
 1 if the filtered frame is a key-frame, 0 otherwise
 
-@item pos
-the position in the file of the filtered frame, -1 if the information
-is not available (e.g. for synthetic video)
 @end table
 
 The default value of the select expression is "1".
@@ -1758,10 +1847,6 @@ the PTS of the first video frame
 
 @item INTERLACED
 tell if the current frame is interlaced
-
-@item POS
-original position in the file of the frame, or undefined if undefined
-for the current frame
 
 @item PREV_INPTS
 previous input PTS
@@ -1904,21 +1989,6 @@ Adler-32 checksum of all the planes of the input frame
 Adler-32 checksum of each plane of the input frame, expressed in the form
 "[@var{c0} @var{c1} @var{c2} @var{c3}]"
 @end table
-
-@section slicify
-
-Pass the images of input video on to next video filter as multiple
-slices.
-
-@example
-./avconv -i in.avi -vf "slicify=32" out.avi
-@end example
-
-The filter accepts the slice height as parameter. If the parameter is
-not specified it will use the default value of 16.
-
-Adding this in the beginning of filter chains should make filtering
-faster due to better use of the memory cache.
 
 @section split
 

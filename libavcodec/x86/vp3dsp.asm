@@ -19,8 +19,7 @@
 ;* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 ;******************************************************************************
 
-%include "x86inc.asm"
-%include "x86util.asm"
+%include "libavutil/x86/x86util.asm"
 
 ; MMX-optimized functions cribbed from the original VP3 source code.
 
@@ -102,7 +101,7 @@ SECTION .text
     mov  [r0+r3  -1], r2w
 %endmacro
 
-INIT_MMX mmx2
+INIT_MMX mmxext
 cglobal vp3_v_loop_filter, 3, 4
 %if ARCH_X86_64
     movsxd        r1, r1d
@@ -634,7 +633,7 @@ vp3_idct_funcs
     movq   [r0+r3  ], m5
 %endmacro
 
-INIT_MMX mmx2
+INIT_MMX mmxext
 cglobal vp3_idct_dc_add, 3, 4
 %if ARCH_X86_64
     movsxd        r1, r1d

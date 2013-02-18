@@ -186,6 +186,8 @@ int show_help(void *optctx, const char *opt, const char *arg);
  * Parse the command line arguments.
  *
  * @param optctx an opaque options context
+ * @param argc   number of command line arguments
+ * @param argv   values of command line arguments
  * @param options Array with the definitions required to interpret every
  * option of the form: -option_name [argument]
  * @param parse_arg_function Name of the function called to process every
@@ -202,6 +204,94 @@ void parse_options(void *optctx, int argc, char **argv, const OptionDef *options
  */
 int parse_option(void *optctx, const char *opt, const char *arg,
                  const OptionDef *options);
+
+/**
+ * An option extracted from the commandline.
+ * Cannot use AVDictionary because of options like -map which can be
+ * used multiple times.
+ */
+typedef struct Option {
+    const OptionDef  *opt;
+    const char       *key;
+    const char       *val;
+} Option;
+
+typedef struct OptionGroupDef {
+    /**< group name */
+    const char *name;
+    /**
+     * Option to be used as group separator. Can be NULL for groups which
+     * are terminated by a non-option argument (e.g. avconv output files)
+     */
+    const char *sep;
+} OptionGroupDef;
+
+typedef struct OptionGroup {
+    const OptionGroupDef *group_def;
+    const char *arg;
+
+    Option *opts;
+    int  nb_opts;
+
+    AVDictionary *codec_opts;
+    AVDictionary *format_opts;
+    struct SwsContext *sws_opts;
+} OptionGroup;
+
+/**
+ * A list of option groups that all have the same group type
+ * (e.g. input files or output files)
+ */
+typedef struct OptionGroupList {
+    const OptionGroupDef *group_def;
+
+    OptionGroup *groups;
+    int       nb_groups;
+} OptionGroupList;
+
+typedef struct OptionParseContext {
+    OptionGroup global_opts;
+
+    OptionGroupList *groups;
+    int           nb_groups;
+
+    /* parsing state */
+    OptionGroup cur_group;
+} OptionParseContext;
+
+/**
+ * Parse an options group and write results into optctx.
+ *
+ * @param optctx an app-specific options context. NULL for global options group
+ */
+int parse_optgroup(void *optctx, OptionGroup *g);
+
+/**
+ * Split the commandline into an intermediate form convenient for further
+ * processing.
+ *
+ * The commandline is assumed to be composed of options which either belong to a
+ * group (those with OPT_SPEC, OPT_OFFSET or OPT_PERFILE) or are global
+ * (everything else).
+ *
+ * A group (defined by an OptionGroupDef struct) is a sequence of options
+ * terminated by either a group separator option (e.g. -i) or a parameter that
+ * is not an option (doesn't start with -). A group without a separator option
+ * must always be first in the supplied groups list.
+ *
+ * All options within the same group are stored in one OptionGroup struct in an
+ * OptionGroupList, all groups with the same group definition are stored in one
+ * OptionGroupList in OptionParseContext.groups. The order of group lists is the
+ * same as the order of group definitions.
+ */
+int split_commandline(OptionParseContext *octx, int argc, char *argv[],
+                      const OptionDef *options,
+                      const OptionGroupDef *groups, int nb_groups);
+
+/**
+ * Free all allocated memory in an OptionParseContext.
+ */
+void uninit_parse_context(OptionParseContext *octx);
 
 /**
  * Find the '-loglevel' option in the command line args and apply it.
@@ -231,6 +321,8 @@ int check_stream_specifier(AVFormatContext *s, AVStream *st, const char *spec);
  * Create a new options dictionary containing only the options from
  * opts which apply to the codec with ID codec_id.
  *
+ * @param opts     dictionary to place options in
+ * @param codec_id ID of the codec that should be filtered for
  * @param s Corresponding format context.
  * @param st A stream from s for which the options should be filtered.
  * @param codec The particular codec for which the options should be filtered.
@@ -349,6 +441,7 @@ int read_yesno(void);
  * Read the file with name filename, and put its content in a newly
  * allocated 0-terminated buffer.
  *
+ * @param filename file to read from
  * @param bufptr location where pointer to buffer is returned
  * @param size   location where size of buffer is returned
  * @return 0 in case of success, a negative value corresponding to an
@@ -373,6 +466,7 @@ void init_pts_correction(PtsCorrectionContext *ctx);
  * which might have incorrect times. Input timestamps may wrap around, in
  * which case the output will as well.
  *
+ * @param ctx the PtsCorrectionContext carrying stream pts information
  * @param pts the pts field of the decoded AVPacket, as passed through
  * AVCodecContext.reordered_opaque
  * @param dts the dts field of the decoded AVPacket
@@ -404,11 +498,16 @@ FILE *get_preset_file(char *filename, size_t filename_size,
  * Realloc array to hold new_size elements of elem_size.
  * Calls exit() on failure.
  *
+ * @param array array to reallocate
  * @param elem_size size in bytes of each element
  * @param size new element count will be written here
+ * @param new_size number of elements to place in reallocated array
  * @return reallocated array
  */
 void *grow_array(void *array, int elem_size, int *size, int new_size);
+
+#define GROW_ARRAY(array, nb_elems)\
+    array = grow_array(array, sizeof(*array), &nb_elems, nb_elems + 1)
 
 typedef struct FrameBuffer {
     uint8_t *base[4];

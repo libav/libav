@@ -583,7 +583,8 @@ static void show_stream(AVFormatContext *fmt_ctx, int stream_idx)
     const AVCodec *dec;
     const char *profile;
     char val_str[128];
-    AVRational display_aspect_ratio;
+    AVRational display_aspect_ratio, *sar = NULL;
+    const AVPixFmtDescriptor *desc;
 
     probe_object_header("stream");
 
@@ -617,21 +618,23 @@ static void show_stream(AVFormatContext *fmt_ctx, int stream_idx)
             probe_int("width", dec_ctx->width);
             probe_int("height", dec_ctx->height);
             probe_int("has_b_frames", dec_ctx->has_b_frames);
-            if (dec_ctx->sample_aspect_ratio.num) {
+            if (dec_ctx->sample_aspect_ratio.num)
+                sar = &dec_ctx->sample_aspect_ratio;
+            else if (stream->sample_aspect_ratio.num)
+                sar = &stream->sample_aspect_ratio;
+
+            if (sar) {
                 probe_str("sample_aspect_ratio",
-                          rational_string(val_str, sizeof(val_str), ":",
-                          &dec_ctx->sample_aspect_ratio));
+                          rational_string(val_str, sizeof(val_str), ":", sar));
                 av_reduce(&display_aspect_ratio.num, &display_aspect_ratio.den,
-                          dec_ctx->width  * dec_ctx->sample_aspect_ratio.num,
-                          dec_ctx->height * dec_ctx->sample_aspect_ratio.den,
+                          dec_ctx->width  * sar->num, dec_ctx->height * sar->den,
                           1024*1024);
                 probe_str("display_aspect_ratio",
                           rational_string(val_str, sizeof(val_str), ":",
                           &display_aspect_ratio));
             }
-            probe_str("pix_fmt",
-                      dec_ctx->pix_fmt != AV_PIX_FMT_NONE ?
-                      av_pix_fmt_descriptors[dec_ctx->pix_fmt].name : "unknown");
+            desc = av_pix_fmt_desc_get(dec_ctx->pix_fmt);
+            probe_str("pix_fmt", desc ? desc->name : "unknown");
             probe_int("level", dec_ctx->level);
             break;
 
@@ -654,6 +657,10 @@ static void show_stream(AVFormatContext *fmt_ctx, int stream_idx)
     probe_str("avg_frame_rate",
               rational_string(val_str, sizeof(val_str), "/",
               &stream->avg_frame_rate));
+    if (dec_ctx->bit_rate)
+        probe_str("bit_rate",
+                  value_string(val_str, sizeof(val_str),
+                               dec_ctx->bit_rate, unit_bit_per_second_str));
     probe_str("time_base",
               rational_string(val_str, sizeof(val_str), "/",
               &stream->time_base));

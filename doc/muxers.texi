@@ -90,6 +90,32 @@ avconv -i INPUT -c:a pcm_u8 -c:v mpeg2video -f framecrc -
 
 See also the @ref{crc} muxer.
 
+@anchor{hls}
+@section hls
+
+Apple HTTP Live Streaming muxer that segments MPEG-TS according to
+the HTTP Live Streaming specification.
+
+It creates a playlist file and numbered segment files. The output
+filename specifies the playlist filename; the segment filenames
+receive the same basename as the playlist, a sequential number and
+a .ts extension.
+
+@example
+avconv -i in.nut out.m3u8
+@end example
+
+@table @option
+@item -hls_time @var{seconds}
+Set the segment length in seconds.
+@item -hls_list_size @var{size}
+Set the maximum number of playlist entries.
+@item -hls_wrap @var{wrap}
+Set the number after which index wraps.
+@item -start_number @var{number}
+Start the sequence from @var{number}.
+@end table
+
 @anchor{image2}
 @section image2
 
@@ -141,6 +167,11 @@ Note also that the pattern must not necessarily contain "%d" or
 @example
 avconv -i in.avi -f image2 -frames:v 1 img.jpeg
 @end example
+
+@table @option
+@item -start_number @var{number}
+Start the sequence from @var{number}.
+@end table
 
 @section MOV/MP4/ISMV
 
@@ -402,5 +433,20 @@ Attach a picture to an mp3:
 avconv -i input.mp3 -i cover.png -c copy -metadata:s:v title="Album cover"
 -metadata:s:v comment="Cover (Front)" out.mp3
 @end example
+
+@section ogg
+
+Ogg container muxer.
+
+@table @option
+@item -page_duration @var{duration}
+Preferred page duration, in microseconds. The muxer will attempt to create
+pages that are approximately @var{duration} microseconds long. This allows the
+user to compromise between seek granularity and container overhead. The default
+is 1 second. A value of 0 will fill all segments, making pages as large as
+possible. A value of 1 will effectively use 1 packet-per-page in most
+situations, giving a small seek granularity at the cost of additional container
+overhead.
+@end table
 
 @c man end MUXERS

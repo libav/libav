@@ -28,8 +28,7 @@
 ; in blocks as conventient to the vector size.
 ; i.e. {4x real, 4x imaginary, 4x real, ...} (or 2x respectively)
 
-%include "x86inc.asm"
-%include "x86util.asm"
+%include "libavutil/x86/x86util.asm"
 
 %if ARCH_X86_64
 %define pointer resq
@@ -106,7 +105,8 @@ SECTION_TEXT
     pfadd    %5, %4 ; {t6,t5}
     pxor     %3, [ps_m1p1] ; {t8,t7}
     mova     %6, %1
-    PSWAPD   %3, %3
+    movd [r0+12], %3
+    punpckhdq %3, [r0+8]
     pfadd    %1, %5 ; {r0,i0}
     pfsub    %6, %5 ; {r2,i2}
     mova     %4, %2
@@ -305,7 +305,6 @@ IF%1 mova  Z(1), m5
 
 INIT_YMM avx
 
-%if HAVE_AVX_EXTERNAL
 align 16
 fft8_avx:
     mova      m0, Z(0)
@@ -394,7 +393,6 @@ fft32_interleave_avx:
     sub r2d, mmsize/4
     jg .deint_loop
     ret
-%endif
 
 INIT_XMM sse
 
@@ -499,19 +497,6 @@ fft8 %+ SUFFIX:
 %endmacro
 
 %if ARCH_X86_32
-%macro PSWAPD 2
-%if cpuflag(3dnowext)
-    pswapd %1, %2
-%elifidn %1, %2
-    movd [r0+12], %1
-    punpckhdq %1, [r0+8]
-%else
-    movq  %1, %2
-    psrlq %1, 32
-    punpckldq %1, %2
-%endif
-%endmacro
-
 INIT_MMX 3dnowext
 FFT48_3DNOW
 
@@ -552,7 +537,6 @@ DEFINE_ARGS zc, w, n, o1, o3
 
 INIT_YMM avx
 
-%if HAVE_AVX_EXTERNAL
 %macro INTERL_AVX 5
     vunpckhps      %3, %2, %1
     vunpcklps      %2, %2, %1
@@ -574,7 +558,6 @@ cglobal fft_calc, 2,5,8
     FFT_DISPATCH _interleave %+ SUFFIX, r1
     REP_RET
 
-%endif
 
 INIT_XMM sse
 
@@ -793,11 +776,9 @@ align 8
 dispatch_tab %+ fullsuffix: pointer list_of_fft
 %endmacro ; DECL_FFT
 
-%if HAVE_AVX_EXTERNAL
 INIT_YMM avx
 DECL_FFT 6
 DECL_FFT 6, _interleave
-%endif
 INIT_XMM sse
 DECL_FFT 5
 DECL_FFT 5, _interleave
@@ -1099,7 +1080,4 @@ DECL_IMDCT POSROTATESHUF_3DNOW
 %endif
 
 INIT_YMM avx
-
-%if HAVE_AVX_EXTERNAL
 DECL_IMDCT POSROTATESHUF_AVX
-%endif

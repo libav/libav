@@ -96,7 +96,7 @@ void ff_fetch_timestamp(AVCodecParserContext *s, int off, int remove){
         if (   s->cur_offset + off >= s->cur_frame_offset[i]
             && (s->frame_offset < s->cur_frame_offset[i] ||
               (!s->frame_offset && !s->next_frame_offset)) // first field/frame
-            //check is disabled  because mpeg-ts doesnt send complete PES packets
+            // check disabled since MPEG-TS does not send complete PES packets
             && /*s->next_frame_offset + off <*/  s->cur_frame_end[i]){
             s->dts= s->cur_frame_dts[i];
             s->pts= s->cur_frame_pts[i];
@@ -167,11 +167,6 @@ int av_parser_parse2(AVCodecParserContext *s,
     return index;
 }
 
-/**
- *
- * @return 0 if the output buffer is a subset of the input, 1 if it is allocated and must be freed
- * @deprecated use AVBitstreamFilter
- */
 int av_parser_change(AVCodecParserContext *s,
                      AVCodecContext *avctx,
                      uint8_t **poutbuf, int *poutbuf_size,
@@ -217,10 +212,6 @@ void av_parser_close(AVCodecParserContext *s)
 
 /*****************************************************/
 
-/**
- * Combine the (truncated) bitstream to a complete frame.
- * @return -1 if no complete frame could be created, AVERROR(ENOMEM) if there was a memory allocation error
- */
 int ff_combine_frame(ParseContext *pc, int next, const uint8_t **buf, int *buf_size)
 {
     if(pc->overread){
@@ -263,7 +254,9 @@ int ff_combine_frame(ParseContext *pc, int next, const uint8_t **buf, int *buf_s
         if(!new_buffer)
             return AVERROR(ENOMEM);
         pc->buffer = new_buffer;
-        memcpy(&pc->buffer[pc->index], *buf, next + FF_INPUT_BUFFER_PADDING_SIZE );
+        if (next > -FF_INPUT_BUFFER_PADDING_SIZE)
+            memcpy(&pc->buffer[pc->index], *buf,
+                   next + FF_INPUT_BUFFER_PADDING_SIZE);
         pc->index = 0;
         *buf= pc->buffer;
     }

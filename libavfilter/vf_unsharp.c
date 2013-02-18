@@ -187,9 +187,10 @@ static void init_filter_param(AVFilterContext *ctx, FilterParam *fp, const char 
 static int config_props(AVFilterLink *link)
 {
     UnsharpContext *unsharp = link->dst->priv;
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(link->format);
 
-    unsharp->hsub = av_pix_fmt_descriptors[link->format].log2_chroma_w;
-    unsharp->vsub = av_pix_fmt_descriptors[link->format].log2_chroma_h;
+    unsharp->hsub = desc->log2_chroma_w;
+    unsharp->vsub = desc->log2_chroma_h;
 
     init_filter_param(link->dst, &unsharp->luma,   "luma",   link->w);
     init_filter_param(link->dst, &unsharp->chroma, "chroma", SHIFTUP(link->w, unsharp->hsub));
@@ -213,38 +214,35 @@ static av_cold void uninit(AVFilterContext *ctx)
     free_filter_param(&unsharp->chroma);
 }
 
-static int end_frame(AVFilterLink *link)
+static int filter_frame(AVFilterLink *link, AVFrame *in)
 {
     UnsharpContext *unsharp = link->dst->priv;
-    AVFilterBufferRef *in  = link->cur_buf;
-    AVFilterBufferRef *out = link->dst->outputs[0]->out_buf;
+    AVFilterLink *outlink   = link->dst->outputs[0];
+    AVFrame *out;
     int cw = SHIFTUP(link->w, unsharp->hsub);
     int ch = SHIFTUP(link->h, unsharp->vsub);
-    int ret;
+
+    out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+    if (!out) {
+        av_frame_free(&in);
+        return AVERROR(ENOMEM);
+    }
+    av_frame_copy_props(out, in);
 
     apply_unsharp(out->data[0], out->linesize[0], in->data[0], in->linesize[0], link->w, link->h, &unsharp->luma);
     apply_unsharp(out->data[1], out->linesize[1], in->data[1], in->linesize[1], cw,      ch,      &unsharp->chroma);
     apply_unsharp(out->data[2], out->linesize[2], in->data[2], in->linesize[2], cw,      ch,      &unsharp->chroma);
 
-    if ((ret = ff_draw_slice(link->dst->outputs[0], 0, link->h, 1)) < 0 ||
-        (ret = ff_end_frame(link->dst->outputs[0])) < 0)
-        return ret;
-    return 0;
-}
-
-static int draw_slice(AVFilterLink *link, int y, int h, int slice_dir)
-{
-    return 0;
+    av_frame_free(&in);
+    return ff_filter_frame(outlink, out);
 }
 
 static const AVFilterPad avfilter_vf_unsharp_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
-        .draw_slice   = draw_slice,
-        .end_frame    = end_frame,
+        .filter_frame = filter_frame,
         .config_props = config_props,
-        .min_perms    = AV_PERM_READ,
     },
     { NULL }
 };

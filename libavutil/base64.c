@@ -44,10 +44,10 @@ static const uint8_t map2[] =
 
 int av_base64_decode(uint8_t *out, const char *in, int out_size)
 {
-    int i, v;
+    int i;
+    unsigned v = 0;
     uint8_t *dst = out;
 
-    v = 0;
     for (i = 0; in[i] && in[i] != '='; i++) {
         unsigned int index= in[i]-43;
         if (index>=FF_ARRAY_ELEMS(map2) || map2[index] == 0xff)
@@ -100,8 +100,6 @@ char *av_base64_encode(char *out, int out_size, const uint8_t *in, int in_size)
 }
 
 #ifdef TEST
-
-#undef printf
 
 #define MAX_DATA_SIZE    1024
 #define MAX_ENCODED_SIZE 2048

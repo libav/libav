@@ -25,11 +25,13 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "libavutil/channel_layout.h"
 #include "libavutil/mathematics.h"
 #include "avcodec.h"
 #define BITSTREAM_READER_LE
 #include "get_bits.h"
 #include "dsputil.h"
+#include "internal.h"
 
 #include "lsp.h"
 #include "acelp_vectors.h"
@@ -509,7 +511,9 @@ static av_cold int sipr_decoder_init(AVCodecContext * avctx)
     for (i = 0; i < 4; i++)
         ctx->energy_history[i] = -14;
 
-    avctx->sample_fmt = AV_SAMPLE_FMT_FLT;
+    avctx->channels       = 1;
+    avctx->channel_layout = AV_CH_LAYOUT_MONO;
+    avctx->sample_fmt     = AV_SAMPLE_FMT_FLT;
 
     avcodec_get_frame_defaults(&ctx->frame);
     avctx->coded_frame = &ctx->frame;
@@ -540,7 +544,7 @@ static int sipr_decode_frame(AVCodecContext *avctx, void *data,
     /* get output buffer */
     ctx->frame.nb_samples = mode_par->frames_per_packet * subframe_size *
                             mode_par->subframe_count;
-    if ((ret = avctx->get_buffer(avctx, &ctx->frame)) < 0) {
+    if ((ret = ff_get_buffer(avctx, &ctx->frame, 0)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }

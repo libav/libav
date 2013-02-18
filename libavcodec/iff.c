@@ -29,6 +29,7 @@
 #include "bytestream.h"
 #include "avcodec.h"
 #include "get_bits.h"
+#include "internal.h"
 
 typedef struct {
     AVFrame frame;
@@ -119,7 +120,7 @@ static av_always_inline uint32_t gray2rgb(const uint32_t x) {
 /**
  * Convert CMAP buffer (stored in extradata) to lavc palette format
  */
-static int ff_cmap_read_palette(AVCodecContext *avctx, uint32_t *pal)
+static int cmap_read_palette(AVCodecContext *avctx, uint32_t *pal)
 {
     int count, i;
 
@@ -166,8 +167,6 @@ static av_cold int decode_init(AVCodecContext *avctx)
     s->planebuf = av_malloc(s->planesize + FF_INPUT_BUFFER_PADDING_SIZE);
     if (!s->planebuf)
         return AVERROR(ENOMEM);
-
-    s->frame.reference = 1;
 
     return 0;
 }
@@ -246,7 +245,7 @@ static int decode_byterun(uint8_t *dst, int dst_size,
 }
 
 static int decode_frame_ilbm(AVCodecContext *avctx,
-                            void *data, int *data_size,
+                            void *data, int *got_frame,
                             AVPacket *avpkt)
 {
     IffContext *s = avctx->priv_data;
@@ -255,16 +254,12 @@ static int decode_frame_ilbm(AVCodecContext *avctx,
     const uint8_t *buf_end = buf+buf_size;
     int y, plane, res;
 
-    if (s->init) {
-        if ((res = avctx->reget_buffer(avctx, &s->frame)) < 0) {
-            av_log(avctx, AV_LOG_ERROR, "reget_buffer() failed\n");
-            return res;
-        }
-    } else if ((res = avctx->get_buffer(avctx, &s->frame)) < 0) {
-        av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
+    if ((res = ff_reget_buffer(avctx, &s->frame)) < 0)
         return res;
-    } else if (avctx->bits_per_coded_sample <= 8 && avctx->pix_fmt != AV_PIX_FMT_GRAY8) {
-        if ((res = ff_cmap_read_palette(avctx, (uint32_t*)s->frame.data[1])) < 0)
+
+    if (!s->init && avctx->bits_per_coded_sample <= 8 &&
+        avctx->pix_fmt != AV_PIX_FMT_GRAY8) {
+        if ((res = cmap_read_palette(avctx, (uint32_t*)s->frame.data[1])) < 0)
             return res;
     }
     s->init = 1;
@@ -297,13 +292,16 @@ static int decode_frame_ilbm(AVCodecContext *avctx,
         }
     }
 
-    *data_size = sizeof(AVFrame);
-    *(AVFrame*)data = s->frame;
+    if ((res = av_frame_ref(data, &s->frame)) < 0)
+        return res;
+
+    *got_frame = 1;
+
     return buf_size;
 }
 
 static int decode_frame_byterun1(AVCodecContext *avctx,
-                            void *data, int *data_size,
+                            void *data, int *got_frame,
                             AVPacket *avpkt)
 {
     IffContext *s = avctx->priv_data;
@@ -312,16 +310,12 @@ static int decode_frame_byterun1(AVCodecContext *avctx,
     const uint8_t *buf_end = buf+buf_size;
     int y, plane, res;
 
-    if (s->init) {
-        if ((res = avctx->reget_buffer(avctx, &s->frame)) < 0) {
-            av_log(avctx, AV_LOG_ERROR, "reget_buffer() failed\n");
-            return res;
-        }
-    } else if ((res = avctx->get_buffer(avctx, &s->frame)) < 0) {
-        av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
+    if ((res = ff_reget_buffer(avctx, &s->frame)) < 0)
         return res;
-    } else if (avctx->bits_per_coded_sample <= 8 && avctx->pix_fmt != AV_PIX_FMT_GRAY8) {
-        if ((res = ff_cmap_read_palette(avctx, (uint32_t*)s->frame.data[1])) < 0)
+
+    if (!s->init && avctx->bits_per_coded_sample <= 8 &&
+        avctx->pix_fmt != AV_PIX_FMT_GRAY8) {
+        if ((res = cmap_read_palette(avctx, (uint32_t*)s->frame.data[1])) < 0)
             return res;
     }
     s->init = 1;
@@ -353,16 +347,18 @@ static int decode_frame_byterun1(AVCodecContext *avctx,
         }
     }
 
-    *data_size = sizeof(AVFrame);
-    *(AVFrame*)data = s->frame;
+    if ((res = av_frame_ref(data, &s->frame)) < 0)
+        return res;
+
+    *got_frame = 1;
+
     return buf_size;
 }
 
 static av_cold int decode_end(AVCodecContext *avctx)
 {
     IffContext *s = avctx->priv_data;
-    if (s->frame.data[0])
-        avctx->release_buffer(avctx, &s->frame);
+    av_frame_unref(&s->frame);
     av_freep(&s->planebuf);
     return 0;
 }

@@ -420,7 +420,7 @@ finish:
 static void free_apic(void *obj)
 {
     ID3v2ExtraMetaAPIC *apic = obj;
-    av_freep(&apic->data);
+    av_buffer_unref(&apic->buf);
     av_freep(&apic->description);
     av_freep(&apic);
 }
@@ -476,9 +476,8 @@ static void read_apic(AVFormatContext *s, AVIOContext *pb, int taglen, char *tag
         goto fail;
     }
 
-    apic->len   = taglen;
-    apic->data  = av_malloc(taglen);
-    if (!apic->data || avio_read(pb, apic->data, taglen) != taglen)
+    apic->buf = av_buffer_alloc(taglen);
+    if (!apic->buf || avio_read(pb, apic->buf->data, taglen) != taglen)
         goto fail;
 
     new_extra->tag    = "APIC";
@@ -617,21 +616,23 @@ static void ff_id3v2_parse(AVFormatContext *s, int len, uint8_t version, uint8_t
         /* check for text tag or supported special meta tag */
         } else if (tag[0] == 'T' || (extra_meta && (extra_func = get_extra_meta_func(tag, isv34)))) {
             if (unsync || tunsync) {
-                int i, j;
+                int64_t end = avio_tell(s->pb) + tlen;
+                uint8_t *b;
                 av_fast_malloc(&buffer, &buffer_size, tlen);
                 if (!buffer) {
                     av_log(s, AV_LOG_ERROR, "Failed to alloc %d bytes\n", tlen);
                     goto seek;
                 }
-                for (i = 0, j = 0; i < tlen; i++, j++) {
-                    buffer[j] = avio_r8(s->pb);
-                    if (j > 0 && !buffer[j] && buffer[j - 1] == 0xff) {
-                        /* Unsynchronised byte, skip it */
-                        j--;
+                b = buffer;
+                while (avio_tell(s->pb) < end) {
+                    *b++ = avio_r8(s->pb);
+                    if (*(b - 1) == 0xff && avio_tell(s->pb) < end - 1) {
+                        uint8_t val = avio_r8(s->pb);
+                        *b++ = val ? val : avio_r8(s->pb);
                     }
                 }
-                ffio_init_context(&pb, buffer, j, 0, NULL, NULL, NULL, NULL);
-                tlen = j;
+                ffio_init_context(&pb, buffer, b - buffer, 0, NULL, NULL, NULL, NULL);
+                tlen = b - buffer;
                 pbx = &pb; // read from sync buffer
             } else {
                 pbx = s->pb; // read straight from input
@@ -732,14 +733,13 @@ int ff_id3v2_parse_apic(AVFormatContext *s, ID3v2ExtraMeta **extra_meta)
         av_dict_set(&st->metadata, "comment", apic->type, 0);
 
         av_init_packet(&st->attached_pic);
-        st->attached_pic.data         = apic->data;
-        st->attached_pic.size         = apic->len;
-        st->attached_pic.destruct     = av_destruct_packet;
+        st->attached_pic.buf          = apic->buf;
+        st->attached_pic.data         = apic->buf->data;
+        st->attached_pic.size         = apic->buf->size;
         st->attached_pic.stream_index = st->index;
         st->attached_pic.flags       |= AV_PKT_FLAG_KEY;
 
-        apic->data = NULL;
-        apic->len  = 0;
+        apic->buf = NULL;
     }
 
     return 0;

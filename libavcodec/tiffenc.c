@@ -240,7 +240,7 @@ static int encode_frame(AVCodecContext * avctx, AVPacket *pkt,
     case AV_PIX_FMT_RGB24:
     case AV_PIX_FMT_GRAY8:
     case AV_PIX_FMT_PAL8:
-        pfd = &av_pix_fmt_descriptors[avctx->pix_fmt];
+        pfd = av_pix_fmt_desc_get(avctx->pix_fmt);
         s->bpp = av_get_bits_per_pixel(pfd);
         if (pfd->flags & PIX_FMT_PAL) {
             s->photometric_interpretation = 3;
@@ -270,8 +270,8 @@ static int encode_frame(AVCodecContext * avctx, AVPacket *pkt,
     case AV_PIX_FMT_YUV410P:
     case AV_PIX_FMT_YUV411P:
         s->photometric_interpretation = 6;
-        avcodec_get_chroma_sub_sample(avctx->pix_fmt,
-                &shift_h, &shift_v);
+        av_pix_fmt_get_chroma_sub_sample(avctx->pix_fmt,
+                                         &shift_h, &shift_v);
         s->bpp = 8 + (16 >> (shift_h + shift_v));
         s->subsampling[0] = 1 << shift_h;
         s->subsampling[1] = 1 << shift_v;

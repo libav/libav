@@ -64,6 +64,7 @@ typedef struct VP8EncoderContext {
     int arnr_type;
     int lag_in_frames;
     int error_resilient;
+    int crf;
 } VP8Context;
 
 /** String mappings for enum vp8e_enc_control_id */
@@ -84,6 +85,7 @@ static const char *const ctlidstr[] = {
     [VP8E_SET_ARNR_MAXFRAMES]    = "VP8E_SET_ARNR_MAXFRAMES",
     [VP8E_SET_ARNR_STRENGTH]     = "VP8E_SET_ARNR_STRENGTH",
     [VP8E_SET_ARNR_TYPE]         = "VP8E_SET_ARNR_TYPE",
+    [VP8E_SET_CQ_LEVEL]          = "VP8E_SET_CQ_LEVEL",
 };
 
 static av_cold void log_encoder_error(AVCodecContext *avctx, const char *desc)
@@ -212,10 +214,10 @@ static av_cold int vp8_free(AVCodecContext *avctx)
     return 0;
 }
 
-static av_cold int vp8_init(AVCodecContext *avctx)
+static av_cold int vpx_init(AVCodecContext *avctx,
+                            const struct vpx_codec_iface *iface)
 {
     VP8Context *ctx = avctx->priv_data;
-    const struct vpx_codec_iface *iface = &vpx_codec_vp8_cx_algo;
     struct vpx_codec_enc_cfg enccfg;
     int res;
 
@@ -251,8 +253,10 @@ static av_cold int vp8_init(AVCodecContext *avctx)
         enccfg.rc_target_bitrate = av_rescale_rnd(avctx->bit_rate, 1, 1000,
                                               AV_ROUND_NEAR_INF);
 
-    if (avctx->rc_min_rate == avctx->rc_max_rate &&
-        avctx->rc_min_rate == avctx->bit_rate)
+    if (ctx->crf)
+        enccfg.rc_end_usage = VPX_CQ;
+    else if (avctx->rc_min_rate == avctx->rc_max_rate &&
+             avctx->rc_min_rate == avctx->bit_rate)
         enccfg.rc_end_usage = VPX_CBR;
 
     if (avctx->qmin > 0)
@@ -343,6 +347,7 @@ static av_cold int vp8_init(AVCodecContext *avctx)
     codecctl_int(avctx, VP8E_SET_NOISE_SENSITIVITY, avctx->noise_reduction);
     codecctl_int(avctx, VP8E_SET_TOKEN_PARTITIONS,  av_log2(avctx->slices));
     codecctl_int(avctx, VP8E_SET_STATIC_THRESHOLD,  avctx->mb_threshold);
+    codecctl_int(avctx, VP8E_SET_CQ_LEVEL,          ctx->crf);
 
     //provide dummy value to initialize wrapper, values will be updated each _encode()
     vpx_img_wrap(&ctx->rawimg, VPX_IMG_FMT_I420, avctx->width, avctx->height, 1,
@@ -490,6 +495,7 @@ static int vp8_encode(AVCodecContext *avctx, AVPacket *pkt,
     struct vpx_image *rawimg = NULL;
     int64_t timestamp = 0;
     int res, coded_size;
+    vpx_enc_frame_flags_t flags = 0;
 
     if (frame) {
         rawimg                      = &ctx->rawimg;
@@ -500,10 +506,12 @@ static int vp8_encode(AVCodecContext *avctx, AVPacket *pkt,
         rawimg->stride[VPX_PLANE_U] = frame->linesize[1];
         rawimg->stride[VPX_PLANE_V] = frame->linesize[2];
         timestamp                   = frame->pts;
+        if (frame->pict_type == AV_PICTURE_TYPE_I)
+            flags |= VPX_EFLAG_FORCE_KF;
     }
 
     res = vpx_codec_encode(&ctx->encoder, rawimg, timestamp,
-                           avctx->ticks_per_frame, 0, ctx->deadline);
+                           avctx->ticks_per_frame, flags, ctx->deadline);
     if (res != VPX_CODEC_OK) {
         log_encoder_error(avctx, "Error encoding frame");
         return AVERROR_INVALIDDATA;
@@ -553,14 +561,8 @@ static const AVOption options[] = {
                          "though earlier partitions have been lost. Note that intra predicition"
                          " is still done over the partition boundary.",       0, AV_OPT_TYPE_CONST, {.i64 = VPX_ERROR_RESILIENT_PARTITIONS}, 0, 0, VE, "er"},
 #endif
+    { "crf",              "Select the quality for constant quality mode", offsetof(VP8Context, crf), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 63, VE },
     { NULL }
-};
-
-static const AVClass class = {
-    .class_name = "libvpx encoder",
-    .item_name  = av_default_item_name,
-    .option     = options,
-    .version    = LIBAVUTIL_VERSION_INT,
 };
 
 static const AVCodecDefault defaults[] = {
@@ -571,7 +573,20 @@ static const AVCodecDefault defaults[] = {
     { NULL },
 };
 
-AVCodec ff_libvpx_encoder = {
+#if CONFIG_LIBVPX_VP8_ENCODER
+static av_cold int vp8_init(AVCodecContext *avctx)
+{
+    return vpx_init(avctx, &vpx_codec_vp8_cx_algo);
+}
+
+static const AVClass class_vp8 = {
+    .class_name = "libvpx encoder",
+    .item_name  = av_default_item_name,
+    .option     = options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
+
+AVCodec ff_libvpx_vp8_encoder = {
     .name           = "libvpx",
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_VP8,
@@ -582,6 +597,36 @@ AVCodec ff_libvpx_encoder = {
     .capabilities   = CODEC_CAP_DELAY | CODEC_CAP_AUTO_THREADS,
     .pix_fmts       = (const enum AVPixelFormat[]){ AV_PIX_FMT_YUV420P, AV_PIX_FMT_NONE },
     .long_name      = NULL_IF_CONFIG_SMALL("libvpx VP8"),
-    .priv_class     = &class,
+    .priv_class     = &class_vp8,
     .defaults       = defaults,
 };
+#endif /* CONFIG_LIBVPX_VP8_ENCODER */
+
+#if CONFIG_LIBVPX_VP9_ENCODER
+static av_cold int vp9_init(AVCodecContext *avctx)
+{
+    return vpx_init(avctx, &vpx_codec_vp9_cx_algo);
+}
+
+static const AVClass class_vp9 = {
+    .class_name = "libvpx encoder",
+    .item_name  = av_default_item_name,
+    .option     = options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
+
+AVCodec ff_libvpx_vp9_encoder = {
+    .name           = "libvpx-vp9",
+    .type           = AVMEDIA_TYPE_VIDEO,
+    .id             = AV_CODEC_ID_VP9,
+    .priv_data_size = sizeof(VP8Context),
+    .init           = vp9_init,
+    .encode2        = vp8_encode,
+    .close          = vp8_free,
+    .capabilities   = CODEC_CAP_DELAY | CODEC_CAP_AUTO_THREADS | CODEC_CAP_EXPERIMENTAL,
+    .pix_fmts       = (const enum AVPixelFormat[]){ AV_PIX_FMT_YUV420P, AV_PIX_FMT_NONE },
+    .long_name      = NULL_IF_CONFIG_SMALL("libvpx VP9"),
+    .priv_class     = &class_vp9,
+    .defaults       = defaults,
+};
+#endif /* CONFIG_LIBVPX_VP9_ENCODER */

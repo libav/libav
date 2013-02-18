@@ -27,7 +27,7 @@ CPPFLAGS   := $(IFLAGS) $(CPPFLAGS)
 CFLAGS     += $(ECFLAGS)
 CCFLAGS     = $(CPPFLAGS) $(CFLAGS)
 ASFLAGS    := $(CPPFLAGS) $(ASFLAGS)
-YASMFLAGS  += $(IFLAGS:%=%/) -I$(SRC_PATH)/libavutil/x86/ -Pconfig.asm
+YASMFLAGS  += $(IFLAGS:%=%/) -Pconfig.asm
 HOSTCCFLAGS = $(IFLAGS) $(HOSTCFLAGS)
 LDFLAGS    := $(ALLFFLIBS:%=$(LD_PATH)lib%) $(LDFLAGS)
 
@@ -45,6 +45,9 @@ COMPILE_S = $(call COMPILE,AS)
 %.o: %.S
 	$(COMPILE_S)
 
+%.i: %.c
+	$(CC) $(CCFLAGS) $(CC_E) $<
+
 %.h.c:
 	$(Q)echo '#include "$*.h"' >$@
 
@@ -59,7 +62,7 @@ PROGS-$(CONFIG_AVPROBE)  += avprobe
 PROGS-$(CONFIG_AVSERVER) += avserver
 
 PROGS      := $(PROGS-yes:%=%$(EXESUF))
-OBJS        = cmdutils.o
+OBJS        = cmdutils.o $(EXEOBJS)
 OBJS-avconv = avconv_opt.o avconv_filter.o
 TESTTOOLS   = audiogen videogen rotozoom tiny_psnr base64
 HOSTPROGS  := $(TESTTOOLS:%=tests/%) doc/print_options
@@ -90,8 +93,8 @@ FF_DEP_LIBS  := $(DEP_LIBS)
 
 all: $(PROGS)
 
-$(TOOLS): %$(EXESUF): %.o
-	$(LD) $(LDFLAGS) $(LD_O) $< $(ELIBS)
+$(TOOLS): %$(EXESUF): %.o $(EXEOBJS)
+	$(LD) $(LDFLAGS) $(LD_O) $^ $(ELIBS)
 
 tools/cws2fws$(EXESUF): ELIBS = $(ZLIB)
 
@@ -102,9 +105,9 @@ config.h: .config
 	@-tput sgr0 2>/dev/null
 
 SUBDIR_VARS := CLEANFILES EXAMPLES FFLIBS HOSTPROGS TESTPROGS TOOLS      \
-               ARCH_HEADERS BUILT_HEADERS SKIPHEADERS                    \
-               ARMV5TE-OBJS ARMV6-OBJS ARMVFP-OBJS NEON-OBJS             \
-               MMI-OBJS ALTIVEC-OBJS VIS-OBJS                            \
+               HEADERS ARCH_HEADERS BUILT_HEADERS SKIPHEADERS            \
+               ARMV5TE-OBJS ARMV6-OBJS VFP-OBJS NEON-OBJS                \
+               ALTIVEC-OBJS VIS-OBJS                                     \
                MMX-OBJS YASM-OBJS                                        \
                OBJS HOSTOBJS TESTOBJS
 
@@ -124,8 +127,8 @@ endef
 $(foreach D,$(FFLIBS),$(eval $(call DOSUBDIR,lib$(D))))
 
 define DOPROG
-OBJS-$(1) += $(1).o
-$(1)$(EXESUF): $(OBJS-$(1))
+OBJS-$(1) += $(1).o cmdutils.o $(EXEOBJS)
+$(1)$(EXESUF): $$(OBJS-$(1))
 $$(OBJS-$(1)): CFLAGS  += $(CFLAGS-$(1))
 $(1)$(EXESUF): LDFLAGS += $(LDFLAGS-$(1))
 $(1)$(EXESUF): FF_EXTRALIBS += $(LIBS-$(1))
@@ -134,8 +137,8 @@ endef
 
 $(foreach P,$(PROGS-yes),$(eval $(call DOPROG,$(P))))
 
-$(PROGS): %$(EXESUF): %.o cmdutils.o $(FF_DEP_LIBS)
-	$(LD) $(LDFLAGS) $(LD_O) $(OBJS-$*) cmdutils.o $(FF_EXTRALIBS)
+$(PROGS): %$(EXESUF): %.o $(FF_DEP_LIBS)
+	$(LD) $(LDFLAGS) $(LD_O) $(OBJS-$*) $(FF_EXTRALIBS)
 
 OBJDIRS += tools
 
@@ -184,7 +187,6 @@ uninstall-data:
 clean::
 	$(RM) $(ALLPROGS)
 	$(RM) $(CLEANSUFFIXES)
-	$(RM) $(TOOLS)
 	$(RM) $(CLEANSUFFIXES:%=tools/%)
 
 distclean::

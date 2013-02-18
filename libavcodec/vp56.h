@@ -30,6 +30,7 @@
 #include "dsputil.h"
 #include "get_bits.h"
 #include "bytestream.h"
+#include "videodsp.h"
 #include "vp3dsp.h"
 #include "vp56dsp.h"
 
@@ -39,6 +40,8 @@ typedef struct VP56mv {
     DECLARE_ALIGNED(4, int16_t, x);
     int16_t y;
 } VP56mv;
+
+#define VP56_SIZE_CHANGE 1
 
 typedef void (*VP56ParseVectorAdjustment)(VP56Context *s,
                                           VP56mv *vect);
@@ -92,11 +95,11 @@ typedef struct VP56Model {
 struct vp56_context {
     AVCodecContext *avctx;
     DSPContext dsp;
+    VideoDSPContext vdsp;
     VP3DSPContext vp3dsp;
     VP56DSPContext vp56dsp;
     ScanTable scantable;
-    AVFrame frames[4];
-    AVFrame *framep[6];
+    AVFrame *frames[4];
     uint8_t *edge_emu_buffer_alloc;
     uint8_t *edge_emu_buffer;
     VP56RangeCoder c;
@@ -114,7 +117,6 @@ struct vp56_context {
     int quantizer;
     uint16_t dequant_dc;
     uint16_t dequant_ac;
-    int8_t *qscale_table;
 
     /* DC predictors management */
     VP56RefDc *above_blocks;
@@ -173,10 +175,10 @@ struct vp56_context {
 };
 
 
-void ff_vp56_init(AVCodecContext *avctx, int flip, int has_alpha);
+int ff_vp56_init(AVCodecContext *avctx, int flip, int has_alpha);
 int ff_vp56_free(AVCodecContext *avctx);
 void ff_vp56_init_dequant(VP56Context *s, int quantizer);
-int ff_vp56_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
+int ff_vp56_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
                          AVPacket *avpkt);
 
 

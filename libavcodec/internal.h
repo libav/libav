@@ -30,31 +30,9 @@
 #include "libavutil/pixfmt.h"
 #include "avcodec.h"
 
-typedef struct InternalBuffer {
-    uint8_t *base[AV_NUM_DATA_POINTERS];
-    uint8_t *data[AV_NUM_DATA_POINTERS];
-    int linesize[AV_NUM_DATA_POINTERS];
-    int width;
-    int height;
-    enum AVPixelFormat pix_fmt;
-    uint8_t **extended_data;
-    int audio_data_size;
-    int nb_channels;
-} InternalBuffer;
+#define FF_SANE_NB_CHANNELS 128U
 
 typedef struct AVCodecInternal {
-    /**
-     * internal buffer count
-     * used by default get/release/reget_buffer().
-     */
-    int buffer_count;
-
-    /**
-     * internal buffers
-     * used by default get/release/reget_buffer().
-     */
-    InternalBuffer *buffer;
-
     /**
      * Whether the parent AVCodecContext is a copy of the context which had
      * init() called on it.
@@ -62,6 +40,21 @@ typedef struct AVCodecInternal {
      * should be freed from the original context only.
      */
     int is_copy;
+
+    /**
+     * Whether to allocate progress for frame threading.
+     *
+     * The codec must set it to 1 if it uses ff_thread_await/report_progress(),
+     * then progress will be allocated in ff_thread_get_buffer(). The frames
+     * then MUST be freed with ff_thread_release_buffer().
+     *
+     * If the codec does not need to call the progress functions (there are no
+     * dependencies between the frames), it should leave this at 0. Then it can
+     * decode straight to the user-provided frames (which the user will then
+     * free with av_frame_unref()), there is no need to call
+     * ff_thread_release_buffer().
+     */
+    int allocate_progress;
 
 #if FF_API_OLD_DECODE_AUDIO
     /**
@@ -76,17 +69,14 @@ typedef struct AVCodecInternal {
      * padded with silence. Reject all subsequent frames.
      */
     int last_audio_frame;
+
+    AVFrame to_free;
 } AVCodecInternal;
 
 struct AVCodecDefault {
     const uint8_t *key;
     const uint8_t *value;
 };
-
-/**
- * Determine whether pix_fmt is a hardware accelerated format.
- */
-int ff_is_hwaccel_pix_fmt(enum AVPixelFormat pix_fmt);
 
 /**
  * Return the hardware accelerated codec for codec codec_id and
@@ -143,5 +133,18 @@ static av_always_inline int64_t ff_samples_to_time_base(AVCodecContext *avctx,
     return av_rescale_q(samples, (AVRational){ 1, avctx->sample_rate },
                         avctx->time_base);
 }
+
+/**
+ * Get a buffer for a frame. This is a wrapper around
+ * AVCodecContext.get_buffer() and should be used instead calling get_buffer()
+ * directly.
+ */
+int ff_get_buffer(AVCodecContext *avctx, AVFrame *frame, int flags);
+
+/**
+ * Identical in function to av_frame_make_writable(), except it uses
+ * ff_get_buffer() to allocate the buffer when needed.
+ */
+int ff_reget_buffer(AVCodecContext *avctx, AVFrame *frame);
 
 #endif /* AVCODEC_INTERNAL_H */

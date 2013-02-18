@@ -1784,14 +1784,6 @@ void ff_set_cmp(DSPContext* c, me_cmp_func *cmp, int type){
         case FF_CMP_NSSE:
             cmp[i]= c->nsse[i];
             break;
-#if CONFIG_DWT
-        case FF_CMP_W53:
-            cmp[i]= c->w53[i];
-            break;
-        case FF_CMP_W97:
-            cmp[i]= c->w97[i];
-            break;
-#endif
         default:
             av_log(NULL, AV_LOG_ERROR,"internal error in cmp function selection\n");
         }
@@ -2375,31 +2367,6 @@ static void vector_fmul_add_c(float *dst, const float *src0, const float *src1, 
         dst[i] = src0[i] * src1[i] + src2[i];
 }
 
-static void vector_fmul_window_c(float *dst, const float *src0,
-                                 const float *src1, const float *win, int len)
-{
-    int i,j;
-    dst += len;
-    win += len;
-    src0+= len;
-    for(i=-len, j=len-1; i<0; i++, j--) {
-        float s0 = src0[i];
-        float s1 = src1[j];
-        float wi = win[i];
-        float wj = win[j];
-        dst[i] = s0*wj - s1*wi;
-        dst[j] = s0*wi + s1*wj;
-    }
-}
-
-static void vector_fmul_scalar_c(float *dst, const float *src, float mul,
-                                 int len)
-{
-    int i;
-    for (i = 0; i < len; i++)
-        dst[i] = src[i] * mul;
-}
-
 static void butterflies_float_c(float *restrict v1, float *restrict v2,
                                 int len)
 {
@@ -2623,8 +2590,6 @@ static void ff_jref_idct_add(uint8_t *dest, int line_size, DCTELEM *block)
     add_pixels_clamped_c(block, dest, line_size);
 }
 
-static void just_return(void *mem av_unused, int stride av_unused, int h av_unused) { return; }
-
 /* init static data */
 av_cold void ff_dsputil_static_init(void)
 {
@@ -2830,9 +2795,6 @@ av_cold void ff_dsputil_init(DSPContext* c, AVCodecContext *avctx)
     c->vsse[5]= vsse_intra8_c;
     c->nsse[0]= nsse16_c;
     c->nsse[1]= nsse8_c;
-#if CONFIG_DWT
-    ff_dsputil_init_dwt(c);
-#endif
 
     c->ssd_int8_vs_int16 = ssd_int8_vs_int16_c;
 
@@ -2860,7 +2822,6 @@ av_cold void ff_dsputil_init(DSPContext* c, AVCodecContext *avctx)
 #endif
     c->vector_fmul_reverse = vector_fmul_reverse_c;
     c->vector_fmul_add = vector_fmul_add_c;
-    c->vector_fmul_window = vector_fmul_window_c;
     c->vector_clipf = vector_clipf_c;
     c->scalarproduct_int16 = scalarproduct_int16_c;
     c->scalarproduct_and_madd_int16 = scalarproduct_and_madd_int16_c;
@@ -2869,14 +2830,11 @@ av_cold void ff_dsputil_init(DSPContext* c, AVCodecContext *avctx)
     c->scalarproduct_float = ff_scalarproduct_float_c;
     c->butterflies_float = butterflies_float_c;
     c->butterflies_float_interleave = butterflies_float_interleave_c;
-    c->vector_fmul_scalar = vector_fmul_scalar_c;
 
     c->shrink[0]= av_image_copy_plane;
     c->shrink[1]= ff_shrink22;
     c->shrink[2]= ff_shrink44;
     c->shrink[3]= ff_shrink88;
-
-    c->prefetch= just_return;
 
     memset(c->put_2tap_qpel_pixels_tab, 0, sizeof(c->put_2tap_qpel_pixels_tab));
     memset(c->avg_2tap_qpel_pixels_tab, 0, sizeof(c->avg_2tap_qpel_pixels_tab));
@@ -2914,7 +2872,6 @@ av_cold void ff_dsputil_init(DSPContext* c, AVCodecContext *avctx)
 #define BIT_DEPTH_FUNCS(depth, dct)\
     c->get_pixels                    = FUNCC(get_pixels   ## dct   , depth);\
     c->draw_edges                    = FUNCC(draw_edges            , depth);\
-    c->emulated_edge_mc              = FUNC (ff_emulated_edge_mc   , depth);\
     c->clear_block                   = FUNCC(clear_block  ## dct   , depth);\
     c->clear_blocks                  = FUNCC(clear_blocks ## dct   , depth);\
     c->add_pixels8                   = FUNCC(add_pixels8  ## dct   , depth);\
@@ -2976,7 +2933,6 @@ av_cold void ff_dsputil_init(DSPContext* c, AVCodecContext *avctx)
     if (HAVE_VIS)        ff_dsputil_init_vis   (c, avctx);
     if (ARCH_ALPHA)      ff_dsputil_init_alpha (c, avctx);
     if (ARCH_PPC)        ff_dsputil_init_ppc   (c, avctx);
-    if (HAVE_MMI)        ff_dsputil_init_mmi   (c, avctx);
     if (ARCH_SH4)        ff_dsputil_init_sh4   (c, avctx);
     if (ARCH_BFIN)       ff_dsputil_init_bfin  (c, avctx);
 

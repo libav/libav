@@ -81,9 +81,10 @@ static int query_formats(AVFilterContext *ctx)
 static int config_input(AVFilterLink *inlink)
 {
     DrawBoxContext *drawbox = inlink->dst->priv;
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(inlink->format);
 
-    drawbox->hsub = av_pix_fmt_descriptors[inlink->format].log2_chroma_w;
-    drawbox->vsub = av_pix_fmt_descriptors[inlink->format].log2_chroma_h;
+    drawbox->hsub = desc->log2_chroma_w;
+    drawbox->vsub = desc->log2_chroma_h;
 
     if (drawbox->w == 0) drawbox->w = inlink->w;
     if (drawbox->h == 0) drawbox->h = inlink->h;
@@ -95,21 +96,20 @@ static int config_input(AVFilterLink *inlink)
     return 0;
 }
 
-static int draw_slice(AVFilterLink *inlink, int y0, int h, int slice_dir)
+static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
 {
     DrawBoxContext *drawbox = inlink->dst->priv;
     int plane, x, y, xb = drawbox->x, yb = drawbox->y;
     unsigned char *row[4];
-    AVFilterBufferRef *picref = inlink->cur_buf;
 
-    for (y = FFMAX(yb, y0); y < (y0 + h) && y < (yb + drawbox->h); y++) {
-        row[0] = picref->data[0] + y * picref->linesize[0];
+    for (y = FFMAX(yb, 0); y < frame->height && y < (yb + drawbox->h); y++) {
+        row[0] = frame->data[0] + y * frame->linesize[0];
 
         for (plane = 1; plane < 3; plane++)
-            row[plane] = picref->data[plane] +
-                picref->linesize[plane] * (y >> drawbox->vsub);
+            row[plane] = frame->data[plane] +
+                 frame->linesize[plane] * (y >> drawbox->vsub);
 
-        for (x = FFMAX(xb, 0); x < (xb + drawbox->w) && x < picref->video->w; x++) {
+        for (x = FFMAX(xb, 0); x < (xb + drawbox->w) && x < frame->width; x++) {
             double alpha = (double)drawbox->yuv_color[A] / 255;
 
             if ((y - yb < 3) || (yb + drawbox->h - y < 4) ||
@@ -121,7 +121,7 @@ static int draw_slice(AVFilterLink *inlink, int y0, int h, int slice_dir)
         }
     }
 
-    return ff_draw_slice(inlink->dst->outputs[0], y0, h, 1);
+    return ff_filter_frame(inlink->dst->outputs[0], frame);
 }
 
 static const AVFilterPad avfilter_vf_drawbox_inputs[] = {
@@ -130,11 +130,8 @@ static const AVFilterPad avfilter_vf_drawbox_inputs[] = {
         .type             = AVMEDIA_TYPE_VIDEO,
         .config_props     = config_input,
         .get_video_buffer = ff_null_get_video_buffer,
-        .start_frame      = ff_null_start_frame,
-        .draw_slice       = draw_slice,
-        .end_frame        = ff_null_end_frame,
-        .min_perms        = AV_PERM_WRITE | AV_PERM_READ,
-        .rej_perms        = AV_PERM_PRESERVE
+        .filter_frame     = filter_frame,
+        .needs_writable   = 1,
     },
     { NULL }
 };

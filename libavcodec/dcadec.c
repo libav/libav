@@ -26,12 +26,13 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#include "libavutil/channel_layout.h"
 #include "libavutil/common.h"
 #include "libavutil/float_dsp.h"
 #include "libavutil/intmath.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mathematics.h"
-#include "libavutil/audioconvert.h"
+#include "libavutil/samplefmt.h"
 #include "avcodec.h"
 #include "dsputil.h"
 #include "fft.h"
@@ -44,6 +45,7 @@
 #include "synth_filter.h"
 #include "dcadsp.h"
 #include "fmtconvert.h"
+#include "internal.h"
 
 #if ARCH_ARM
 #   include "arm/dca.h"
@@ -316,7 +318,6 @@ typedef struct {
 
     /* Primary audio coding header */
     int subframes;              ///< number of subframes
-    int is_channels_set;        ///< check for if the channel number is already set
     int total_channels;         ///< number of channels including extensions
     int prim_channels;          ///< number of primary audio channels
     int subband_activity[DCA_PRIM_CHANNELS_MAX];    ///< subband activity count
@@ -357,6 +358,9 @@ typedef struct {
 
     DECLARE_ALIGNED(32, float, subband_samples)[DCA_BLOCKS_MAX][DCA_PRIM_CHANNELS_MAX][DCA_SUBBANDS][8];
     float *samples_chanptr[DCA_PRIM_CHANNELS_MAX + 1];
+    float *extra_channels[DCA_PRIM_CHANNELS_MAX + 1];
+    uint8_t *extra_channels_buffer;
+    unsigned int extra_channels_buffer_size;
 
     uint8_t dca_buffer[DCA_MAX_FRAME_SIZE + DCA_MAX_EXSS_HEADER_SIZE + DCA_BUFFER_PADDING_SIZE];
     int dca_buffer_size;        ///< how much data is in the dca_buffer
@@ -1276,9 +1280,10 @@ static int dca_filter_channels(DCAContext *s, int block_index)
     for (k = 0; k < s->prim_channels; k++) {
 /*        static float pcm_to_double[8] = { 32768.0, 32768.0, 524288.0, 524288.0,
                                             0, 8388608.0, 8388608.0 };*/
-        qmf_32_subbands(s, k, subband_samples[k],
-                        s->samples_chanptr[s->channel_order_tab[k]],
-                        M_SQRT1_2 / 32768.0 /* pcm_to_double[s->source_pcm_res] */);
+        if (s->channel_order_tab[k] >= 0)
+            qmf_32_subbands(s, k, subband_samples[k],
+                            s->samples_chanptr[s->channel_order_tab[k]],
+                            M_SQRT1_2 / 32768.0 /* pcm_to_double[s->source_pcm_res] */);
     }
 
     /* Down mixing */
@@ -1656,7 +1661,7 @@ static int dca_decode_frame(AVCodecContext *avctx, void *data,
     int i, ret;
     float  **samples_flt;
     DCAContext *s = avctx->priv_data;
-    int channels;
+    int channels, full_channels;
     int core_ss_end;
 
 
@@ -1790,7 +1795,7 @@ static int dca_decode_frame(AVCodecContext *avctx, void *data,
 
     avctx->profile = s->profile;
 
-    channels = s->prim_channels + !!s->lfe;
+    full_channels = channels = s->prim_channels + !!s->lfe;
 
     if (s->amode < 16) {
         avctx->channel_layout = dca_core_channel_layout[s->amode];
@@ -1827,30 +1832,36 @@ static int dca_decode_frame(AVCodecContext *avctx, void *data,
         av_log(avctx, AV_LOG_ERROR, "Non standard configuration %d !\n", s->amode);
         return AVERROR_INVALIDDATA;
     }
-
-
-    /* There is nothing that prevents a dts frame to change channel configuration
-       but Libav doesn't support that so only set the channels if it is previously
-       unset. Ideally during the first probe for channels the crc should be checked
-       and only set avctx->channels when the crc is ok. Right now the decoder could
-       set the channels based on a broken first frame.*/
-    if (s->is_channels_set == 0) {
-        s->is_channels_set = 1;
-        avctx->channels = channels;
-    }
-    if (avctx->channels != channels) {
-        av_log(avctx, AV_LOG_ERROR, "DCA decoder does not support number of "
-               "channels changing in stream. Skipping frame.\n");
-        return AVERROR_PATCHWELCOME;
-    }
+    avctx->channels = channels;
 
     /* get output buffer */
     s->frame.nb_samples = 256 * (s->sample_blocks / 8);
-    if ((ret = avctx->get_buffer(avctx, &s->frame)) < 0) {
+    if ((ret = ff_get_buffer(avctx, &s->frame, 0)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }
     samples_flt = (float  **) s->frame.extended_data;
+
+    /* allocate buffer for extra channels if downmixing */
+    if (avctx->channels < full_channels) {
+        ret = av_samples_get_buffer_size(NULL, full_channels - channels,
+                                         s->frame.nb_samples,
+                                         avctx->sample_fmt, 0);
+        if (ret < 0)
+            return ret;
+
+        av_fast_malloc(&s->extra_channels_buffer,
+                       &s->extra_channels_buffer_size, ret);
+        if (!s->extra_channels_buffer)
+            return AVERROR(ENOMEM);
+
+        ret = av_samples_fill_arrays((uint8_t **)s->extra_channels, NULL,
+                                     s->extra_channels_buffer,
+                                     full_channels - channels,
+                                     s->frame.nb_samples, avctx->sample_fmt, 0);
+        if (ret < 0)
+            return ret;
+    }
 
     /* filter to get final output */
     for (i = 0; i < (s->sample_blocks / 8); i++) {
@@ -1858,6 +1869,8 @@ static int dca_decode_frame(AVCodecContext *avctx, void *data,
 
         for (ch = 0; ch < channels; ch++)
             s->samples_chanptr[ch] = samples_flt[ch] + i * 256;
+        for (; ch < full_channels; ch++)
+            s->samples_chanptr[ch] = s->extra_channels[ch - channels] + i * 256;
 
         dca_filter_channels(s, i);
 
@@ -1922,6 +1935,7 @@ static av_cold int dca_decode_end(AVCodecContext *avctx)
 {
     DCAContext *s = avctx->priv_data;
     ff_mdct_end(&s->imdct);
+    av_freep(&s->extra_channels_buffer);
     return 0;
 }
 

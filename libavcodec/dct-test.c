@@ -83,7 +83,7 @@ static const struct algo fdct_tab[] = {
 
 #if HAVE_MMX_INLINE
     { "MMX",            ff_fdct_mmx,           NO_PERM,   AV_CPU_FLAG_MMX     },
-    { "MMXEXT",         ff_fdct_mmx2,          NO_PERM,   AV_CPU_FLAG_MMXEXT  },
+    { "MMXEXT",         ff_fdct_mmxext,        NO_PERM,   AV_CPU_FLAG_MMXEXT  },
     { "SSE2",           ff_fdct_sse2,          NO_PERM,   AV_CPU_FLAG_SSE2    },
 #endif
 
@@ -107,7 +107,7 @@ static const struct algo idct_tab[] = {
 #if HAVE_MMX_INLINE
     { "SIMPLE-MMX",     ff_simple_idct_mmx,  MMX_SIMPLE_PERM, AV_CPU_FLAG_MMX },
     { "XVID-MMX",       ff_idct_xvid_mmx,      NO_PERM,   AV_CPU_FLAG_MMX,  1 },
-    { "XVID-MMXEXT",    ff_idct_xvid_mmx2,     NO_PERM,   AV_CPU_FLAG_MMXEXT, 1 },
+    { "XVID-MMXEXT",    ff_idct_xvid_mmxext,   NO_PERM,   AV_CPU_FLAG_MMXEXT, 1 },
     { "XVID-SSE2",      ff_idct_xvid_sse2,     SSE2_PERM, AV_CPU_FLAG_SSE2, 1 },
 #endif
 
@@ -120,13 +120,13 @@ static const struct algo idct_tab[] = {
     { "INT-ARM",        ff_j_rev_dct_arm,      MMX_PERM },
 #endif
 #if HAVE_ARMV5TE
-    { "SIMPLE-ARMV5TE", ff_simple_idct_armv5te,NO_PERM  },
+    { "SIMPLE-ARMV5TE", ff_simple_idct_armv5te,NO_PERM,   AV_CPU_FLAG_ARMV5TE },
 #endif
 #if HAVE_ARMV6
-    { "SIMPLE-ARMV6",   ff_simple_idct_armv6,  MMX_PERM },
+    { "SIMPLE-ARMV6",   ff_simple_idct_armv6,  MMX_PERM,  AV_CPU_FLAG_ARMV6   },
 #endif
 #if HAVE_NEON
-    { "SIMPLE-NEON",    ff_simple_idct_neon,   PARTTRANS_PERM },
+    { "SIMPLE-NEON",    ff_simple_idct_neon, PARTTRANS_PERM, AV_CPU_FLAG_NEON },
 #endif
 
 #if ARCH_ALPHA

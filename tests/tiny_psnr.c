@@ -139,14 +139,14 @@ int main(int argc, char *argv[])
         } else {
             char *end;
             len = strtol(argv[3], &end, 0);
-            if (*end || len > 2) {
+            if (*end || len < 1 || len > 2) {
                 fprintf(stderr, "Unsupported sample format: %s\n", argv[3]);
                 return 1;
             }
         }
     }
 
-    max = (1 << (8 * len)) - 1;
+    max = (1LL << (8 * len)) - 1;
 
     f[0] = fopen(argv[1], "rb");
     f[1] = fopen(argv[2], "rb");

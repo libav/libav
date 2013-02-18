@@ -419,13 +419,6 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .props     = AV_CODEC_PROP_LOSSLESS,
     },
     {
-        .id        = AV_CODEC_ID_SNOW,
-        .type      = AVMEDIA_TYPE_VIDEO,
-        .name      = "snow",
-        .long_name = NULL_IF_CONFIG_SMALL("Snow"),
-        .props     = AV_CODEC_PROP_LOSSY | AV_CODEC_PROP_LOSSLESS,
-    },
-    {
         .id        = AV_CODEC_ID_TSCC,
         .type      = AVMEDIA_TYPE_VIDEO,
         .name      = "tscc",
@@ -1017,6 +1010,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .type      = AVMEDIA_TYPE_VIDEO,
         .name      = "vp8",
         .long_name = NULL_IF_CONFIG_SMALL("On2 VP8"),
+        .props     = AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_VP9,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "vp9",
+        .long_name = NULL_IF_CONFIG_SMALL("Google VP9"),
         .props     = AV_CODEC_PROP_LOSSY,
     },
     {
@@ -2111,6 +2111,20 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .name      = "opus",
         .long_name = NULL_IF_CONFIG_SMALL("Opus (Opus Interactive Audio Codec)"),
         .props     = AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_COMFORT_NOISE,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "comfortnoise",
+        .long_name = NULL_IF_CONFIG_SMALL("RFC 3389 Comfort Noise"),
+        .props     = AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_TAK,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "tak",
+        .long_name = NULL_IF_CONFIG_SMALL("TAK (Tom's lossless Audio Kompressor)"),
+        .props     = AV_CODEC_PROP_LOSSLESS,
     },
 
     /* subtitle codecs */

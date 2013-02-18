@@ -26,7 +26,7 @@
 //#define MOV_EXPORT_ALL_METADATA
 
 #include "libavutil/attributes.h"
-#include "libavutil/audioconvert.h"
+#include "libavutil/channel_layout.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/intfloat.h"
 #include "libavutil/mathematics.h"
@@ -351,6 +351,7 @@ static int mov_read_chpl(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     return 0;
 }
 
+#define MIN_DATA_ENTRY_BOX_SIZE 12
 static int mov_read_dref(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 {
     AVStream *st;
@@ -364,7 +365,8 @@ static int mov_read_dref(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
     avio_rb32(pb); // version + flags
     entries = avio_rb32(pb);
-    if (entries >= UINT_MAX / sizeof(*sc->drefs))
+    if (entries >  (atom.size - 1) / MIN_DATA_ENTRY_BOX_SIZE + 1 ||
+        entries >= UINT_MAX / sizeof(*sc->drefs))
         return AVERROR_INVALIDDATA;
     av_free(sc->drefs);
     sc->drefs = av_mallocz(entries * sizeof(*sc->drefs));
@@ -1057,33 +1059,12 @@ static int mov_read_stco(MOVContext *c, AVIOContext *pb, MOVAtom atom)
  */
 enum AVCodecID ff_mov_get_lpcm_codec_id(int bps, int flags)
 {
-    if (flags & 1) { // floating point
-        if (flags & 2) { // big endian
-            if      (bps == 32) return AV_CODEC_ID_PCM_F32BE;
-            else if (bps == 64) return AV_CODEC_ID_PCM_F64BE;
-        } else {
-            if      (bps == 32) return AV_CODEC_ID_PCM_F32LE;
-            else if (bps == 64) return AV_CODEC_ID_PCM_F64LE;
-        }
-    } else {
-        if (flags & 2) {
-            if      (bps == 8)
-                // signed integer
-                if (flags & 4)  return AV_CODEC_ID_PCM_S8;
-                else            return AV_CODEC_ID_PCM_U8;
-            else if (bps == 16) return AV_CODEC_ID_PCM_S16BE;
-            else if (bps == 24) return AV_CODEC_ID_PCM_S24BE;
-            else if (bps == 32) return AV_CODEC_ID_PCM_S32BE;
-        } else {
-            if      (bps == 8)
-                if (flags & 4)  return AV_CODEC_ID_PCM_S8;
-                else            return AV_CODEC_ID_PCM_U8;
-            else if (bps == 16) return AV_CODEC_ID_PCM_S16LE;
-            else if (bps == 24) return AV_CODEC_ID_PCM_S24LE;
-            else if (bps == 32) return AV_CODEC_ID_PCM_S32LE;
-        }
-    }
-    return AV_CODEC_ID_NONE;
+    /* lpcm flags:
+     * 0x1 = float
+     * 0x2 = big-endian
+     * 0x4 = signed
+     */
+    return ff_get_pcm_codec_id(bps, flags & 1, flags & 2, flags & 4 ? -1 : 0);
 }
 
 int ff_mov_read_stsd_entries(MOVContext *c, AVIOContext *pb, int entries)
@@ -1190,6 +1171,10 @@ int ff_mov_read_stsd_entries(MOVContext *c, AVIOContext *pb, int entries)
             /* codec_tag YV12 triggers an UV swap in rawdec.c */
             if (!memcmp(st->codec->codec_name, "Planar Y'CbCr 8-bit 4:2:0", 25))
                 st->codec->codec_tag=MKTAG('I', '4', '2', '0');
+            /* Flash Media Server uses tag H263 with Sorenson Spark */
+            if (format == MKTAG('H','2','6','3') &&
+                !memcmp(st->codec->codec_name, "Sorenson H263", 13))
+                st->codec->codec_id = AV_CODEC_ID_FLV1;
 
             st->codec->bits_per_coded_sample = avio_rb16(pb); /* depth */
             color_table_id = avio_rb16(pb); /* colortable id */
@@ -2073,8 +2058,9 @@ static int mov_read_trak(MOVContext *c, AVIOContext *pb, MOVAtom atom)
                                              ((double)st->codec->width * sc->height), INT_MAX);
         }
 
-        av_reduce(&st->avg_frame_rate.num, &st->avg_frame_rate.den,
-                  sc->time_scale*st->nb_frames, st->duration, INT_MAX);
+        if (st->duration != AV_NOPTS_VALUE)
+            av_reduce(&st->avg_frame_rate.num, &st->avg_frame_rate.den,
+                      sc->time_scale*st->nb_frames, st->duration, INT_MAX);
 
 #if FF_API_R_FRAME_RATE
         if (sc->stts_count == 1 || (sc->stts_count == 2 && sc->stts_data[1].count == 1))

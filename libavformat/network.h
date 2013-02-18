@@ -22,6 +22,7 @@
 #define AVFORMAT_NETWORK_H
 
 #include <errno.h>
+#include <stdint.h>
 
 #include "config.h"
 #include "libavutil/error.h"
@@ -185,6 +186,14 @@ int ff_getnameinfo(const struct sockaddr *sa, int salen,
 const char *ff_gai_strerror(int ecode);
 #undef gai_strerror
 #define gai_strerror ff_gai_strerror
+#endif
+
+#ifndef INADDR_LOOPBACK
+#define INADDR_LOOPBACK 0x7f000001
+#endif
+
+#ifndef INET_ADDRSTRLEN
+#define INET_ADDRSTRLEN 16
 #endif
 
 #ifndef INET6_ADDRSTRLEN

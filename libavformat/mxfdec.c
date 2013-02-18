@@ -340,7 +340,7 @@ static int mxf_decrypt_triplet(AVFormatContext *s, AVPacket *pkt, KLVPacket *klv
     int index;
 
     if (!mxf->aesc && s->key && s->keylen == 16) {
-        mxf->aesc = av_malloc(av_aes_size);
+        mxf->aesc = av_aes_alloc();
         if (!mxf->aesc)
             return AVERROR(ENOMEM);
         av_aes_init(mxf->aesc, s->key, 128, 1);
@@ -955,7 +955,7 @@ static int mxf_get_sorted_table_segments(MXFContext *mxf, int *nb_sorted_segment
 
     *sorted_segments  = av_mallocz(nb_segments * sizeof(**sorted_segments));
     unsorted_segments = av_mallocz(nb_segments * sizeof(*unsorted_segments));
-    if (!sorted_segments || !unsorted_segments) {
+    if (!*sorted_segments || !unsorted_segments) {
         av_freep(sorted_segments);
         av_free(unsorted_segments);
         return AVERROR(ENOMEM);
@@ -2210,7 +2210,7 @@ static int mxf_read_seek(AVFormatContext *s, int stream_index, int64_t sample_ti
     int ret;
     MXFIndexTable *t;
 
-    if (mxf->index_tables <= 0) {
+    if (mxf->nb_index_tables <= 0) {
     if (!s->bit_rate)
         return AVERROR_INVALIDDATA;
     if (sample_time < 0)

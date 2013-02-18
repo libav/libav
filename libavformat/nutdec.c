@@ -27,6 +27,7 @@
 #include "libavutil/tree.h"
 #include "avio_internal.h"
 #include "nut.h"
+#include "riff.h"
 
 #undef NDEBUG
 #include <assert.h>
@@ -350,15 +351,20 @@ static int decode_stream_header(NUTContext *nut)
     case 0:
         st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
         st->codec->codec_id   = av_codec_get_id((const AVCodecTag * const []) {
-                                                    ff_codec_bmp_tags,
                                                     ff_nut_video_tags,
+                                                    ff_codec_bmp_tags,
                                                     0
                                                 },
                                                 tmp);
         break;
     case 1:
         st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
-        st->codec->codec_id   = ff_codec_get_id(ff_codec_wav_tags, tmp);
+        st->codec->codec_id   = av_codec_get_id((const AVCodecTag * const []) {
+                                                    ff_nut_audio_tags,
+                                                    ff_codec_wav_tags,
+                                                    0
+                                                },
+                                                tmp);
         break;
     case 2:
         st->codec->codec_type = AVMEDIA_TYPE_SUBTITLE;
@@ -366,6 +372,7 @@ static int decode_stream_header(NUTContext *nut)
         break;
     case 3:
         st->codec->codec_type = AVMEDIA_TYPE_DATA;
+        st->codec->codec_id   = ff_codec_get_id(ff_nut_data_tags, tmp);
         break;
     default:
         av_log(s, AV_LOG_ERROR, "unknown stream class (%d)\n", class);
@@ -903,7 +910,7 @@ static int64_t nut_read_timestamp(AVFormatContext *s, int stream_index,
     else if (stream_index == -2)
         return back_ptr;
 
-    assert(0);
+    return AV_NOPTS_VALUE;
 }
 
 static int read_seek(AVFormatContext *s, int stream_index,
@@ -991,8 +998,5 @@ AVInputFormat ff_nut_demuxer = {
     .read_close     = nut_read_close,
     .read_seek      = read_seek,
     .extensions     = "nut",
-    .codec_tag      = (const AVCodecTag * const []) {
-        ff_codec_bmp_tags, ff_nut_video_tags, ff_codec_wav_tags,
-        ff_nut_subtitle_tags, 0
-    },
+    .codec_tag      = ff_nut_codec_tags,
 };
