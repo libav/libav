@@ -215,7 +215,7 @@ static void set_ref_poc_list(HEVCContext *s)
         refPocList[ST_FOLL].numPic = k;
         refPocList[LT_CURR].numPic = 0;
         refPocList[LT_FOLL].numPic = 0;
-        //set_ref_pic_list(s);
+        set_ref_pic_list(s);
     }
 }
 static int hls_slice_header(HEVCContext *s)
@@ -328,6 +328,7 @@ static int hls_slice_header(HEVCContext *s)
                     short_term_ref_pic_set_idx = get_bits(gb, numbits);
                 else
                     short_term_ref_pic_set_idx = 0;
+                sh->short_term_rps = &s->sps->short_term_rps_list[short_term_ref_pic_set_idx];
             }
             if (s->sps->long_term_ref_pics_present_flag) {
                 av_log(s->avctx, AV_LOG_ERROR, "TODO: long_term_ref_pics_present_flag\n");
@@ -540,6 +541,7 @@ static int hls_sao_param(HEVCContext *s, int rx, int ry)
 static void deblocking_filter(HEVCContext *s)
 {
     uint8_t *src;
+    int x, y;
     int qp_y_pred = s->sh.slice_qp;
     int qp_y = ((qp_y_pred + s->tu.cu_qp_delta + 52 + 2 * s->sps->qp_bd_offset) %
         (52 + s->sps->qp_bd_offset)) - s->sps->qp_bd_offset;
@@ -549,8 +551,8 @@ static void deblocking_filter(HEVCContext *s)
     const int beta = betatable[idxb];
 
     // vertical filtering
-    for (int y = 0; y < (s->sps->pic_height_in_luma_samples+3)/4; y+=1) {
-        for (int x = 2; x < (s->sps->pic_width_in_luma_samples+3)/4; x+=2) {
+    for (y = 0; y < (s->sps->pic_height_in_luma_samples+3)/4; y+=1) {
+        for (x = 2; x < (s->sps->pic_width_in_luma_samples+3)/4; x+=2) {
             int bs = s->vertical_bs[(x / 2) + y * s->bs_width];
             if (bs) {
                 const int idxt = av_clip_c(qp + DEFAULT_INTRA_TC_OFFSET * (bs - 1) + s->sh.tc_offset, 0, MAX_QP + DEFAULT_INTRA_TC_OFFSET);
@@ -567,8 +569,8 @@ static void deblocking_filter(HEVCContext *s)
         }
     }
     // horizontal filtering
-    for (int y = 2; y < (s->sps->pic_height_in_luma_samples+3)/4; y+=2) {
-        for (int x = 0; x < (s->sps->pic_width_in_luma_samples+3)/4; x+=1) {
+    for (y = 2; y < (s->sps->pic_height_in_luma_samples+3)/4; y+=2) {
+        for (x = 0; x < (s->sps->pic_width_in_luma_samples+3)/4; x+=1) {
             int bs = s->horizontal_bs[x + (y / 2) * 2 * s->bs_width];
             if (bs) {
                 const int idxt = av_clip_c(qp + DEFAULT_INTRA_TC_OFFSET * (bs - 1) + s->sh.tc_offset, 0, MAX_QP + DEFAULT_INTRA_TC_OFFSET);
@@ -1435,10 +1437,10 @@ static void derive_spatial_merge_candidates(HEVCContext *s, int x0, int y0, int 
     if((isDiffMER(s, xB2, yB2, x0, y0))) {
         isAvailableB2 = 0;
     }
-    if (isAvailableA1) {
+    if (isAvailableA1 && isAvailableB2) {
         check_MER = !(compareMVrefidx(s->pu.tab_mvf[(xB2_pu) * pic_width_in_min_pu + yB2_pu], s->pu.tab_mvf[(xA1_pu) * pic_width_in_min_pu + yA1_pu]));
     }
-    if (is_available_b1) {
+    if (is_available_b1 && isAvailableB2) {
         check_MER_1 = !(compareMVrefidx(s->pu.tab_mvf[(xB2_pu) * pic_width_in_min_pu + yB2_pu], s->pu.tab_mvf[(xB1_pu) * pic_width_in_min_pu + yB1_pu]));
     }
 
@@ -1581,11 +1583,11 @@ static void luma_mv_mvp_mode(HEVCContext *s, int x0, int y0, int nPbW, int nPbH,
     
     int xB1, yB1;
     int xB1_pu, yB1_pu;
-    int is_available_b1;
+    int is_available_b1 = 0;
     
     int xB2, yB2;
     int xB2_pu, yB2_pu;
-    int isAvailableB2;
+    int isAvailableB2 = 0;
     struct MvField mvpcand_list[2] = { 0 };
     int check_A0, check_A1, check_B0, check_B1, check_B2;
     MvField mxA;
