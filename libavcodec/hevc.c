@@ -2808,6 +2808,7 @@ static void hls_coding_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
     s->cu.pred_mode = MODE_INTRA;
     s->cu.part_mode = PART_2Nx2N;
     s->cu.intra_split_flag = 0;
+    s->cu.pcm_flag = 0;
     SAMPLE(s->cu.skip_flag, x0, y0) = 0;
     for (x = 0; x < 4; x++) {
         s->pu.intra_pred_mode[x] = 1;
