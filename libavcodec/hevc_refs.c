@@ -41,10 +41,10 @@ static void update_refs(HEVCContext *s)
     int i, j;
     int used[FF_ARRAY_ELEMS(s->short_refs)] = { 0 };
 
-    for (i = 0; i < 2; i++) {
-        RefPicList *rpl = &s->sh.refPicList[i];
+    for (i = 0; i < 5; i++) {
+        RefPicList *rpl = &s->sh.refPocList[i];
         for (j = 0; j < rpl->numPic; j++)
-            used[rpl->list[j]] = 1;
+            used[rpl->idx[j]] = 1;
     }
     for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
         if (!used[i]) {
@@ -131,17 +131,17 @@ static void set_ref_pic_list(HEVCContext *s)
         while(cIdx < num_rps_curr_lx) {
             for(i = 0; i < refPocList[first_list].numPic; i++) {
                 refPicList[list_idx].list[cIdx] = refPocList[first_list].list[i];
-                refPicList[list_idx].idx[cIdx] = find_ref_idx(s, refPocList[first_list].list[i]);
+                refPicList[list_idx].idx[cIdx]  = refPocList[first_list].idx[i];
                 cIdx++;
             }
             for(i = 0; i < refPocList[sec_list].numPic; i++) {
                 refPicList[list_idx].list[cIdx] = refPocList[sec_list].list[i];
-                refPicList[list_idx].idx[cIdx] = find_ref_idx(s, refPocList[sec_list].list[i]);
+                refPicList[list_idx].idx[cIdx]  = refPocList[sec_list].idx[i];
                 cIdx++;
             }
             for(i = 0; i < refPocList[LT_CURR].numPic; i++) {
                 refPicList[list_idx].list[cIdx] = refPocList[LT_CURR].list[i];
-                refPicList[list_idx].idx[cIdx] = find_ref_idx(s, refPocList[LT_CURR].list[i]);
+                refPicList[list_idx].idx[cIdx]  = refPocList[LT_CURR].idx[i];
                 cIdx++;
             }
         }
@@ -160,9 +160,11 @@ void ff_hevc_set_ref_poc_list(HEVCContext *s)
         for (i = 0; i < rps->num_negative_pics; i ++) {
             if ( rps->used[i] == 1 ) {
                 refPocList[ST_CURR_BEF].list[j] = s->poc + rps->delta_poc[i];
+                refPocList[ST_CURR_BEF].idx[j] = find_ref_idx(s, refPocList[ST_CURR_BEF].list[j]);
                 j++;
             } else {
                 refPocList[ST_FOLL].list[k] = s->poc + rps->delta_poc[i];
+                refPocList[ST_FOLL].idx[j] = find_ref_idx(s, refPocList[ST_FOLL].list[k]);
                 k++;
             }
         }
@@ -171,9 +173,11 @@ void ff_hevc_set_ref_poc_list(HEVCContext *s)
         for( i = rps->num_negative_pics; i < rps->num_delta_pocs; i ++ ) {
             if (rps->used[i] ==1) {
                 refPocList[ST_CURR_AFT].list[j] = s->poc + rps->delta_poc[i];
+                refPocList[ST_CURR_AFT].idx[j] = find_ref_idx(s, refPocList[ST_CURR_AFT].list[j]);
                 j++;
             } else {
                 refPocList[ST_FOLL].list[k] = s->poc + rps->delta_poc[i];
+                refPocList[ST_FOLL].idx[j] = find_ref_idx(s, refPocList[ST_FOLL].list[k]);
                 k++;
             }
         }
