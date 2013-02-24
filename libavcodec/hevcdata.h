@@ -90,6 +90,21 @@ static const uint8_t diag_scan2x2_x[4] = {
     0, 0, 1, 1,
 };
 
+static const uint8_t l0_l1_cand_idx[12][2] = {
+    { 0, 1, },
+    { 1, 0, },
+    { 0, 2, },
+    { 2, 0, },
+    { 1, 2, },
+    { 2, 1, },
+    { 0, 3, },
+    { 3, 0, },
+    { 1, 3, },
+    { 3, 1, },
+    { 2, 3, },
+    { 3, 2, },
+};
+
 static const uint8_t diag_scan2x2_y[4] = {
     0, 1, 0, 1,
 };

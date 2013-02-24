@@ -150,11 +150,15 @@ static int decode_profile_tier_level(HEVCContext *s, PTL *ptl,
         ptl->general_profile_idc = get_bits(gb, 5);
         for (i = 0; i < 32; i++)
             ptl->general_profile_compatibility_flag[i] = get_bits1(gb);
-        if (get_bits(gb, 16) != 0) // XXX_reserved_zero_48bits[0..15]
+        skip_bits1(gb);// general_progressive_source_flag
+        skip_bits1(gb);// general_interlaced_source_flag
+        skip_bits1(gb);// general_non_packed_constraint_flag
+        skip_bits1(gb);// general_frame_only_constraint_flag
+        if (get_bits(gb, 16) != 0) // XXX_reserved_zero_44bits[0..15]
             return -1;
-        if (get_bits(gb, 16) != 0) // XXX_reserved_zero_48bits[16..31]
+        if (get_bits(gb, 16) != 0) // XXX_reserved_zero_44bits[16..31]
             return -1;
-        if (get_bits(gb, 16) != 0) // XXX_reserved_zero_48bits[32..47]
+        if (get_bits(gb, 12) != 0) // XXX_reserved_zero_44bits[32..43]
             return -1;
     }
 

@@ -48,6 +48,9 @@
 enum NALUnitType {
     NAL_TRAIL_R   = 0,
     NAL_TRAIL_N   = 1,
+    NAL_BLA_W_LP = 16,
+    NAL_BLA_W_RADL = 17,
+    NAL_BLA_N_LP = 18,
     NAL_IDR_W_DLP = 19,
     NAL_VPS = 32,
     NAL_SPS = 33,
@@ -90,7 +93,7 @@ typedef struct RefPicList {
 #define MAX_CU_SIZE 128
 
 //TODO: check if this is really the maximum
-#define MAX_TRANSFORM_DEPTH 3
+#define MAX_TRANSFORM_DEPTH 5
 
 #define MAX_TB_SIZE 32
 #define MAX_PB_SIZE 64
@@ -570,8 +573,10 @@ typedef struct Mv {
 } Mv;
 
 typedef struct MvField {
-      Mv  mv;
-      int ref_idx;
+      Mv  mv_l0;
+      Mv  mv_l1;
+      int ref_idx_l0;
+      int ref_idx_l1;
       int pred_flag_l0;
       int pred_flag_l1;
       int is_intra;
