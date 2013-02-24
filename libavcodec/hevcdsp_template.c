@@ -604,6 +604,29 @@ static void FUNC(put_hevc_epel_hv)(int16_t *dst, ptrdiff_t dststride,
     }
 }
 
+static void FUNC(put_unweighted_pred)(uint8_t *_dst, ptrdiff_t _dststride,
+                                      int16_t *src, ptrdiff_t srcstride,
+                                      int width, int height)
+{
+    int x, y;
+    pixel *dst = (pixel*)_dst;
+    ptrdiff_t dststride = _dststride/sizeof(pixel);
+
+    int shift = 14 - BIT_DEPTH;
+    #if BIT_DEPTH < 14
+    int offset = 1 << (shift - 1);
+    #else
+    int offset = 0;
+    #endif
+    for (y = 0; y < height; y++) {
+        for (x = 0; x < width; x++)
+            dst[x] = av_clip_pixel((src[x] + offset) >> shift);
+        dst += dststride;
+        src += srcstride;
+    }
+}
+
+
 // line zero
 #define P3 pix[-4*xstride]
 #define P2 pix[-3*xstride]

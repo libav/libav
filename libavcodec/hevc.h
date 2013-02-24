@@ -79,6 +79,7 @@ typedef struct ShortTermRPS {
 #define LT_FOLL      4
 typedef struct RefPicList {
     int list[16];
+    int idx[16];
     int numPic;
 } RefPicList;
 
@@ -649,6 +650,11 @@ typedef struct SAOParams {
     int offset_val[3][5]; ///<SaoOffsetVal
 } SAOParams;
 
+typedef struct HEVCFrame {
+    AVFrame *frame;
+    int poc;
+} HEVCFrame;
+
 typedef struct HEVCContext {
     AVCodecContext *avctx;
     AVFrame *frame;
@@ -699,6 +705,8 @@ typedef struct HEVCContext {
     TransformUnit tu;
     ResidualCoding rc;
     int poc;
+
+    HEVCFrame short_refs[16];
 } HEVCContext;
 
 enum ScanType {
@@ -712,6 +720,11 @@ int ff_hevc_decode_nal_vps(HEVCContext *s);
 int ff_hevc_decode_nal_sps(HEVCContext *s);
 int ff_hevc_decode_nal_pps(HEVCContext *s);
 int ff_hevc_decode_nal_sei(HEVCContext *s);
+
+void ff_hevc_clear_refs(HEVCContext *s);
+int ff_hevc_add_ref(HEVCContext *s, AVFrame *frame, int poc);
+void ff_hevc_compute_poc(HEVCContext *s, int poc_lsb);
+void ff_hevc_set_ref_poc_list(HEVCContext *s);
 
 void save_states(HEVCContext *s);
 void load_states(HEVCContext *s);
