@@ -2703,29 +2703,12 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
     int ret;
     
-#ifdef HM
-    AVFrame *picture = (AVFrame*) data;
-    int gotpicture;
-#endif
     int temporal_id, temp_id;
 
 
     *data_size = 0;
 
     init_get_bits(gb, avpkt->data, avpkt->size*8);
-#ifdef HM
-    gotpicture = libDecoderDecode(avpkt->data, avpkt->size,  &temporal_id);
-    if (gotpicture) {
-        libDecoderGetOuptut(0, s->frame->data[0], s->frame->data[1], s->frame->data[2], 1);
-    }
-    if (gotpicture) {
-        temporal_id = temp_id;
-        
-        libDecoderDecode(avpkt->data, avpkt->size, &temp_id);
-    }
-
-
-#endif
     av_log(s->avctx, AV_LOG_DEBUG, "=================\n");
 
     if (hls_nal_unit(s) <= 0) {
@@ -2770,7 +2753,7 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             return -1;
 
         ff_hevc_cabac_init(s);
-#ifndef HM
+
         if (hls_slice_data(s) < 0)
             return -1;
 
@@ -2793,16 +2776,10 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             if ((ret = av_frame_ref(data, s->frame)) < 0)
                 return ret;
         }
-#endif
 
         av_frame_unref(s->frame);
         s->frame->pict_type = AV_PICTURE_TYPE_I;
         s->frame->key_frame = 1;
-#ifdef HM
-        if ((ret = av_frame_ref(data, s->frame)) < 0)
-            return ret;
-        picture->linesize[0] = s->frame->width;
-#endif
         *data_size = sizeof(AVFrame);
         break;
     case NAL_AUD:
@@ -2820,9 +2797,6 @@ static av_cold int hevc_decode_init(AVCodecContext *avctx)
 {
     HEVCContext *s = avctx->priv_data;
 
-#ifdef HM
-    libDecoderInit();
-#endif
     s->avctx = avctx;
     s->frame = av_frame_alloc();
     s->sao_frame = av_frame_alloc();
@@ -2869,9 +2843,6 @@ static av_cold int hevc_decode_free(AVCodecContext *avctx)
 
     pic_arrays_free(s);
 
-#ifdef HM
-    libDecoderClose();
-#endif
     return 0;
 }
 
