@@ -429,7 +429,7 @@ static void FUNC(put_hevc_qpel_pixels)(int16_t *dst, ptrdiff_t dststride,
      17*src[x+stride] - 5*src[x+2*stride] + 1*src[x+3*stride])
 #define QPEL_FILTER_2(src, stride)                                              \
     (-src[x-3*stride] + 4*src[x-2*stride] - 11*src[x-stride] + 40*src[x] +      \
-     40*src[x+stride] - 11*src[x+2*stride] + 4*src[x+3*stride] + src[x+4*stride])
+     40*src[x+stride] - 11*src[x+2*stride] + 4*src[x+3*stride] - src[x+4*stride])
 #define QPEL_FILTER_3(src, stride)                                             \
     (src[x-2*stride] - 5*src[x-stride] + 17*src[x] + 58*src[x+stride]          \
      - 10*src[x+2*stride] + 4*src[x+3*stride] - src[x+4*stride])
