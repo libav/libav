@@ -22,6 +22,7 @@
  */
 
 #include "hevc.h"
+#include "golomb.h"
 
 static void decode_nal_sei_decoded_picture_hash(HEVCContext *s, int payload_size)
 {
@@ -46,6 +47,32 @@ static void decode_nal_sei_decoded_picture_hash(HEVCContext *s, int payload_size
     }
 }
 
+static void decode_nal_sei_frame_packing_arrangement(HEVCContext *s)
+{
+    GetBitContext *gb = &s->gb;
+    int cancel, type, quincunx;
+
+    get_ue_golomb(gb);                      // frame_packing_arrangement_id
+    cancel = get_bits1(gb);                 // frame_packing_cancel_flag
+    if ( cancel == 0 )
+    {
+        type = get_bits(gb, 7);             // frame_packing_arrangement_type
+        quincunx = get_bits1(gb);           // quincunx_sampling_flag
+        skip_bits(gb, 6);                   // content_interpretation_type
+
+        // the following skips spatial_flipping_flag frame0_flipped_flag
+        // field_views_flag current_frame_is_frame0_flag
+        // frame0_self_contained_flag frame1_self_contained_flag
+        skip_bits(gb, 6);
+
+        if ( quincunx == 0 && type != 5 )
+            skip_bits(gb, 16);              // frame[01]_grid_position_[xy]
+        skip_bits(gb, 8);                   // frame_packing_arrangement_reserved_byte
+        skip_bits1(gb);                     // frame_packing_arrangement_persistance_flag
+    }
+    skip_bits1(gb);                         // upsampled_aspect_ratio_flag
+}
+
 static int decode_nal_sei_message(HEVCContext *s)
 {
     GetBitContext *gb = &s->gb;
@@ -67,6 +94,8 @@ static int decode_nal_sei_message(HEVCContext *s)
     if (s->nal_unit_type == NAL_SEI_PREFIX) {
         if (payload_type == 256 && s->decode_checksum_sei)
             decode_nal_sei_decoded_picture_hash(s, payload_size);
+        else if (payload_type == 45)
+            decode_nal_sei_frame_packing_arrangement(s);
         else {
             av_log(s->avctx, AV_LOG_DEBUG, "Skipped PREFIX SEI %d\n", payload_type);
             skip_bits(gb, 8*payload_size);
