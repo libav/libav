@@ -29,6 +29,7 @@
 #include "internal.h"
 #include "hevcdata.h"
 #include "hevc.h"
+#include "libavutil/opt.h"
 
 /**
  * NOTE: Each function hls_foo correspond to the function foo in the
@@ -2793,11 +2794,27 @@ static void hevc_decode_flush(AVCodecContext *avctx)
 {
 }
 
+#define OFFSET(x) offsetof(HEVCContext, x)
+#define PAR (AV_OPT_FLAG_DECODING_PARAM | AV_OPT_FLAG_VIDEO_PARAM)
+static const AVOption options[] = {
+    { "decode-checksum", "decode picture checksum SEI message", OFFSET(decode_checksum_sei),
+      AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, PAR },
+    { NULL },
+};
+
+static const AVClass hevc_decoder_class = {
+    .class_name = "HEVC decoder",
+    .item_name  = av_default_item_name,
+    .option     = options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
+
 AVCodec ff_hevc_decoder = {
     .name           = "hevc",
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_HEVC,
     .priv_data_size = sizeof(HEVCContext),
+    .priv_class     = &hevc_decoder_class,
     .init           = hevc_decode_init,
     .close          = hevc_decode_free,
     .decode         = hevc_decode_frame,

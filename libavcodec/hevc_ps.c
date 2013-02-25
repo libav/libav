@@ -830,14 +830,14 @@ static int decode_nal_sei_message(HEVCContext *s)
         payload_size += byte;
     }
     if (s->nal_unit_type == NAL_SEI_PREFIX) {
-        if (payload_type == 256)
+        if (payload_type == 256 && s->decode_checksum_sei)
             decode_nal_sei_decoded_picture_hash(s, payload_size);
         else {
             av_log(s->avctx, AV_LOG_DEBUG, "Skipped PREFIX SEI %d\n", payload_type);
             skip_bits(gb, 8*payload_size);
         }
     } else { /* nal_unit_type == NAL_SEI_SUFFIX */
-        if (payload_type == 132)
+        if (payload_type == 132 && s->decode_checksum_sei)
             decode_nal_sei_decoded_picture_hash(s, payload_size);
         else {
             av_log(s->avctx, AV_LOG_DEBUG, "Skipped SUFFIX SEI %d\n", payload_type);
