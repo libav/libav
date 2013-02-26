@@ -656,6 +656,8 @@ typedef struct HEVCFrame {
 } HEVCFrame;
 
 typedef struct HEVCContext {
+    AVClass *c;  // needed by private avoptions
+
     AVCodecContext *avctx;
     AVFrame *frame;
     AVFrame *sao_frame;
@@ -707,6 +709,7 @@ typedef struct HEVCContext {
     int poc;
 
     HEVCFrame short_refs[16];
+    int decode_checksum_sei;
 } HEVCContext;
 
 enum ScanType {

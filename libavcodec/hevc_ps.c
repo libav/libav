@@ -425,6 +425,12 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
         sps->pic_conf_win.top_offset    = get_ue_golomb(gb);
         sps->pic_conf_win.bottom_offset = get_ue_golomb(gb);
     }
+    if (s->avctx->flags2 & CODEC_FLAG2_IGNORE_CROP) {
+        sps->pic_conf_win.left_offset   =
+        sps->pic_conf_win.right_offset  =
+        sps->pic_conf_win.top_offset    =
+        sps->pic_conf_win.bottom_offset = 0;
+    }
 
     sps->bit_depth = get_ue_golomb(gb) + 8;
     bit_depth_chroma = get_ue_golomb(gb) + 8;
@@ -789,73 +795,4 @@ err:
     return -1;
 }
 
-static void decode_nal_sei_decoded_picture_hash(HEVCContext *s, int payload_size)
-{
-    int cIdx, i;
-    int hash_type;
-    int picture_md5;
-    int picture_crc;
-    int picture_checksum;
-    GetBitContext *gb = &s->gb;
-    hash_type = get_bits(gb, 8);
 
-    for( cIdx = 0; cIdx < 3/*((s->sps->chroma_format_idc == 0) ? 1 : 3)*/; cIdx++ ) {
-        if ( hash_type == 0 ) {
-            for( i = 0; i < 16; i++) {
-                picture_md5 = get_bits(gb, 8);
-            }
-        } else if( hash_type == 1 ) {
-            picture_crc = get_bits(gb, 16);
-        } else if( hash_type == 2 ) {
-            picture_checksum = get_bits(gb, 32);
-        }
-    }
-}
-static int decode_nal_sei_message(HEVCContext *s)
-{
-    GetBitContext *gb = &s->gb;
-
-    int payload_type = 0;
-    int payload_size = 0;
-    int byte = 0xFF;
-    av_log(s->avctx, AV_LOG_DEBUG, "Decoding SEI\n");
-
-    while (byte == 0xFF) {
-        byte = get_bits(gb, 8);
-        payload_type += byte;
-    }
-    byte = 0xFF;
-    while (byte == 0xFF) {
-        byte = get_bits(gb, 8);
-        payload_size += byte;
-    }
-    if (s->nal_unit_type == NAL_SEI_PREFIX) {
-        if (payload_type == 256)
-            decode_nal_sei_decoded_picture_hash(s, payload_size);
-        else {
-            av_log(s->avctx, AV_LOG_DEBUG, "Skipped PREFIX SEI %d\n", payload_type);
-            skip_bits(gb, 8*payload_size);
-        }
-    } else { /* nal_unit_type == NAL_SEI_SUFFIX */
-        if (payload_type == 132)
-            decode_nal_sei_decoded_picture_hash(s, payload_size);
-        else {
-            av_log(s->avctx, AV_LOG_DEBUG, "Skipped SUFFIX SEI %d\n", payload_type);
-            skip_bits(gb, 8*payload_size);
-        }
-    }
-    return 0;
-}
-
-static int more_rbsp_data(GetBitContext *gb)
-{
-    return get_bits_left(gb) > 0 && show_bits(gb, 8) != 0x80;
-}
-
-int ff_hevc_decode_nal_sei(HEVCContext *s)
-{
-    do {
-        decode_nal_sei_message(s);
-    } while (more_rbsp_data(&s->gb));
-    return 0;
-}
