@@ -425,6 +425,12 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
         sps->pic_conf_win.top_offset    = get_ue_golomb(gb);
         sps->pic_conf_win.bottom_offset = get_ue_golomb(gb);
     }
+    if (s->avctx->flags2 & CODEC_FLAG2_IGNORE_CROP) {
+        sps->pic_conf_win.left_offset   =
+        sps->pic_conf_win.right_offset  =
+        sps->pic_conf_win.top_offset    =
+        sps->pic_conf_win.bottom_offset = 0;
+    }
 
     sps->bit_depth = get_ue_golomb(gb) + 8;
     bit_depth_chroma = get_ue_golomb(gb) + 8;
