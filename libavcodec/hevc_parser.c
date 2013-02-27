@@ -113,7 +113,7 @@ static int hevc_parse(AVCodecParserContext *s,
 
     if (next == AVERROR_INVALIDDATA) {
         av_log(NULL, AV_LOG_ERROR, "Data fed to parser isn't a NAL unit\n");
-        return next;
+        return buf_size;
     }
 
     // next is an offset in buf, but we want to combine frames from *poutbuf
