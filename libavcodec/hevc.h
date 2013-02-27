@@ -581,6 +581,7 @@ typedef struct MvField {
       int pred_flag_l0;
       int pred_flag_l1;
       int is_intra;
+      int is_pcm;
 } MvField;
 
 // MERGE
