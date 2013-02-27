@@ -54,6 +54,9 @@ typedef struct HEVCDSPContext {
     void (*put_unweighted_pred)(uint8_t *dst, ptrdiff_t dststride, int16_t *src, ptrdiff_t srcstride,
                                 int width, int height);
 
+    void (*put_weighted_pred_avg)(uint8_t *dst, ptrdiff_t dststride, int16_t *src1, int16_t *src2,
+                                  ptrdiff_t srcstride, int width, int height);
+
     void (*hevc_loop_filter_luma)(uint8_t *_pix, ptrdiff_t _xstride, ptrdiff_t _ystride, int no_p, int no_q, int _beta, int _tc);
     void (*hevc_loop_filter_chroma)(uint8_t *_pix, ptrdiff_t _xstride, ptrdiff_t _ystride, int no_p, int no_q, int _tc);
 } HEVCDSPContext;
