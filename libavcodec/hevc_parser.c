@@ -117,7 +117,8 @@ static int hevc_parse(AVCodecParserContext *s,
     // next is an offset in buf, but we want to combine frames from *poutbuf
     combine_next = (next != END_NOT_FOUND) ? *poutbuf_size : next;
 
-    if (*poutbuf_size == 0 || ff_combine_frame(pc, combine_next, poutbuf, poutbuf_size) < 0) {
+    if (ff_combine_frame(pc, combine_next, poutbuf, poutbuf_size) < 0 ||
+        *poutbuf_size == 0) {
         *poutbuf      = NULL;
         *poutbuf_size = 0;
         return buf_size;
