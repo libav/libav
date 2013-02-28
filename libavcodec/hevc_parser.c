@@ -70,11 +70,8 @@ static int hevc_parse_nal_unit(HEVCParserContext *hpc, uint8_t **poutbuf,
             pc->state = (pc->state << 8) | buf[i];
             switch (pc->state & mask) {
             case START_CODE:
-                pc->frame_start_found = 0;
-                pc->state = -1;
-                // The start code is three bytes long
-                *poutbuf_size = i - 2 - skipped;
-                return header + i - 2;
+                *poutbuf_size = FFMAX(i - 2 - skipped, 0);
+                return header + i + 1;
             case EMULATION_CODE:
                 skipped++;
 
@@ -99,6 +96,8 @@ static int hevc_parse_nal_unit(HEVCParserContext *hpc, uint8_t **poutbuf,
     return END_NOT_FOUND;
 }
 
+// Each parsed packet is a NAL unit with the emulation bytes removed and may
+// have trailing zero bytes.
 static int hevc_parse(AVCodecParserContext *s,
                       AVCodecContext *avctx,
                       const uint8_t **poutbuf, int *poutbuf_size,
