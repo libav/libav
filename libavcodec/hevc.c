@@ -2720,51 +2720,50 @@ static void hls_prediction_unit(HEVCContext *s, int x0, int y0, int nPbW, int nP
             }
         }
     }
-    switch(inter_pred_idc) {
+    if (current_mv.pred_flag_l0 && !current_mv.pred_flag_l1) {
+        int16_t tmp[MAX_PB_SIZE*MAX_PB_SIZE];
+        int16_t tmp2[MAX_PB_SIZE*MAX_PB_SIZE];
+        luma_mc(s, tmp, tmpstride,
+                s->short_refs[s->sh.refPicList[0].idx[current_mv.ref_idx_l0]].frame,
+                &current_mv.mv_l0, x0, y0, nPbW, nPbH);
+        s->hevcdsp.put_unweighted_pred(dst0, s->frame->linesize[0], tmp, tmpstride, nPbW, nPbH);
+        chroma_mc(s, tmp, tmp2, tmpstride,
+                  s->short_refs[s->sh.refPicList[0].idx[current_mv.ref_idx_l0]].frame,
+                  &current_mv.mv_l0, x0/2, y0/2, nPbW/2, nPbH/2);
+                    s->hevcdsp.put_unweighted_pred(dst1, s->frame->linesize[1], tmp, tmpstride, nPbW/2, nPbH/2);
+                    s->hevcdsp.put_unweighted_pred(dst2, s->frame->linesize[2], tmp2, tmpstride, nPbW/2, nPbH/2);
+    } else if (!current_mv.pred_flag_l0 && current_mv.pred_flag_l1) {
+        int16_t tmp[MAX_PB_SIZE*MAX_PB_SIZE];
+        int16_t tmp2[MAX_PB_SIZE*MAX_PB_SIZE];
+        luma_mc(s, tmp, tmpstride,
+                s->short_refs[s->sh.refPicList[1].idx[current_mv.ref_idx_l1]].frame,
+                &current_mv.mv_l1, x0, y0, nPbW, nPbH);
+        s->hevcdsp.put_unweighted_pred(dst0, s->frame->linesize[0], tmp, tmpstride, nPbW, nPbH);
+        chroma_mc(s, tmp, tmp2, tmpstride,
+                  s->short_refs[s->sh.refPicList[1].idx[current_mv.ref_idx_l1]].frame,
+                  &current_mv.mv_l1, x0/2, y0/2, nPbW/2, nPbH/2);
+                    s->hevcdsp.put_unweighted_pred(dst1, s->frame->linesize[1], tmp, tmpstride, nPbW/2, nPbH/2);
+                    s->hevcdsp.put_unweighted_pred(dst2, s->frame->linesize[2], tmp2, tmpstride, nPbW/2, nPbH/2);
+    } else {
         int16_t tmp[MAX_PB_SIZE*MAX_PB_SIZE];
         int16_t tmp2[MAX_PB_SIZE*MAX_PB_SIZE];
         int16_t tmp3[MAX_PB_SIZE*MAX_PB_SIZE];
         int16_t tmp4[MAX_PB_SIZE*MAX_PB_SIZE];
-        case PRED_L0 :
-            luma_mc(s, tmp, tmpstride,
-                    s->short_refs[s->sh.refPicList[0].idx[current_mv.ref_idx_l0]].frame,
-                    &current_mv.mv_l0, x0, y0, nPbW, nPbH);
-            s->hevcdsp.put_unweighted_pred(dst0, s->frame->linesize[0], tmp, tmpstride, nPbW, nPbH);
-            chroma_mc(s, tmp, tmp2, tmpstride,
-                      s->short_refs[s->sh.refPicList[0].idx[current_mv.ref_idx_l0]].frame,
-                      &current_mv.mv_l0, x0/2, y0/2, nPbW/2, nPbH/2);
-            s->hevcdsp.put_unweighted_pred(dst1, s->frame->linesize[1], tmp, tmpstride, nPbW/2, nPbH/2);
-            s->hevcdsp.put_unweighted_pred(dst2, s->frame->linesize[2], tmp2, tmpstride, nPbW/2, nPbH/2);
-            break;
-        case PRED_L1 :
-            luma_mc(s, tmp, tmpstride,
-                    s->short_refs[s->sh.refPicList[1].idx[current_mv.ref_idx_l1]].frame,
-                    &current_mv.mv_l1, x0, y0, nPbW, nPbH);
-            s->hevcdsp.put_unweighted_pred(dst0, s->frame->linesize[0], tmp, tmpstride, nPbW, nPbH);
-            chroma_mc(s, tmp, tmp2, tmpstride,
-                      s->short_refs[s->sh.refPicList[1].idx[current_mv.ref_idx_l1]].frame,
-                      &current_mv.mv_l1, x0/2, y0/2, nPbW/2, nPbH/2);
-            s->hevcdsp.put_unweighted_pred(dst1, s->frame->linesize[1], tmp, tmpstride, nPbW/2, nPbH/2);
-            s->hevcdsp.put_unweighted_pred(dst2, s->frame->linesize[2], tmp2, tmpstride, nPbW/2, nPbH/2);
-            break;
-        case PRED_BI :
-            luma_mc(s, tmp, tmpstride,
-                    s->short_refs[s->sh.refPicList[0].idx[current_mv.ref_idx_l0]].frame,
-                    &current_mv.mv_l0, x0, y0, nPbW, nPbH);
-            luma_mc(s, tmp2, tmpstride,
-                    s->short_refs[s->sh.refPicList[1].idx[current_mv.ref_idx_l1]].frame,
-                    &current_mv.mv_l1, x0, y0, nPbW, nPbH);
-            s->hevcdsp.put_weighted_pred_avg(dst0, s->frame->linesize[0], tmp, tmp2, tmpstride, nPbW, nPbH);
-            chroma_mc(s, tmp, tmp2, tmpstride,
-                      s->short_refs[s->sh.refPicList[0].idx[current_mv.ref_idx_l0]].frame,
-                      &current_mv.mv_l0, x0/2, y0/2, nPbW/2, nPbH/2);
-            chroma_mc(s, tmp3, tmp4, tmpstride,
-                      s->short_refs[s->sh.refPicList[1].idx[current_mv.ref_idx_l1]].frame,
-                      &current_mv.mv_l1, x0/2, y0/2, nPbW/2, nPbH/2);
-            s->hevcdsp.put_weighted_pred_avg(dst1, s->frame->linesize[1], tmp, tmp3, tmpstride, nPbW/2, nPbH/2);
-            s->hevcdsp.put_weighted_pred_avg(dst2, s->frame->linesize[2], tmp2, tmp4, tmpstride, nPbW/2, nPbH/2);
-            break;
-        default : break;
+        luma_mc(s, tmp, tmpstride,
+                s->short_refs[s->sh.refPicList[0].idx[current_mv.ref_idx_l0]].frame,
+                &current_mv.mv_l0, x0, y0, nPbW, nPbH);
+        luma_mc(s, tmp2, tmpstride,
+                s->short_refs[s->sh.refPicList[1].idx[current_mv.ref_idx_l1]].frame,
+                &current_mv.mv_l1, x0, y0, nPbW, nPbH);
+        s->hevcdsp.put_weighted_pred_avg(dst0, s->frame->linesize[0], tmp, tmp2, tmpstride, nPbW, nPbH);
+        chroma_mc(s, tmp, tmp2, tmpstride,
+                  s->short_refs[s->sh.refPicList[0].idx[current_mv.ref_idx_l0]].frame,
+                  &current_mv.mv_l0, x0/2, y0/2, nPbW/2, nPbH/2);
+        chroma_mc(s, tmp3, tmp4, tmpstride,
+                  s->short_refs[s->sh.refPicList[1].idx[current_mv.ref_idx_l1]].frame,
+                  &current_mv.mv_l1, x0/2, y0/2, nPbW/2, nPbH/2);
+                    s->hevcdsp.put_weighted_pred_avg(dst1, s->frame->linesize[1], tmp, tmp3, tmpstride, nPbW/2, nPbH/2);
+                    s->hevcdsp.put_weighted_pred_avg(dst2, s->frame->linesize[2], tmp2, tmp4, tmpstride, nPbW/2, nPbH/2);
     }
     return;
 }

@@ -634,7 +634,7 @@ static void FUNC(put_weighted_pred_avg)(uint8_t *_dst, ptrdiff_t _dststride,
     pixel *dst = (pixel*)_dst;
     ptrdiff_t dststride = _dststride/sizeof(pixel);
 
-    int shift = 14 - BIT_DEPTH;
+    int shift = 14 + 1 - BIT_DEPTH;
 #if BIT_DEPTH < 14
     int offset = 1 << (shift - 1);
 #else
@@ -642,7 +642,7 @@ static void FUNC(put_weighted_pred_avg)(uint8_t *_dst, ptrdiff_t _dststride,
 #endif
     for (y = 0; y < height; y++) {
         for (x = 0; x < width; x++)
-            dst[x] = av_clip_pixel((src1[x] + src2[x] + offset) >> (shift + 1));
+            dst[x] = av_clip_pixel((src1[x] + src2[x] + offset) >> shift);
         dst += dststride;
         src1 += srcstride;
         src2 += srcstride;
