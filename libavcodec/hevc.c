@@ -3105,9 +3105,6 @@ static int hls_nal_unit(HEVCContext *s)
     return ret;
 }
 
-/**
- * Note: avpkt->data must contain exactly one NAL unit
- */
 static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
                              AVPacket *avpkt)
 {
