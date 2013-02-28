@@ -451,19 +451,20 @@ static int chroma_tc(HEVCContext *s, int qp_y, int c_idx)
     int qp;
     int idxt;
 
-    if (c_idx == 1) {
+    // slice qp offset is not used for deblocking
+    if (c_idx == 1)
         offset = s->pps->cb_qp_offset;
-    } else {
+    else
         offset = s->pps->cr_qp_offset;
-    }
-    qp_i = av_clip_c(qp_y + offset, 0, 53);
-    if (qp_i < 30) {
+
+    qp_i = av_clip_c(qp_y + offset, - s->sps->qp_bd_offset, 57);
+    if (qp_i < 30)
         qp = qp_i;
-    } else if (qp_i > 43) {
+    else if (qp_i > 43)
         qp = qp_i - 6;
-    } else {
+    else
         qp = qp_c[qp_i - 30];
-    }
+
     qp += s->sps->qp_bd_offset;
 
     idxt = av_clip_c(qp + DEFAULT_INTRA_TC_OFFSET + s->sh.tc_offset, 0, 53);
