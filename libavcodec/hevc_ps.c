@@ -497,10 +497,8 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
         }
 
         sps->pcm.loop_filter_disable_flag = get_bits1(gb);
-        if (sps->pcm.loop_filter_disable_flag) {
+        if (sps->pcm.loop_filter_disable_flag)
             av_log_missing_feature(s->avctx, "pcm_loop_filter_disable_flag", 0);
-            goto err;
-        }
     }
 
     sps->num_short_term_ref_pic_sets = get_ue_golomb(gb);
