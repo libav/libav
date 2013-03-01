@@ -516,7 +516,7 @@ typedef struct CodingUnit {
     uint8_t *skip_flag;
     enum PredMode pred_mode; ///< PredMode
     enum PartMode part_mode; ///< PartMode
-    uint8_t no_residual_data_flag;
+    uint8_t rqt_root_cbf;
 
     uint8_t pcm_flag;
 
@@ -581,6 +581,7 @@ typedef struct MvField {
       int pred_flag_l0;
       int pred_flag_l1;
       int is_intra;
+      int cbf_luma; // cbf_luma of colocated TU
       int is_pcm;
 } MvField;
 
