@@ -3241,12 +3241,9 @@ static int calc_md5(uint8_t *md5, uint8_t* src, int stride, int width, int heigh
     buf = av_malloc(width * height);
     int y,x;
 
-    for (y = 0; y < height; y++)
-    {
+    for (y = 0; y < height; y++) {
         for (x = 0; x < width; x++)
-        {
-            buf[y * width + x] = src[x] & 0xff;
-        }
+            buf[y * width + x] = src[x];
 
         src += stride;
     }
@@ -3356,19 +3353,19 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             if ((ret = av_frame_ref(data, s->sao_frame)) < 0)
                 return ret;
 	        if (s->decode_checksum_sei) {
-	            calc_md5(s->md5[0], s->sao_frame->data[0], s->frame->linesize[0], s->frame->width, s->frame->height);
-	            calc_md5(s->md5[1], s->sao_frame->data[1], s->frame->linesize[1], s->frame->width/2, s->frame->height/2);
-	            calc_md5(s->md5[2], s->sao_frame->data[2], s->frame->linesize[2], s->frame->width/2, s->frame->height/2);
+                calc_md5(s->md5[0], s->sao_frame->data[0], s->frame->linesize[0], s->frame->width, s->frame->height);
+                calc_md5(s->md5[1], s->sao_frame->data[1], s->frame->linesize[1], s->frame->width/2, s->frame->height/2);
+                calc_md5(s->md5[2], s->sao_frame->data[2], s->frame->linesize[2], s->frame->width/2, s->frame->height/2);
 	        }
             ff_hevc_add_ref(s, s->sao_frame, s->poc);
             av_frame_unref(s->sao_frame);
         } else {
             ff_hevc_add_ref(s, s->frame, s->poc);
 	        if (s->decode_checksum_sei) {
-	            calc_md5(s->md5[0], s->frame->data[0], s->frame->linesize[0], s->frame->width, s->frame->height);
-	            calc_md5(s->md5[1], s->frame->data[1], s->frame->linesize[1], s->frame->width/2, s->frame->height/2);
-	            calc_md5(s->md5[2], s->frame->data[2], s->frame->linesize[2], s->frame->width/2, s->frame->height/2);
-	        }
+                calc_md5(s->md5[0], s->frame->data[0], s->frame->linesize[0], s->frame->width, s->frame->height);
+                calc_md5(s->md5[1], s->frame->data[1], s->frame->linesize[1], s->frame->width/2, s->frame->height/2);
+                calc_md5(s->md5[2], s->frame->data[2], s->frame->linesize[2], s->frame->width/2, s->frame->height/2);
+            }
             if ((ret = av_frame_ref(data, s->frame)) < 0)
                 return ret;
         }

@@ -46,9 +46,9 @@ static void decode_nal_sei_decoded_picture_hash(HEVCContext *s, int payload_size
 
     for( cIdx = 0; cIdx < 3/*((s->sps->chroma_format_idc == 0) ? 1 : 3)*/; cIdx++ ) {
         if ( hash_type == 0 ) {
-            for( i = 0; i < 16; i++) {
+            for( i = 0; i < 16; i++)
                 picture_md5[i] = get_bits(gb, 8);
-            }
+
             if (!compare_md5(picture_md5, s->md5[cIdx]) && (cIdx == 0))
                 av_log(s->avctx, AV_LOG_ERROR, "md5 not ok\n");
         } else if( hash_type == 1 ) {
