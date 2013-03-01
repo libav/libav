@@ -30,6 +30,7 @@
 #include "hevcdata.h"
 #include "hevc.h"
 #include "libavutil/opt.h"
+#include "libavutil/md5.h"
 
 /**
  * NOTE: Each function hls_foo correspond to the function foo in the
@@ -61,20 +62,6 @@ static int pic_arrays_init(HEVCContext *s)
     s->pu.left_ipm = av_malloc(pic_height_in_min_pu);
     s->pu.top_ipm = av_malloc(pic_width_in_min_pu);
     s->pu.tab_mvf = av_malloc(pic_width_in_min_pu*pic_height_in_min_pu*sizeof(MvField));
-
-    for( i =0; i<pic_width_in_min_pu*pic_height_in_min_pu ; i++ ) {
-        s->pu.tab_mvf[i].ref_idx_l0 =  -1;
-        s->pu.tab_mvf[i].ref_idx_l1 =  -1;
-        s->pu.tab_mvf[i].mv_l0.x = 0 ;
-        s->pu.tab_mvf[i].mv_l0.y = 0 ;
-        s->pu.tab_mvf[i].mv_l1.x = 0 ;
-        s->pu.tab_mvf[i].mv_l1.y = 0 ;
-        s->pu.tab_mvf[i].pred_flag_l0 = 0;
-        s->pu.tab_mvf[i].pred_flag_l1 = 0;
-        s->pu.tab_mvf[i].is_intra = 0;
-        s->pu.tab_mvf[i].cbf_luma = 0;
-        s->pu.tab_mvf[i].is_pcm = 0;
-    }
 
     s->horizontal_bs = (uint8_t*)av_malloc(2 * s->bs_width * s->bs_height);
     s->vertical_bs = (uint8_t*)av_malloc(s->bs_width * 2 * s->bs_height);
@@ -3249,6 +3236,25 @@ static int hls_nal_unit(HEVCContext *s)
     return ret;
 }
 
+static int calc_md5(uint8_t *md5, uint8_t* src, int stride, int width, int height) {
+    uint8_t *buf;
+    buf = av_malloc(width * height);
+    int y,x;
+
+    for (y = 0; y < height; y++)
+    {
+        for (x = 0; x < width; x++)
+        {
+            buf[y * width + x] = src[x] & 0xff;
+        }
+
+        src += stride;
+    }
+    av_md5_sum(md5, buf, width * height);
+    av_free(buf);
+}
+
+
 static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
                              AVPacket *avpkt)
 {
@@ -3349,10 +3355,20 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             sao_filter(s);
             if ((ret = av_frame_ref(data, s->sao_frame)) < 0)
                 return ret;
+	        if (s->decode_checksum_sei) {
+	            calc_md5(s->md5[0], s->sao_frame->data[0], s->frame->linesize[0], s->frame->width, s->frame->height);
+	            calc_md5(s->md5[1], s->sao_frame->data[1], s->frame->linesize[1], s->frame->width/2, s->frame->height/2);
+	            calc_md5(s->md5[2], s->sao_frame->data[2], s->frame->linesize[2], s->frame->width/2, s->frame->height/2);
+	        }
             ff_hevc_add_ref(s, s->sao_frame, s->poc);
             av_frame_unref(s->sao_frame);
         } else {
             ff_hevc_add_ref(s, s->frame, s->poc);
+	        if (s->decode_checksum_sei) {
+	            calc_md5(s->md5[0], s->frame->data[0], s->frame->linesize[0], s->frame->width, s->frame->height);
+	            calc_md5(s->md5[1], s->frame->data[1], s->frame->linesize[1], s->frame->width/2, s->frame->height/2);
+	            calc_md5(s->md5[2], s->frame->data[2], s->frame->linesize[2], s->frame->width/2, s->frame->height/2);
+	        }
             if ((ret = av_frame_ref(data, s->frame)) < 0)
                 return ret;
         }
