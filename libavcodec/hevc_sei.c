@@ -40,8 +40,8 @@ static void decode_nal_sei_decoded_picture_hash(HEVCContext *s, int payload_size
     uint16_t picture_crc;
     uint32_t picture_checksum;
     GetBitContext *gb = &s->gb;
-    hash_type = get_bits(gb, 8);
     uint8_t picture_md5[16];
+    hash_type = get_bits(gb, 8);
     
 
     for( cIdx = 0; cIdx < 3/*((s->sps->chroma_format_idc == 0) ? 1 : 3)*/; cIdx++ ) {
