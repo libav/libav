@@ -542,7 +542,9 @@ static void sao_filter(HEVCContext *s)
     //TODO: This should be easily parallelizable
     //TODO: skip CBs when (cu_transquant_bypass_flag || (pcm_loop_filter_disable_flag && pcm_flag))
     int c_idx, y_ctb, x_ctb;
-    for (c_idx = 0; c_idx < 3; c_idx++) {
+    int c_idx_min = s->sh.slice_sample_adaptive_offset_flag[0] != 0 ? 0 : 1;
+    int c_idx_max = s->sh.slice_sample_adaptive_offset_flag[1] != 0 ? 3 : 1;
+    for (c_idx = c_idx_min; c_idx < c_idx_max; c_idx++) {
         int stride = s->frame->linesize[c_idx];
         int ctb_size = (1 << (s->sps->log2_ctb_size)) >> s->sps->hshift[c_idx];
         for (y_ctb = 0; y_ctb < s->sps->pic_height_in_ctbs; y_ctb++) {
