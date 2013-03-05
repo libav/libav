@@ -2639,8 +2639,7 @@ static void chroma_mc(HEVCContext *s, int16_t *dst1, int16_t *dst2, ptrdiff_t ds
     src1 += y_off * src1stride + (x_off << s->sps->pixel_shift);
     src2 += y_off * src2stride + (x_off << s->sps->pixel_shift);
 
-    if ((mx || my) &&
-        x_off < epel_extra_before || x_off >= pic_width - block_w - epel_extra_after ||
+    if (x_off < epel_extra_before || x_off >= pic_width - block_w - epel_extra_after ||
         y_off < epel_extra_after || y_off >= pic_height - block_h - epel_extra_after) {
         int offset1 = epel_extra_before * (src1stride + (1 << s->sps->pixel_shift));
         int offset2 = epel_extra_before * (src2stride + (1 << s->sps->pixel_shift));
