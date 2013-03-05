@@ -211,8 +211,8 @@ static int hls_slice_header(HEVCContext *s)
             ff_hevc_compute_poc(s, sh->pic_order_cnt_lsb);
             short_term_ref_pic_set_sps_flag = get_bits1(gb);
             if (!short_term_ref_pic_set_sps_flag) {
-                ff_hevc_decode_short_term_rps(s, MAX_SHORT_TERM_RPS_COUNT, s->sps);
-                sh->short_term_rps = &s->sps->short_term_rps_list[MAX_SHORT_TERM_RPS_COUNT];
+                ff_hevc_decode_short_term_rps(s, s->sps->num_short_term_ref_pic_sets, s->sps);
+                sh->short_term_rps = &s->sps->short_term_rps_list[s->sps->num_short_term_ref_pic_sets];
             } else {
                 int numbits = 0;
                 int short_term_ref_pic_set_idx;
