@@ -1249,9 +1249,13 @@ static int isDiffMER(HEVCContext *s, int xN, int yN, int xP, int yP)
 // check if the mv's and refidx are the same between A and B
 static int compareMVrefidx(struct MvField A, struct MvField B)
 {
-    if((A.ref_idx_l0 == B.ref_idx_l0) && (A.ref_idx_l1 == B.ref_idx_l1) && (A.mv_l0.x == B.mv_l0.x) && (A.mv_l0.y == B.mv_l0.y)
-            && (A.mv_l1.x == B.mv_l1.x) && (A.mv_l1.y == B.mv_l1.y))
-        return 1;
+    if(A.pred_flag_l0 && A.pred_flag_l1 && B.pred_flag_l0 && B.pred_flag_l1)
+        return ((A.ref_idx_l0 == B.ref_idx_l0)  && (A.mv_l0.x == B.mv_l0.x) && (A.mv_l0.y == B.mv_l0.y) &&
+                (A.ref_idx_l1 == B.ref_idx_l1) && (A.mv_l1.x == B.mv_l1.x) && (A.mv_l1.y == B.mv_l1.y));
+    else if (A.pred_flag_l0 && !A.pred_flag_l1 && B.pred_flag_l0 && !B.pred_flag_l1)
+        return ((A.ref_idx_l0 == B.ref_idx_l0)  && (A.mv_l0.x == B.mv_l0.x) && (A.mv_l0.y == B.mv_l0.y));
+    else if (!A.pred_flag_l0 && A.pred_flag_l1 && !B.pred_flag_l0 && B.pred_flag_l1)
+        return ((A.ref_idx_l1 == B.ref_idx_l1) && (A.mv_l1.x == B.mv_l1.x) && (A.mv_l1.y == B.mv_l1.y));
     else
         return 0;
 }
@@ -2680,7 +2684,6 @@ static void hls_prediction_unit(HEVCContext *s, int x0, int y0, int nPbW, int nP
     uint8_t *dst0 = POS(0, x0, y0);
     uint8_t *dst1 = POS(1, x0, y0);
     uint8_t *dst2 = POS(2, x0, y0);
-
     if (SAMPLE(s->cu.skip_flag, x0, y0)) {
         if (s->sh.max_num_merge_cand > 1) {
             merge_idx = ff_hevc_merge_idx_decode(s);
