@@ -3317,6 +3317,8 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     case NAL_BLA_W_RADL:
     case NAL_BLA_N_LP:
     case NAL_IDR_W_DLP:
+    case NAL_CRA_NUT:
+    case NAL_RASL_R:
         if (s->nal_unit_type == NAL_IDR_W_DLP)
             ff_hevc_clear_refs(s);
         if (hls_slice_header(s) < 0)
