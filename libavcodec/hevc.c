@@ -944,67 +944,135 @@ static void hls_transform_unit(HEVCContext *s, int x0, int  y0, int xBase, int y
     }
 }
 
+static int boundary_strength(HEVCContext *s, MvField *curr, MvField *neigh, int tu_border)
+{
+    int bs = 0;
+
+    if (tu_border) {
+        if (curr->is_intra || neigh->is_intra)
+            return 2;
+        if (curr->cbf_luma || neigh->cbf_luma)
+            return 1;
+    }
+
+    if (s->sh.slice_type == P_SLICE) {
+        if (abs(neigh->mv_l0.x - curr->mv_l0.x) >= 4 || abs(neigh->mv_l0.y - curr->mv_l0.y) >= 4 ||
+                         neigh->ref_idx_l0 != curr->ref_idx_l0)
+            return 1;
+
+    } else if (s->sh.slice_type == B_SLICE) {
+        int mvs = curr->pred_flag_l0 + curr->pred_flag_l1;
+        if (mvs == neigh->pred_flag_l0 + neigh->pred_flag_l1) {
+            if (mvs == 2) {
+                // same L0 and L1
+                if (curr->ref_idx_l0 == neigh->ref_idx_l0 && curr->ref_idx_l0 == curr->ref_idx_l1 && neigh->ref_idx_l0 == neigh->ref_idx_l1) {
+                    if ((abs(neigh->mv_l0.x - curr->mv_l0.x) >= 4 || abs(neigh->mv_l0.y - curr->mv_l0.y) >= 4 ||
+                        abs(neigh->mv_l1.x - curr->mv_l1.x) >= 4 || abs(neigh->mv_l1.y - curr->mv_l1.y) >= 4) &&
+                        (abs(neigh->mv_l1.x - curr->mv_l0.x) >= 4 || abs(neigh->mv_l1.y - curr->mv_l0.y) >= 4 ||
+                        abs(neigh->mv_l0.x - curr->mv_l1.x) >= 4 || abs(neigh->mv_l0.y - curr->mv_l1.y) >= 4))
+                        bs = 1;
+                }
+                else if (neigh->ref_idx_l0 == curr->ref_idx_l0 && neigh->ref_idx_l1 == curr->ref_idx_l1) {
+                    if (abs(neigh->mv_l0.x - curr->mv_l0.x) >= 4 || abs(neigh->mv_l0.y - curr->mv_l0.y) >= 4 ||
+                        abs(neigh->mv_l1.x - curr->mv_l1.x) >= 4 || abs(neigh->mv_l1.y - curr->mv_l1.y) >= 4)
+                        bs = 1;
+                }
+                else if (neigh->ref_idx_l1 == curr->ref_idx_l0 && neigh->ref_idx_l0 == curr->ref_idx_l1) {
+                    if (abs(neigh->mv_l1.x - curr->mv_l0.x) >= 4 || abs(neigh->mv_l1.y - curr->mv_l0.y) >= 4 ||
+                        abs(neigh->mv_l0.x - curr->mv_l1.x) >= 4 || abs(neigh->mv_l0.y - curr->mv_l1.y) >= 4)
+                        bs = 1;
+
+                } else {
+                    bs = 1;
+                }
+            } else { // 1 MV
+                Mv A, B;
+                int ref_A;
+                int ref_B;
+                if (curr->pred_flag_l0) {
+                    A = curr->mv_l0;
+                    ref_A = curr->ref_idx_l0;
+                }
+                else {
+                    A = curr->mv_l1;
+                    ref_A = curr->ref_idx_l1;
+                }
+                if (neigh->pred_flag_l0) {
+                    B = neigh->mv_l0;
+                    ref_B = neigh->ref_idx_l0;
+                } else {
+                    B = neigh->mv_l1;
+                    ref_B = neigh->ref_idx_l1;
+                }
+                if (ref_A == ref_B) {
+                    if (abs(A.x - B.x) >= 4 || abs(A.y - B.y) >= 4)
+                        bs = 1;
+                } else
+                    bs = 1;
+            }
+        }
+        else
+            bs = 1;
+    }
+    return bs;
+}
+
 static void deblocking_boundary_strengths(HEVCContext *s, int x0, int y0, int log2_trafo_size)
 {
     int min_pu_size = 1 << s->sps->log2_min_pu_size;
     int pic_width_in_min_pu = s->sps->pic_width_in_min_cbs * 4;
     int i, j;
-        if (y0 % 8 == 0)
-            for (i = 0; i < (1<<log2_trafo_size); i+=4) {
+    int bs;
+    if (y0 % 8 == 0)
+        for (i = 0; i < (1<<log2_trafo_size); i+=4) {
+            int x_pu = (x0 + i) / min_pu_size;
+            int yp_pu = (y0 - 1) / min_pu_size;
+            int yq_pu = y0 / min_pu_size;
+            MvField *top = &s->pu.tab_mvf[yp_pu * pic_width_in_min_pu + x_pu];
+            MvField *curr = &s->pu.tab_mvf[yq_pu * pic_width_in_min_pu + x_pu];
+            bs = boundary_strength(s, curr, top, 1);
+            if (bs)
+                s->horizontal_bs[(x0 + i) / 4 + y0 / 4 * s->bs_width] = bs;
+        }
+    // bs for TU internal horizontal PU boundaries
+    if (log2_trafo_size > s->sps->log2_min_pu_size && s->sh.slice_type != I_SLICE)
+        for (j = 8; j < (1<<log2_trafo_size); j += 8)
+            for (i = 0; i < (1<<log2_trafo_size); i += 4) {
                 int x_pu = (x0 + i) / min_pu_size;
-                int yp_pu = (y0 - 1) / min_pu_size;
-                int yq_pu = y0 / min_pu_size;
+                int yp_pu = (y0 + j - 1) / min_pu_size;
+                int yq_pu = (y0 + j) / min_pu_size;
                 MvField *top = &s->pu.tab_mvf[yp_pu * pic_width_in_min_pu + x_pu];
                 MvField *curr = &s->pu.tab_mvf[yq_pu * pic_width_in_min_pu + x_pu];
-                if(top->is_intra || s->cu.pred_mode == MODE_INTRA)
-                    s->horizontal_bs[(x0 + i) / 4 + y0 / 4 * s->bs_width] = 2;
-                else if (curr->cbf_luma || top->cbf_luma ||
-                         abs(top->mv_l0.x - curr->mv_l0.x) >= 4 || abs(top->mv_l0.y - curr->mv_l0.y) >= 4 ||
-                         top->ref_idx_l0 != curr->ref_idx_l0)
-                    s->horizontal_bs[(x0 + i) / 4 + y0 / 4 * s->bs_width] = 1;
+                bs = boundary_strength(s, curr, top, 0);
+                if (bs)
+                    s->horizontal_bs[(x0 + i) / 4 + (y0 + j) / 4 * s->bs_width] = bs;
             }
-        // bs for TU internal horizontal PU boundaries
-        if (log2_trafo_size > s->sps->log2_min_pu_size && s->sh.slice_type != I_SLICE)
-            for (j = 8; j < (1<<log2_trafo_size); j += 8)
-                for (i = 0; i < (1<<log2_trafo_size); i += 4) {
-                    int x_pu = (x0 + i) / min_pu_size;
-                    int yp_pu = (y0 + j - 1) / min_pu_size;
-                    int yq_pu = (y0 + j) / min_pu_size;
-                    MvField *top = &s->pu.tab_mvf[yp_pu * pic_width_in_min_pu + x_pu];
-                    MvField *curr = &s->pu.tab_mvf[yq_pu * pic_width_in_min_pu + x_pu];
-                    if (abs(top->mv_l0.x - curr->mv_l0.x) >= 4 || abs(top->mv_l0.y - curr->mv_l0.y) >= 4 ||
-                       top->ref_idx_l0 != curr->ref_idx_l0)
-                        s->horizontal_bs[(x0 + i) / 4 + (y0 + j) / 4 * s->bs_width] = 1;
-                }
 
-        // bs for vertical TU boundaries
-        if (x0 % 8 == 0)
-            for (i = 0; i < (1<<log2_trafo_size); i+=4) {
-                int xp_pu = (x0 - 1) / min_pu_size;
-                int xq_pu = x0 / min_pu_size;
-                int y_pu = (y0 + i) / min_pu_size;
+    // bs for vertical TU boundaries
+    if (x0 % 8 == 0)
+        for (i = 0; i < (1<<log2_trafo_size); i+=4) {
+            int xp_pu = (x0 - 1) / min_pu_size;
+            int xq_pu = x0 / min_pu_size;
+            int y_pu = (y0 + i) / min_pu_size;
+            MvField *left = &s->pu.tab_mvf[y_pu * pic_width_in_min_pu + xp_pu];
+            MvField *curr = &s->pu.tab_mvf[y_pu * pic_width_in_min_pu + xq_pu];
+            bs = boundary_strength(s, curr, left, 1);
+            if (bs)
+                s->vertical_bs[x0 / 8 + (y0 + i) / 4 * s->bs_width] = bs;
+        }
+    // bs for TU internal vertical PU boundaries
+    if (log2_trafo_size > s->sps->log2_min_pu_size && s->sh.slice_type != I_SLICE)
+        for (j = 0; j < (1<<log2_trafo_size); j += 4)
+            for (i = 8; i < (1<<log2_trafo_size); i += 8) {
+                int xp_pu = (x0 + i - 1) / min_pu_size;
+                int xq_pu = (x0 + i) / min_pu_size;
+                int y_pu = (y0 + j) / min_pu_size;
                 MvField *left = &s->pu.tab_mvf[y_pu * pic_width_in_min_pu + xp_pu];
                 MvField *curr = &s->pu.tab_mvf[y_pu * pic_width_in_min_pu + xq_pu];
-                if (left->is_intra || s->cu.pred_mode == MODE_INTRA)
-                    s->vertical_bs[x0 / 8 + (y0 + i) / 4 * s->bs_width] = 2;
-                else if (curr->cbf_luma || left->cbf_luma ||
-                         abs(left->mv_l0.x - curr->mv_l0.x) >= 4 || abs(left->mv_l0.y - curr->mv_l0.y) >= 4 ||
-                         left->ref_idx_l0 != curr->ref_idx_l0)
-                    s->vertical_bs[x0 / 8 + (y0 + i) / 4 * s->bs_width] = 1;
+                bs = boundary_strength(s, curr, left, 0);
+                if (bs)
+                    s->vertical_bs[(x0 + i) / 8 + (y0 + j) / 4 * s->bs_width] = bs;
             }
-        // bs for TU internal vertical PU boundaries
-        if (log2_trafo_size > s->sps->log2_min_pu_size && s->sh.slice_type != I_SLICE)
-            for (j = 0; j < (1<<log2_trafo_size); j += 4)
-                for (i = 8; i < (1<<log2_trafo_size); i += 8) {
-                    int xp_pu = (x0 + i - 1) / min_pu_size;
-                    int xq_pu = (x0 + i) / min_pu_size;
-                    int y_pu = (y0 + j) / min_pu_size;
-                    MvField *left = &s->pu.tab_mvf[y_pu * pic_width_in_min_pu + xp_pu];
-                    MvField *curr = &s->pu.tab_mvf[y_pu * pic_width_in_min_pu + xq_pu];
-                    if (abs(left->mv_l0.x - curr->mv_l0.x) >= 4 || abs(left->mv_l0.y - curr->mv_l0.y) >= 4 ||
-                        left->ref_idx_l0 != curr->ref_idx_l0)
-                        s->vertical_bs[(x0 + i) / 8 + (y0 + j) / 4 * s->bs_width] = 1;
-                }
 }
 
 static void hls_transform_tree(HEVCContext *s, int x0, int y0,
