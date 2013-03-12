@@ -116,6 +116,9 @@ typedef struct RefPicList {
 
 #define HEVC_CONTEXTS 183
 
+#define L0 0
+#define L1 1
+
 typedef struct HEVCWindow {
     int left_offset;
     int right_offset;
@@ -397,6 +400,7 @@ enum SliceType {
     I_SLICE = 2
 };
 
+
 typedef struct SliceHeader {
     uint8_t first_slice_in_pic_flag;
     int slice_address;
@@ -411,7 +415,6 @@ typedef struct SliceHeader {
     int pic_order_cnt_lsb;
     ShortTermRPS *short_term_rps;
     RefPicList refPocList[5];
-    RefPicList refPicList[2];
 
     uint8_t no_output_of_prior_pics_flag;
 
@@ -586,12 +589,9 @@ typedef struct Mv {
 } Mv;
 
 typedef struct MvField {
-      Mv  mv_l0;
-      Mv  mv_l1;
-      int ref_idx_l0;
-      int ref_idx_l1;
-      int pred_flag_l0;
-      int pred_flag_l1;
+      Mv  mv[2];
+      int ref_idx[2];
+      int pred_flag[2];
       int is_intra;
       int cbf_luma; // cbf_luma of colocated TU
       int is_pcm;
@@ -613,7 +613,6 @@ typedef struct PredictionUnit {
     uint8_t *left_ipm;
 
     Mv mvd;
-    MvField *tab_mvf;
 } PredictionUnit;
 
 typedef struct TransformTree {
@@ -667,6 +666,8 @@ typedef struct SAOParams {
 typedef struct HEVCFrame {
     AVFrame *frame;
     int poc;
+    MvField *tab_mvf;
+    RefPicList refPicList[2];
 } HEVCFrame;
 
 typedef struct HEVCContext {
@@ -721,6 +722,7 @@ typedef struct HEVCContext {
     TransformUnit tu;
     ResidualCoding rc;
     int poc;
+    int poc_idx;
 
     HEVCFrame short_refs[16];
     int decode_checksum_sei;
@@ -797,5 +799,8 @@ int ff_hevc_coeff_abs_level_greater2_flag_decode(HEVCContext *s, int c_idx,
                                                  int i, int n);
 int ff_hevc_coeff_abs_level_remaining(HEVCContext *s, int n, int base_level);
 int ff_hevc_coeff_sign_flag(HEVCContext *s, uint8_t nb);
+
+void ff_hevc_luma_mv_merge_mode(HEVCContext *s, int x0, int y0, int nPbW, int nPbH, int log2_cb_size, int part_idx, int merge_idx, MvField *mv);
+void ff_hevc_luma_mv_mvp_mode(HEVCContext *s, int x0, int y0, int nPbW, int nPbH, int log2_cb_size, int part_idx, int merge_idx, MvField *mv , int mvp_lx_flag, int LX);
 
 #endif // AVCODEC_HEVC_H

@@ -200,7 +200,7 @@ OBJS-$(CONFIG_H264_DXVA2_HWACCEL)      += dxva2_h264.o
 OBJS-$(CONFIG_H264_VAAPI_HWACCEL)      += vaapi_h264.o
 OBJS-$(CONFIG_H264_VDA_HWACCEL)        += vda_h264.o
 OBJS-$(CONFIG_H264_VDPAU_HWACCEL)      += vdpau_h264.o
-OBJS-$(CONFIG_HEVC_DECODER)            += hevc.o hevc_ps.o hevc_sei.o \
+OBJS-$(CONFIG_HEVC_DECODER)            += hevc.o hevc_mvs.o hevc_ps.o hevc_sei.o \
                                           hevc_cabac.o hevc_refs.o hevcpred.o \
                                           hevcdsp.o cabac.o
 OBJS-$(CONFIG_HUFFYUV_DECODER)         += huffyuv.o

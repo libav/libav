@@ -62,6 +62,22 @@ void ff_hevc_clear_refs(HEVCContext *s)
     }
 }
 
+int ff_hevc_find_next_ref(HEVCContext *s, AVFrame *frame, int poc)
+{
+    int i;
+    update_refs(s);
+
+    for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
+        HEVCFrame *ref = &s->short_refs[i];
+        if (!ref->frame->buf[0]) {
+            return i;
+        }
+    }
+    av_log(s->avctx, AV_LOG_ERROR,
+           "could not free room for POC %d\n", poc);
+    return -1;
+}
+
 int ff_hevc_add_ref(HEVCContext *s, AVFrame *frame, int poc)
 {
     int i;
@@ -100,7 +116,7 @@ static void set_ref_pic_list(HEVCContext *s)
 {
     SliceHeader *sh = &s->sh;
     RefPicList  *refPocList = s->sh.refPocList;
-    RefPicList  *refPicList = s->sh.refPicList;
+    RefPicList  *refPicList =  s->short_refs[ff_hevc_find_next_ref(s, s->frame, s->poc)].refPicList;
 
     uint8_t num_ref_idx_lx_act[2];
     uint8_t cIdx;
@@ -129,17 +145,17 @@ static void set_ref_pic_list(HEVCContext *s)
         num_rps_curr_lx    = num_poc_total_curr<num_ref_idx_lx_act[list_idx] ? num_poc_total_curr : num_ref_idx_lx_act[list_idx];
         cIdx = 0;
         while(cIdx < num_rps_curr_lx) {
-            for(i = 0; i < refPocList[first_list].numPic; i++) {
+            for(i = 0; i < refPocList[first_list].numPic && cIdx < num_rps_curr_lx; i++) {
                 refPicList[list_idx].list[cIdx] = refPocList[first_list].list[i];
                 refPicList[list_idx].idx[cIdx]  = refPocList[first_list].idx[i];
                 cIdx++;
             }
-            for(i = 0; i < refPocList[sec_list].numPic; i++) {
+            for(i = 0; i < refPocList[sec_list].numPic && cIdx < num_rps_curr_lx; i++) {
                 refPicList[list_idx].list[cIdx] = refPocList[sec_list].list[i];
                 refPicList[list_idx].idx[cIdx]  = refPocList[sec_list].idx[i];
                 cIdx++;
             }
-            for(i = 0; i < refPocList[LT_CURR].numPic; i++) {
+            for(i = 0; i < refPocList[LT_CURR].numPic && cIdx < num_rps_curr_lx; i++) {
                 refPicList[list_idx].list[cIdx] = refPocList[LT_CURR].list[i];
                 refPicList[list_idx].idx[cIdx]  = refPocList[LT_CURR].idx[i];
                 cIdx++;
