@@ -976,27 +976,30 @@ static int boundary_strength(HEVCContext *s, MvField *curr, uint8_t curr_cbf_lum
 
     if (s->sh.slice_type == P_SLICE) {
         if (abs(neigh->mv[0].x - curr->mv[0].x) >= 4 || abs(neigh->mv[0].y - curr->mv[0].y) >= 4 ||
-                         neigh->ref_idx[0] != curr->ref_idx[0])
+            s->ref->refPicList[0].list[neigh->ref_idx[0]] != s->ref->refPicList[0].list[curr->ref_idx[0]])
             return 1;
-
     } else if (s->sh.slice_type == B_SLICE) {
         int mvs = curr->pred_flag[0] + curr->pred_flag[1];
         if (mvs == neigh->pred_flag[0] + neigh->pred_flag[1]) {
             if (mvs == 2) {
                 // same L0 and L1
-                if (curr->ref_idx[0] == neigh->ref_idx[0] && curr->ref_idx[0] == curr->ref_idx[1] && neigh->ref_idx[0] == neigh->ref_idx[1]) {
+                if (s->ref->refPicList[0].list[curr->ref_idx[0]] == s->ref->refPicList[0].list[neigh->ref_idx[0]]
+                    && s->ref->refPicList[0].list[curr->ref_idx[0]] == s->ref->refPicList[1].list[curr->ref_idx[1]]
+                    && s->ref->refPicList[0].list[neigh->ref_idx[0]] == s->ref->refPicList[1].list[neigh->ref_idx[1]]) {
                     if ((abs(neigh->mv[0].x - curr->mv[0].x) >= 4 || abs(neigh->mv[0].y - curr->mv[0].y) >= 4 ||
                         abs(neigh->mv[1].x - curr->mv[1].x) >= 4 || abs(neigh->mv[1].y - curr->mv[1].y) >= 4) &&
                         (abs(neigh->mv[1].x - curr->mv[0].x) >= 4 || abs(neigh->mv[1].y - curr->mv[0].y) >= 4 ||
                         abs(neigh->mv[0].x - curr->mv[1].x) >= 4 || abs(neigh->mv[0].y - curr->mv[1].y) >= 4))
                         bs = 1;
                 }
-                else if (neigh->ref_idx[0] == curr->ref_idx[0] && neigh->ref_idx[1] == curr->ref_idx[1]) {
+                else if (s->ref->refPicList[0].list[neigh->ref_idx[0]] == s->ref->refPicList[0].list[curr->ref_idx[0]]
+                         && s->ref->refPicList[1].list[neigh->ref_idx[1]] == s->ref->refPicList[1].list[curr->ref_idx[1]]) {
                     if (abs(neigh->mv[0].x - curr->mv[0].x) >= 4 || abs(neigh->mv[0].y - curr->mv[0].y) >= 4 ||
                         abs(neigh->mv[1].x - curr->mv[1].x) >= 4 || abs(neigh->mv[1].y - curr->mv[1].y) >= 4)
                         bs = 1;
                 }
-                else if (neigh->ref_idx[1] == curr->ref_idx[0] && neigh->ref_idx[0] == curr->ref_idx[1]) {
+                else if (s->ref->refPicList[1].list[neigh->ref_idx[1]] == s->ref->refPicList[0].list[curr->ref_idx[0]]
+                        && s->ref->refPicList[0].list[neigh->ref_idx[0]] == s->ref->refPicList[1].list[curr->ref_idx[1]]) {
                     if (abs(neigh->mv[1].x - curr->mv[0].x) >= 4 || abs(neigh->mv[1].y - curr->mv[0].y) >= 4 ||
                         abs(neigh->mv[0].x - curr->mv[1].x) >= 4 || abs(neigh->mv[0].y - curr->mv[1].y) >= 4)
                         bs = 1;
@@ -1010,18 +1013,18 @@ static int boundary_strength(HEVCContext *s, MvField *curr, uint8_t curr_cbf_lum
                 int ref_B;
                 if (curr->pred_flag[0]) {
                     A = curr->mv[0];
-                    ref_A = curr->ref_idx[0];
+                    ref_A = s->ref->refPicList[0].list[curr->ref_idx[0]];
                 }
                 else {
                     A = curr->mv[1];
-                    ref_A = curr->ref_idx[1];
+                    ref_A = s->ref->refPicList[1].list[curr->ref_idx[1]];
                 }
                 if (neigh->pred_flag[0]) {
                     B = neigh->mv[0];
-                    ref_B = neigh->ref_idx[0];
+                    ref_B = s->ref->refPicList[0].list[neigh->ref_idx[0]];
                 } else {
                     B = neigh->mv[1];
-                    ref_B = neigh->ref_idx[1];
+                    ref_B = s->ref->refPicList[1].list[neigh->ref_idx[1]];
                 }
                 if (ref_A == ref_B) {
                     if (abs(A.x - B.x) >= 4 || abs(A.y - B.y) >= 4)
