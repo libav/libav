@@ -100,7 +100,7 @@ int ff_hevc_decode_short_term_rps(HEVCContext *s, int idx, SPS *sps)
             }
         }
         if ( (rps->num_negative_pics>>1) != 0 ) {
-            int used, tmp;
+            int used;
             k = rps->num_negative_pics - 1;
             // flip the negative values to largest first
             for( i = 0; i < rps->num_negative_pics>>1; i++) {
@@ -129,7 +129,7 @@ int ff_hevc_decode_short_term_rps(HEVCContext *s, int idx, SPS *sps)
             prev = 0;
             for (i = 0; i < rps->num_positive_pics; i++) {
                 delta_poc = get_ue_golomb(gb) + 1;
-                prev -= delta_poc;
+                prev += delta_poc;
                 rps->delta_poc[rps->num_negative_pics + i] = prev;
                 rps->used[rps->num_negative_pics + i] = get_bits1(gb);
             }
@@ -606,7 +606,13 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
     pps->pic_slice_level_chroma_qp_offsets_present_flag = get_bits1(gb);
 
     pps->weighted_pred_flag            = get_bits1(gb);
+    if (pps->weighted_pred_flag)
+        av_log(s->avctx, AV_LOG_ERROR, "TODO: pps->weighted_pred_flag\n");
+
     pps->weighted_bipred_flag          = get_bits1(gb);
+    if (pps->weighted_bipred_flag)
+        av_log(s->avctx, AV_LOG_ERROR, "TODO: pps->weighted_bipred_flag\n");
+
     pps->transquant_bypass_enable_flag = get_bits1(gb);
     pps->tiles_enabled_flag               = get_bits1(gb);
     pps->entropy_coding_sync_enabled_flag = get_bits1(gb);

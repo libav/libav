@@ -117,7 +117,7 @@ static int derive_temporal_colocated_mvs(HEVCContext *s, MvField temp_col, int r
     int listCol;
     int refidxCol;
     int check_mvset =0;
-    RefPicList  *refPicList =  s->short_refs[s->poc_idx].refPicList;
+    RefPicList  *refPicList =  s->ref->refPicList;
 
 
     if(temp_col.is_intra) {
@@ -197,7 +197,7 @@ static int temporal_luma_motion_vector(HEVCContext *s, int x0, int y0, int nPbW,
 {
     MvField *coloc_tab_mvf = NULL;
     MvField temp_col;
-    RefPicList  *refPicList =  s->short_refs[s->poc_idx].refPicList;
+    RefPicList  *refPicList =  s->ref->refPicList;
     int xPRb, yPRb;
     int xPRb_pu;
     int yPRb_pu;
@@ -256,8 +256,8 @@ static int temporal_luma_motion_vector(HEVCContext *s, int x0, int y0, int nPbW,
 static void derive_spatial_merge_candidates(HEVCContext *s, int x0, int y0, int nPbW, int nPbH, int log2_cb_size, int singleMCLFlag, int part_idx,  struct MvField mergecandlist[])
 {
 
-    RefPicList  *refPicList =  s->short_refs[s->poc_idx].refPicList;
-    MvField *tab_mvf = s->short_refs[s->poc_idx].tab_mvf;
+    RefPicList  *refPicList =  s->ref->refPicList;
+    MvField *tab_mvf = s->ref->tab_mvf;
     int available_a1_flag=0;
     int available_b1_flag=0;
     int available_b0_flag=0;
@@ -688,8 +688,8 @@ void ff_hevc_luma_mv_merge_mode(HEVCContext *s, int x0, int y0, int nPbW, int nP
     tab_mvf[(y) * pic_width_in_min_pu + x]
 
 static av_always_inline void dist_scale(HEVCContext *s, Mv * mv, int pic_width_in_min_pu, int x_pu, int y_pu, int elist, int ref_idx_curr, int ref_idx) {
-    RefPicList  *refPicList =  s->short_refs[s->poc_idx].refPicList;
-    MvField *tab_mvf = s->short_refs[s->poc_idx].tab_mvf;
+    RefPicList  *refPicList =  s->ref->refPicList;
+    MvField *tab_mvf = s->ref->tab_mvf;
     if((DiffPicOrderCnt(refPicList[elist].list[TAB_MVF(x_pu, y_pu).ref_idx[elist]], refPicList[ref_idx_curr].list[ref_idx]))!=0) {
         // *** Assuming there are no long term pictures in version 1 of the decoder and the pictures are short term pictures ***
         int td = av_clip_int8_c((DiffPicOrderCnt(s->poc,refPicList[elist].list[(TAB_MVF(x_pu, y_pu).ref_idx[elist])])));
@@ -703,8 +703,8 @@ static av_always_inline void dist_scale(HEVCContext *s, Mv * mv, int pic_width_i
 
 void ff_hevc_luma_mv_mvp_mode(HEVCContext *s, int x0, int y0, int nPbW, int nPbH, int log2_cb_size, int part_idx, int merge_idx, MvField *mv , int mvp_lx_flag, int LX)
 {
-    RefPicList  *refPicList =  s->short_refs[s->poc_idx].refPicList;
-    MvField *tab_mvf = s->short_refs[s->poc_idx].tab_mvf;
+    RefPicList  *refPicList =  s->ref->refPicList;
+    MvField *tab_mvf = s->ref->tab_mvf;
     int isScaledFlag_L0 = 0;
     int availableFlagLXA0 = 0;
     int availableFlagLXB0 = 0;
