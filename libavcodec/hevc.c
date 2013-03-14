@@ -2023,7 +2023,7 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         if (hls_slice_header(s) < 0)
             return -1;
         if(!s->sh.disable_deblocking_filter_flag) {
-             MvField *tab_mvf = s->short_refs[s->poc_idx].tab_mvf;
+             MvField *tab_mvf = s->ref->tab_mvf;
              int pic_width_in_min_pu  = s->sps->pic_width_in_min_cbs * 4;
              int pic_height_in_min_pu = s->sps->pic_height_in_min_cbs * 4;
              int i;
