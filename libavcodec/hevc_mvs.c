@@ -169,9 +169,9 @@ static int derive_temporal_colocated_mvs(HEVCContext *s, MvField temp_col, int r
         }
         // Assuming no long term pictures in version 1 of the decoder
         if(check_mvset == 1) {
-            availableFlagLXCol = 1;
             int colPocDiff = DiffPicOrderCnt(colPic, refPicList_col[listCol].list[refidxCol]);
             int curPocDiff = DiffPicOrderCnt(s->poc, refPicList[X].list[refIdxLx]);
+            availableFlagLXCol = 1;
             if (colPocDiff == curPocDiff) {
                 mvLXCol->x = mvCol.x;
                 mvLXCol->y = mvCol.y;
@@ -321,7 +321,8 @@ static void derive_spatial_merge_candidates(HEVCContext *s, int x0, int y0, int 
     int refIdxL0Col = 0;
     int refIdxL1Col = 0;
     int availableFlagLXCol = 0;
-
+    int availableFlagL0Col = 0;
+    int availableFlagL1Col = 0;
 
     int xA1_pu = xA1 >> s->sps->log2_min_pu_size;
     int yA1_pu = yA1 >> s->sps->log2_min_pu_size;
@@ -519,8 +520,6 @@ static void derive_spatial_merge_candidates(HEVCContext *s, int x0, int y0, int 
     // temporal motion vector candidate
     // one optimization is that do temporal checking only if the number of
     // available candidates < MRG_MAX_NUM_CANDS
-    int availableFlagL0Col=0;
-    int availableFlagL1Col=0;
     if(s->sh.slice_temporal_mvp_enabled_flag == 0) {
         availableFlagLXCol = 0;
     } else {
