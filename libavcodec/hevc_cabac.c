@@ -556,9 +556,9 @@ int ff_hevc_abs_mvd_greater1_flag_decode(HEVCContext *s)
     return GET_CABAC(elem_offset[ABS_MVD_GREATER1_FLAG] + 1);
 }
 
-int ff_hevc_abs_mvd_minus2_decode(HEVCContext *s)
+int ff_hevc_mvd_decode(HEVCContext *s)
 {
-    int ret = 0;
+    int ret = 2;
     int k = 1;
 
     while (get_cabac_bypass(&s->cc)) {
@@ -568,12 +568,7 @@ int ff_hevc_abs_mvd_minus2_decode(HEVCContext *s)
     while (k--)
         ret += get_cabac_bypass(&s->cc) << k;
 
-    return ret;
-}
-
-int ff_hevc_mvd_sign_flag_decode(HEVCContext *s)
-{
-    return get_cabac_bypass(&s->cc);
+    return get_cabac_bypass_sign(&s->cc, -ret);
 }
 
 int ff_hevc_split_transform_flag_decode(HEVCContext *s, int log2_trafo_size)

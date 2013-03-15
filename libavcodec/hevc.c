@@ -1247,37 +1247,35 @@ static void hls_pcm_sample(HEVCContext *s, int x0, int y0, int log2_cb_size)
 
 static void hls_mvd_coding(HEVCContext *s, int x0, int y0, int log2_cb_size)
 {
+    int x = ff_hevc_abs_mvd_greater0_flag_decode(s);
+    int y = ff_hevc_abs_mvd_greater0_flag_decode(s);
 
-    uint16_t abs_mvd_greater0_flag[2];
-    uint16_t abs_mvd_greater1_flag[2] = { 0 };
-    uint16_t abs_mvd_minus2[2] = { 0 };
-    uint8_t mvd_sign_flag[2] = { 0 };
-    abs_mvd_greater0_flag[0] = ff_hevc_abs_mvd_greater0_flag_decode(s);
-    av_dlog(s->avctx, "abs_mvd_greater0_flag[0]: %d\n",
-            abs_mvd_greater0_flag[0]);
-    abs_mvd_greater0_flag[1] = ff_hevc_abs_mvd_greater0_flag_decode(s);
-    av_dlog(s->avctx, "abs_mvd_greater0_flag[1]: %d\n",
-            abs_mvd_greater0_flag[1]);
-    if (abs_mvd_greater0_flag[0])
-        abs_mvd_greater1_flag[0] = ff_hevc_abs_mvd_greater1_flag_decode(s);
+    if (x)
+        x += ff_hevc_abs_mvd_greater1_flag_decode(s);
+    if (y)
+        y += ff_hevc_abs_mvd_greater1_flag_decode(s);
 
-    if (abs_mvd_greater0_flag[1])
-        abs_mvd_greater1_flag[1] = ff_hevc_abs_mvd_greater1_flag_decode(s);
-
-    if (abs_mvd_greater0_flag[0]) {
-        abs_mvd_minus2[0] = -1;
-        if (abs_mvd_greater1_flag[0])
-            abs_mvd_minus2[0] = ff_hevc_abs_mvd_minus2_decode(s);
-        mvd_sign_flag[0] = ff_hevc_mvd_sign_flag_decode(s);
+    switch (x) {
+        case 2:
+            s->pu.mvd.x = ff_hevc_mvd_decode(s);
+            break;
+        case 1:
+            s->pu.mvd.x = get_cabac_bypass_sign(&s->cc, -1);
+            break;
+        case 0:
+            s->pu.mvd.x = 0;
     }
-    if (abs_mvd_greater0_flag[1]) {
-        abs_mvd_minus2[1] = -1;
-        if (abs_mvd_greater1_flag[1])
-            abs_mvd_minus2[1] = ff_hevc_abs_mvd_minus2_decode(s);
-        mvd_sign_flag[1] = ff_hevc_mvd_sign_flag_decode(s);
+
+    switch (y) {
+        case 2:
+            s->pu.mvd.y = ff_hevc_mvd_decode(s);
+            break;
+        case 1:
+            s->pu.mvd.y = get_cabac_bypass_sign(&s->cc, -1);
+            break;
+        case 0:
+            s->pu.mvd.y = 0;
     }
-    s->pu.mvd.x = abs_mvd_greater0_flag[0] * (abs_mvd_minus2[0] + 2) * (1 - (mvd_sign_flag[0] << 1));
-    s->pu.mvd.y = abs_mvd_greater0_flag[1] * (abs_mvd_minus2[1] + 2) * (1 - (mvd_sign_flag[1] << 1));
     return;
 }
 
