@@ -2020,6 +2020,9 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             ff_hevc_clear_refs(s);
         if (hls_slice_header(s) < 0)
             return -1;
+
+        s->ref = &s->short_refs[ff_hevc_find_next_ref(s, s->frame, s->poc)];
+
         if(!s->sh.disable_deblocking_filter_flag) {
              MvField *tab_mvf = s->ref->tab_mvf;
              int pic_width_in_min_pu  = s->sps->pic_width_in_min_cbs * 4;
@@ -2039,7 +2042,6 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             return -1;
 
         ff_hevc_cabac_init(s);
-        s->ref = &s->short_refs[ff_hevc_find_next_ref(s, s->frame, s->poc)];
         if (hls_slice_data(s) < 0)
             return -1;
 
