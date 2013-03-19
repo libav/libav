@@ -689,8 +689,6 @@ int ff_hevc_significant_coeff_flag_decode(HEVCContext *s, int c_idx, int x_c, in
         sig_ctx = ctx_idx_map[(y_c << 2) + x_c];
     } else {
         int prev_sig = 0;
-        int x_off = x_c - (x_cg << 2);
-        int y_off = y_c - (y_cg << 2);
 
         if (x_cg < ((1 << log2_trafo_size) - 1) >> 2)
             prev_sig += s->rc.significant_coeff_group_flag[x_cg + 1][y_cg];
@@ -699,14 +697,17 @@ int ff_hevc_significant_coeff_flag_decode(HEVCContext *s, int c_idx, int x_c, in
         av_dlog(s->avctx, "prev_sig: %d\n", prev_sig);
 
         switch (prev_sig) {
-        case 0:
-            sig_ctx = ((x_off + y_off) == 0) ? 2 : ((x_off + y_off) <= 2) ? 1 : 0;
+        case 0: {
+                int x_off = x_c & 3;
+                int y_off = y_c & 3;
+                sig_ctx   = ((x_off + y_off) == 0) ? 2 : ((x_off + y_off) <= 2) ? 1 : 0;
+            }
             break;
         case 1:
-            sig_ctx = 2 - FFMIN(y_off, 2);
+            sig_ctx = 2 - FFMIN(y_c & 3, 2);
             break;
         case 2:
-            sig_ctx = 2 - FFMIN(x_off, 2);
+            sig_ctx = 2 - FFMIN(x_c & 3, 2);
             break;
         default:
             sig_ctx = 2;
@@ -751,7 +752,7 @@ int ff_hevc_coeff_abs_level_greater1_flag_decode(HEVCContext *s, int c_idx,
         greater1_ctx = 1;
     }
 
-    inc = (ctx_set * 4) + greater1_ctx;
+    inc = (ctx_set << 2) + greater1_ctx;
     if (c_idx > 0)
         inc += 16;
 

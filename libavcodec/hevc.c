@@ -48,8 +48,8 @@ static int pic_arrays_init(HEVCContext *s)
     int ctb_count = s->sps->pic_width_in_ctbs * s->sps->pic_height_in_ctbs;
     int pic_width_in_min_pu  = s->sps->pic_width_in_min_cbs * 4;
     int pic_height_in_min_pu = s->sps->pic_height_in_min_cbs * 4;
-    s->bs_width = s->sps->pic_width_in_luma_samples / 8;
-    s->bs_height = s->sps->pic_height_in_luma_samples / 8;
+    s->bs_width = s->sps->pic_width_in_luma_samples >> 3;
+    s->bs_height = s->sps->pic_height_in_luma_samples >> 3;
     s->sao = av_mallocz(ctb_count * sizeof(*s->sao));
 
     s->split_coding_unit_flag = av_malloc(pic_size);
@@ -493,12 +493,13 @@ static void deblocking_filter(HEVCContext *s)
     const int beta = betatable[idxb];
     int pic_width_in_min_pu = s->sps->pic_width_in_min_cbs * 4;
     int min_pu_size = 1 << (s->sps->log2_min_pu_size - 1);
+    int log2_min_pu_size = s->sps->log2_min_pu_size - 1;
     MvField *tab_mvf = s->ref->tab_mvf;
 
     // vertical filtering
     for (y = 0; y < s->sps->pic_height_in_luma_samples; y += 4) {
         for (x = 8; x < s->sps->pic_width_in_luma_samples; x += 8) {
-            int bs = s->vertical_bs[(x / 8) + (y / 4) * s->bs_width];
+            int bs = s->vertical_bs[(x >> 3) + (y >> 2) * s->bs_width];
             if (bs) {
                 int no_p = 0;
                 int no_q = 0;
@@ -506,8 +507,8 @@ static void deblocking_filter(HEVCContext *s)
                 const int tc = tctable[idxt];
                 if(s->sps->pcm_enabled_flag && s->sps->pcm.loop_filter_disable_flag) {
                     int xp_pu = (x - 1) / min_pu_size;
-                    int xq_pu = x / min_pu_size;
-                    int y_pu = y / min_pu_size;
+                    int xq_pu = x >> log2_min_pu_size;
+                    int y_pu = y >> log2_min_pu_size;
                     if (s->is_pcm[y_pu * pic_width_in_min_pu + xp_pu])
                         no_p = 1;
                     if (s->is_pcm[y_pu * pic_width_in_min_pu + xq_pu])
@@ -515,7 +516,7 @@ static void deblocking_filter(HEVCContext *s)
                 }
                 src = &s->frame->data[LUMA][y * s->frame->linesize[LUMA] + x];
                 s->hevcdsp.hevc_loop_filter_luma(src, pixel, s->frame->linesize[LUMA], no_p, no_q, beta, tc);
-                if (x % 16 == 0 && y % 8 == 0 && bs == 2) {
+                if ((x & 15) == 0 && (y & 7) == 0 && bs == 2) {
                     src = &s->frame->data[CB][(y / 2) * s->frame->linesize[CB] + (x / 2)];
                     s->hevcdsp.hevc_loop_filter_chroma(src, pixel, s->frame->linesize[CB], no_p, no_q, chroma_tc(s, qp_y, CB));
                     src = &s->frame->data[CR][(y / 2) * s->frame->linesize[CR] + (x / 2)];
@@ -526,17 +527,17 @@ static void deblocking_filter(HEVCContext *s)
     }
     // horizontal filtering
     for (y = 8; y < s->sps->pic_height_in_luma_samples; y += 8) {
+        int yp_pu = (y - 1) / min_pu_size;
+        int yq_pu = y >> log2_min_pu_size;
         for (x = 0; x < s->sps->pic_width_in_luma_samples; x += 4) {
-            int bs = s->horizontal_bs[(x / 4) + (y / 8) * 2 * s->bs_width];
+            int bs = s->horizontal_bs[(x + y * s->bs_width) >> 2];
             if (bs) {
                 int no_p = 0;
                 int no_q = 0;
                 const int idxt = av_clip_c(qp + DEFAULT_INTRA_TC_OFFSET * (bs - 1) + s->sh.tc_offset, 0, MAX_QP + DEFAULT_INTRA_TC_OFFSET);
                 const int tc = tctable[idxt];
                 if(s->sps->pcm_enabled_flag && s->sps->pcm.loop_filter_disable_flag) {
-                    int x_pu = x / min_pu_size;
-                    int yp_pu = (y - 1) / min_pu_size;
-                    int yq_pu = y / min_pu_size;
+                    int x_pu = x >> log2_min_pu_size;
                     if (s->is_pcm[yp_pu * pic_width_in_min_pu + x_pu])
                         no_p = 1;
                     if (s->is_pcm[yq_pu * pic_width_in_min_pu + x_pu])
@@ -544,7 +545,7 @@ static void deblocking_filter(HEVCContext *s)
                 }
                 src = &s->frame->data[LUMA][y * s->frame->linesize[LUMA] + x];
                 s->hevcdsp.hevc_loop_filter_luma(src, s->frame->linesize[LUMA], pixel, no_p, no_q, beta, tc);
-                if (x % 8 == 0 && y % 16 == 0 && bs == 2) {
+                if ((x & 7) == 0 && (y & 15) == 0 && bs == 2) {
                     src = &s->frame->data[CB][(y / 2) * s->frame->linesize[CB] + (x / 2)];
                     s->hevcdsp.hevc_loop_filter_chroma(src, s->frame->linesize[CB], pixel, no_p, no_q, chroma_tc(s, qp_y, CB));
                     src = &s->frame->data[CR][(y / 2) * s->frame->linesize[CR] + (x / 2)];
@@ -685,8 +686,8 @@ static void hls_residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_s
 
     switch (scan_idx) {
     case SCAN_DIAG: {
-        int last_x_c = last_significant_coeff_x % 4;
-        int last_y_c = last_significant_coeff_y % 4;
+        int last_x_c = last_significant_coeff_x & 3;
+        int last_y_c = last_significant_coeff_y & 3;
 
         scan_x_off = diag_scan4x4_x;
         scan_y_off = diag_scan4x4_y;
@@ -852,7 +853,7 @@ static void hls_residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_s
                 }
                 if (s->pps->sign_data_hiding_flag && sign_hidden) {
                     sum_abs += trans_coeff_level;
-                    if (n == first_nz_pos_in_cg && (sum_abs%2 == 1))
+                    if (n == first_nz_pos_in_cg && ((sum_abs&1) == 1))
                         trans_coeff_level = -trans_coeff_level;
                 }
             if (coeff_sign_flag >> 15)
@@ -972,8 +973,6 @@ static void hls_transform_unit(HEVCContext *s, int x0, int  y0, int xBase, int y
 
 static int boundary_strength(HEVCContext *s, MvField *curr, uint8_t curr_cbf_luma, MvField *neigh, uint8_t neigh_cbf_luma, int tu_border)
 {
-    int bs = 0;
-
     if (tu_border) {
         if (curr->is_intra || neigh->is_intra)
             return 2;
@@ -985,6 +984,8 @@ static int boundary_strength(HEVCContext *s, MvField *curr, uint8_t curr_cbf_lum
         if (abs(neigh->mv[0].x - curr->mv[0].x) >= 4 || abs(neigh->mv[0].y - curr->mv[0].y) >= 4 ||
             s->ref->refPicList[0].list[neigh->ref_idx[0]] != s->ref->refPicList[0].list[curr->ref_idx[0]])
             return 1;
+        else
+            return 0;
     } else if (s->sh.slice_type == B_SLICE) {
         int mvs = curr->pred_flag[0] + curr->pred_flag[1];
         if (mvs == neigh->pred_flag[0] + neigh->pred_flag[1]) {
@@ -997,22 +998,27 @@ static int boundary_strength(HEVCContext *s, MvField *curr, uint8_t curr_cbf_lum
                         abs(neigh->mv[1].x - curr->mv[1].x) >= 4 || abs(neigh->mv[1].y - curr->mv[1].y) >= 4) &&
                         (abs(neigh->mv[1].x - curr->mv[0].x) >= 4 || abs(neigh->mv[1].y - curr->mv[0].y) >= 4 ||
                         abs(neigh->mv[0].x - curr->mv[1].x) >= 4 || abs(neigh->mv[0].y - curr->mv[1].y) >= 4))
-                        bs = 1;
+                        return 1;
+                    else
+                        return 0;
                 }
                 else if (s->ref->refPicList[0].list[neigh->ref_idx[0]] == s->ref->refPicList[0].list[curr->ref_idx[0]]
                          && s->ref->refPicList[1].list[neigh->ref_idx[1]] == s->ref->refPicList[1].list[curr->ref_idx[1]]) {
                     if (abs(neigh->mv[0].x - curr->mv[0].x) >= 4 || abs(neigh->mv[0].y - curr->mv[0].y) >= 4 ||
                         abs(neigh->mv[1].x - curr->mv[1].x) >= 4 || abs(neigh->mv[1].y - curr->mv[1].y) >= 4)
-                        bs = 1;
+                        return 1;
+                    else
+                        return 0;
                 }
                 else if (s->ref->refPicList[1].list[neigh->ref_idx[1]] == s->ref->refPicList[0].list[curr->ref_idx[0]]
                         && s->ref->refPicList[0].list[neigh->ref_idx[0]] == s->ref->refPicList[1].list[curr->ref_idx[1]]) {
                     if (abs(neigh->mv[1].x - curr->mv[0].x) >= 4 || abs(neigh->mv[1].y - curr->mv[0].y) >= 4 ||
                         abs(neigh->mv[0].x - curr->mv[1].x) >= 4 || abs(neigh->mv[0].y - curr->mv[1].y) >= 4)
-                        bs = 1;
-
+                        return 1;
+                    else
+                        return 0;
                 } else {
-                    bs = 1;
+                    return 1;
                 }
             } else { // 1 MV
                 Mv A, B;
@@ -1035,82 +1041,88 @@ static int boundary_strength(HEVCContext *s, MvField *curr, uint8_t curr_cbf_lum
                 }
                 if (ref_A == ref_B) {
                     if (abs(A.x - B.x) >= 4 || abs(A.y - B.y) >= 4)
-                        bs = 1;
+                        return 1;
+                    else
+                        return 0;
                 } else
-                    bs = 1;
+                    return 1;
             }
         }
         else
-            bs = 1;
+            return 1;
     }
-    return bs;
+    return 0;
 }
 
 static void deblocking_boundary_strengths(HEVCContext *s, int x0, int y0, int log2_trafo_size)
 {
+    int log2_min_pu_size = s->sps->log2_min_pu_size;
     int min_pu_size = 1 << s->sps->log2_min_pu_size;
     int pic_width_in_min_pu = s->sps->pic_width_in_min_cbs * 4;
     int i, j;
     int bs;
     MvField *tab_mvf = s->ref->tab_mvf;
-    if (y0 % 8 == 0)
+    if ((y0 & 7) == 0) {
+        int yp_pu = (y0 - 1) / min_pu_size;
+        int yq_pu = y0 >> log2_min_pu_size;
         for (i = 0; i < (1<<log2_trafo_size); i+=4) {
-            int x_pu = (x0 + i) / min_pu_size;
-            int yp_pu = (y0 - 1) / min_pu_size;
-            int yq_pu = y0 / min_pu_size;
+            int x_pu = (x0 + i) >> log2_min_pu_size;
             MvField *top = &tab_mvf[yp_pu * pic_width_in_min_pu + x_pu];
             MvField *curr = &tab_mvf[yq_pu * pic_width_in_min_pu + x_pu];
             uint8_t top_cbf_luma = s->cbf_luma[yp_pu * pic_width_in_min_pu + x_pu];
             uint8_t curr_cbf_luma = s->cbf_luma[yq_pu * pic_width_in_min_pu + x_pu];
             bs = boundary_strength(s, curr, curr_cbf_luma, top, top_cbf_luma, 1);
             if (bs)
-                s->horizontal_bs[(x0 + i) / 4 + y0 / 4 * s->bs_width] = bs;
+                s->horizontal_bs[((x0 + i) + y0 * s->bs_width) >> 2] = bs;
         }
+    }
     // bs for TU internal horizontal PU boundaries
     if (log2_trafo_size > s->sps->log2_min_pu_size && s->sh.slice_type != I_SLICE)
-        for (j = 8; j < (1<<log2_trafo_size); j += 8)
+        for (j = 8; j < (1<<log2_trafo_size); j += 8) {
+            int yp_pu = (y0 + j - 1) >> log2_min_pu_size;
+            int yq_pu = (y0 + j) >> log2_min_pu_size;
             for (i = 0; i < (1<<log2_trafo_size); i += 4) {
-                int x_pu = (x0 + i) / min_pu_size;
-                int yp_pu = (y0 + j - 1) / min_pu_size;
-                int yq_pu = (y0 + j) / min_pu_size;
+                int x_pu = (x0 + i) >> log2_min_pu_size;
                 MvField *top = &tab_mvf[yp_pu * pic_width_in_min_pu + x_pu];
                 MvField *curr = &tab_mvf[yq_pu * pic_width_in_min_pu + x_pu];
                 uint8_t top_cbf_luma = s->cbf_luma[yp_pu * pic_width_in_min_pu + x_pu];
                 uint8_t curr_cbf_luma = s->cbf_luma[yq_pu * pic_width_in_min_pu + x_pu];
                 bs = boundary_strength(s, curr, curr_cbf_luma, top, top_cbf_luma, 0);
                 if (bs)
-                    s->horizontal_bs[(x0 + i) / 4 + (y0 + j) / 4 * s->bs_width] = bs;
+                    s->horizontal_bs[((x0 + i) + (y0 + j) * s->bs_width) >> 2] = bs;
             }
-
+        }
     // bs for vertical TU boundaries
-    if (x0 % 8 == 0)
+    if ((x0 & 7) == 0) {
+        int xp_pu = (x0 - 1) / min_pu_size;
+        int xq_pu = x0 >> log2_min_pu_size;
         for (i = 0; i < (1<<log2_trafo_size); i+=4) {
-            int xp_pu = (x0 - 1) / min_pu_size;
-            int xq_pu = x0 / min_pu_size;
-            int y_pu = (y0 + i) / min_pu_size;
+            int y_pu = (y0 + i) >> log2_min_pu_size;
             MvField *left = &tab_mvf[y_pu * pic_width_in_min_pu + xp_pu];
             MvField *curr = &tab_mvf[y_pu * pic_width_in_min_pu + xq_pu];
             uint8_t left_cbf_luma = s->cbf_luma[y_pu * pic_width_in_min_pu + xp_pu];
             uint8_t curr_cbf_luma = s->cbf_luma[y_pu * pic_width_in_min_pu + xq_pu];
             bs = boundary_strength(s, curr, curr_cbf_luma, left, left_cbf_luma, 1);
             if (bs)
-                s->vertical_bs[x0 / 8 + (y0 + i) / 4 * s->bs_width] = bs;
+                s->vertical_bs[(x0 >> 3) + ((y0 + i) >> 2) * s->bs_width] = bs;
         }
+    }
     // bs for TU internal vertical PU boundaries
     if (log2_trafo_size > s->sps->log2_min_pu_size && s->sh.slice_type != I_SLICE)
-        for (j = 0; j < (1<<log2_trafo_size); j += 4)
+        for (j = 0; j < (1<<log2_trafo_size); j += 4) {
+            int y_pu = (y0 + j) >> log2_min_pu_size;
             for (i = 8; i < (1<<log2_trafo_size); i += 8) {
-                int xp_pu = (x0 + i - 1) / min_pu_size;
-                int xq_pu = (x0 + i) / min_pu_size;
-                int y_pu = (y0 + j) / min_pu_size;
+                int xp_pu = (x0 + i - 1) >> log2_min_pu_size;
+                int xq_pu = (x0 + i) >> log2_min_pu_size;
                 MvField *left = &tab_mvf[y_pu * pic_width_in_min_pu + xp_pu];
                 MvField *curr = &tab_mvf[y_pu * pic_width_in_min_pu + xq_pu];
                 uint8_t left_cbf_luma = s->cbf_luma[y_pu * pic_width_in_min_pu + xp_pu];
                 uint8_t curr_cbf_luma = s->cbf_luma[y_pu * pic_width_in_min_pu + xq_pu];
                 bs = boundary_strength(s, curr, curr_cbf_luma, left, left_cbf_luma, 0);
                 if (bs)
-                    s->vertical_bs[(x0 + i) / 8 + (y0 + j) / 4 * s->bs_width] = bs;
+                    s->vertical_bs[((x0 + i) >> 3) + ((y0 + j) >> 2) * s->bs_width] = bs;
             }
+        }
 }
 
 static void hls_transform_tree(HEVCContext *s, int x0, int y0,
@@ -1191,6 +1203,7 @@ static void hls_transform_tree(HEVCContext *s, int x0, int y0,
     } else {
         int i,j;
         int min_pu_size = 1 << s->sps->log2_min_pu_size;
+        int log2_min_pu_size = s->sps->log2_min_pu_size;
         int pic_width_in_min_pu = s->sps->pic_width_in_min_cbs * 4;
         if (s->cu.pred_mode == MODE_INTRA || trafo_depth != 0 ||
             SAMPLE_CBF(s->tt.cbf_cb[trafo_depth], x0, y0) ||
@@ -1207,8 +1220,8 @@ static void hls_transform_tree(HEVCContext *s, int x0, int y0,
         if (s->tt.cbf_luma)
             for (i = 0; i < (1<<log2_trafo_size); i += min_pu_size)
                 for (j = 0; j < (1<<log2_trafo_size); j += min_pu_size) {
-                    int x_pu = (x0 + j) / min_pu_size;
-                    int y_pu = (y0 + i) / min_pu_size;
+                    int x_pu = (x0 + j) >> log2_min_pu_size;
+                    int y_pu = (y0 + i) >> log2_min_pu_size;
                     s->cbf_luma[y_pu * pic_width_in_min_pu + x_pu] = 1;
                 }
         deblocking_boundary_strengths(s, x0, y0, log2_trafo_size);
@@ -1220,7 +1233,7 @@ static void hls_pcm_sample(HEVCContext *s, int x0, int y0, int log2_cb_size)
 {
     //TODO: non-4:2:0 support
     int i, j;
-    int min_pu_size = 1 << (s->sps->log2_min_pu_size - 1);
+    int log2_min_pu_size = s->sps->log2_min_pu_size - 1;
     int pic_width_in_min_pu = s->sps->pic_width_in_min_cbs * 4;
     GetBitContext gb;
     int cb_size = 1 << log2_cb_size;
@@ -1233,17 +1246,17 @@ static void hls_pcm_sample(HEVCContext *s, int x0, int y0, int log2_cb_size)
     MvField *tab_mvf = s->ref->tab_mvf;
 
     int length = cb_size * cb_size * 3 / 2 * s->sps->pcm.bit_depth;
-    uint8_t *pcm = skip_bytes(&s->cc, length / 8);
+    uint8_t *pcm = skip_bytes(&s->cc, length >> 3);
 
-    for (j = y0 / min_pu_size; j < (y0 + cb_size) / min_pu_size; j++)
-        for (i = x0 / min_pu_size; i < (x0 + cb_size) / min_pu_size; i++)
+    for (j = y0 >> log2_min_pu_size; j < ((y0 + cb_size) >> log2_min_pu_size); j++)
+        for (i = x0 >> log2_min_pu_size; i < ((x0 + cb_size) >> log2_min_pu_size); i++)
             s->is_pcm[i + j * pic_width_in_min_pu] = 1;
-    if(y0 % 8 == 0)
+    if((y0 & 7) == 0)
         for(i = 0; i < cb_size; i+=4)
-            s->horizontal_bs[(x0 + i) / 4 + y0 / 4 * s->bs_width] = 2;
-    if(x0 % 8 == 0)
+            s->horizontal_bs[((x0 + i) + y0 * s->bs_width) >> 2] = 2;
+    if((x0 & 7) == 0)
         for(i = 0; i < cb_size; i+=4)
-            s->vertical_bs[x0 / 8 + (y0 + i) / 4 * s->bs_width] = 2;
+            s->vertical_bs[(x0 >> 3) + ((y0 + i) * s->bs_width) >> 2] = 2;
 
     init_get_bits(&gb, pcm, length);
 
@@ -1501,24 +1514,24 @@ static void hls_prediction_unit(HEVCContext *s, int x0, int y0, int nPbW, int nP
         luma_mc(s, tmp, tmpstride,
                 s->short_refs[refPicList[0].idx[current_mv.ref_idx[0]]].frame,
                 &current_mv.mv[0], x0, y0, nPbW, nPbH);
-        s->hevcdsp.put_unweighted_pred(dst0, s->frame->linesize[0], tmp, tmpstride, nPbW, nPbH);
+        s->hevcdsp.put_unweighted_pred_luma(dst0, s->frame->linesize[0], tmp, tmpstride, nPbW, nPbH);
         chroma_mc(s, tmp, tmp2, tmpstride,
                   s->short_refs[refPicList[0].idx[current_mv.ref_idx[0]]].frame,
                   &current_mv.mv[0], x0/2, y0/2, nPbW/2, nPbH/2);
-        s->hevcdsp.put_unweighted_pred(dst1, s->frame->linesize[1], tmp, tmpstride, nPbW/2, nPbH/2);
-        s->hevcdsp.put_unweighted_pred(dst2, s->frame->linesize[2], tmp2, tmpstride, nPbW/2, nPbH/2);
+        s->hevcdsp.put_unweighted_pred_chroma(dst1, s->frame->linesize[1], tmp, tmpstride, nPbW/2, nPbH/2);
+        s->hevcdsp.put_unweighted_pred_chroma(dst2, s->frame->linesize[2], tmp2, tmpstride, nPbW/2, nPbH/2);
     } else if (!current_mv.pred_flag[0] && current_mv.pred_flag[1]) {
         int16_t tmp[MAX_PB_SIZE*MAX_PB_SIZE];
         int16_t tmp2[MAX_PB_SIZE*MAX_PB_SIZE];
         luma_mc(s, tmp, tmpstride,
                 s->short_refs[refPicList[1].idx[current_mv.ref_idx[1]]].frame,
                 &current_mv.mv[1], x0, y0, nPbW, nPbH);
-        s->hevcdsp.put_unweighted_pred(dst0, s->frame->linesize[0], tmp, tmpstride, nPbW, nPbH);
+        s->hevcdsp.put_unweighted_pred_luma(dst0, s->frame->linesize[0], tmp, tmpstride, nPbW, nPbH);
         chroma_mc(s, tmp, tmp2, tmpstride,
                   s->short_refs[refPicList[1].idx[current_mv.ref_idx[1]]].frame,
                   &current_mv.mv[1], x0/2, y0/2, nPbW/2, nPbH/2);
-        s->hevcdsp.put_unweighted_pred(dst1, s->frame->linesize[1], tmp, tmpstride, nPbW/2, nPbH/2);
-        s->hevcdsp.put_unweighted_pred(dst2, s->frame->linesize[2], tmp2, tmpstride, nPbW/2, nPbH/2);
+        s->hevcdsp.put_unweighted_pred_chroma(dst1, s->frame->linesize[1], tmp, tmpstride, nPbW/2, nPbH/2);
+        s->hevcdsp.put_unweighted_pred_chroma(dst2, s->frame->linesize[2], tmp2, tmpstride, nPbW/2, nPbH/2);
     } else if (current_mv.pred_flag[0] && current_mv.pred_flag[1]) {
         int16_t tmp[MAX_PB_SIZE*MAX_PB_SIZE];
         int16_t tmp2[MAX_PB_SIZE*MAX_PB_SIZE];
@@ -1530,15 +1543,15 @@ static void hls_prediction_unit(HEVCContext *s, int x0, int y0, int nPbW, int nP
         luma_mc(s, tmp2, tmpstride,
                 s->short_refs[refPicList[1].idx[current_mv.ref_idx[1]]].frame,
                 &current_mv.mv[1], x0, y0, nPbW, nPbH);
-        s->hevcdsp.put_weighted_pred_avg(dst0, s->frame->linesize[0], tmp, tmp2, tmpstride, nPbW, nPbH);
+        s->hevcdsp.put_weighted_pred_avg_luma(dst0, s->frame->linesize[0], tmp, tmp2, tmpstride, nPbW, nPbH);
         chroma_mc(s, tmp, tmp2, tmpstride,
                   s->short_refs[refPicList[0].idx[current_mv.ref_idx[0]]].frame,
                   &current_mv.mv[0], x0/2, y0/2, nPbW/2, nPbH/2);
         chroma_mc(s, tmp3, tmp4, tmpstride,
                   s->short_refs[refPicList[1].idx[current_mv.ref_idx[1]]].frame,
                   &current_mv.mv[1], x0/2, y0/2, nPbW/2, nPbH/2);
-        s->hevcdsp.put_weighted_pred_avg(dst1, s->frame->linesize[1], tmp, tmp3, tmpstride, nPbW/2, nPbH/2);
-        s->hevcdsp.put_weighted_pred_avg(dst2, s->frame->linesize[2], tmp2, tmp4, tmpstride, nPbW/2, nPbH/2);
+        s->hevcdsp.put_weighted_pred_avg_chroma(dst1, s->frame->linesize[1], tmp, tmp3, tmpstride, nPbW/2, nPbH/2);
+        s->hevcdsp.put_weighted_pred_avg_chroma(dst2, s->frame->linesize[2], tmp2, tmp4, tmpstride, nPbW/2, nPbH/2);
     }
     return;
 }
@@ -1578,8 +1591,8 @@ static int luma_intra_pred_mode(HEVCContext *s, int x0, int y0, int pu_size,
             candidate[2] = INTRA_ANGULAR_26;
         } else {
             candidate[0] = cand_left;
-            candidate[1] = 2 + ((cand_left - 2 - 1 + 32) % 32);
-            candidate[2] = 2 + ((cand_left - 2 + 1) % 32);
+            candidate[1] = 2 + ((cand_left - 2 - 1 + 32) & 31);
+            candidate[2] = 2 + ((cand_left - 2 + 1) & 31);
         }
     } else {
         candidate[0] = cand_left;

@@ -51,10 +51,14 @@ typedef struct HEVCDSPContext {
     void (*put_hevc_epel[2][2])(int16_t *dst, ptrdiff_t dststride, uint8_t *src, ptrdiff_t srcstride,
                              int width, int height, int mx, int my);
 
-    void (*put_unweighted_pred)(uint8_t *dst, ptrdiff_t dststride, int16_t *src, ptrdiff_t srcstride,
+    void (*put_unweighted_pred_luma)(uint8_t *dst, ptrdiff_t dststride, int16_t *src, ptrdiff_t srcstride,
+                                int width, int height);
+    void (*put_unweighted_pred_chroma)(uint8_t *dst, ptrdiff_t dststride, int16_t *src, ptrdiff_t srcstride,
                                 int width, int height);
 
-    void (*put_weighted_pred_avg)(uint8_t *dst, ptrdiff_t dststride, int16_t *src1, int16_t *src2,
+    void (*put_weighted_pred_avg_luma)(uint8_t *dst, ptrdiff_t dststride, int16_t *src1, int16_t *src2,
+                                  ptrdiff_t srcstride, int width, int height);
+    void (*put_weighted_pred_avg_chroma)(uint8_t *dst, ptrdiff_t dststride, int16_t *src1, int16_t *src2,
                                   ptrdiff_t srcstride, int width, int height);
 
     void (*hevc_loop_filter_luma)(uint8_t *_pix, ptrdiff_t _xstride, ptrdiff_t _ystride, int no_p, int no_q, int _beta, int _tc);
