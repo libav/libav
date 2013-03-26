@@ -21,6 +21,7 @@
  */
 
 #include "hevc.h"
+#include "internal.h"
 
 static int find_ref_idx(HEVCContext *s, int poc)
 {
@@ -47,9 +48,11 @@ static void update_refs(HEVCContext *s)
             used[rpl->idx[j]] = 1;
     }
     for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
-        if (!used[i]) {
-            av_frame_unref(s->short_refs[i].frame);
-        }
+        HEVCFrame *ref = &s->short_refs[i];
+        if (!used[i])
+            ref->flags &= 1;
+        if ( ref->flags == 0)
+            av_frame_unref(ref->frame);
     }
 }
 
@@ -62,7 +65,7 @@ void ff_hevc_clear_refs(HEVCContext *s)
     }
 }
 
-int ff_hevc_find_next_ref(HEVCContext *s, AVFrame *frame, int poc)
+int ff_hevc_find_next_ref(HEVCContext *s, int poc)
 {
     int i;
     update_refs(s);
@@ -77,23 +80,37 @@ int ff_hevc_find_next_ref(HEVCContext *s, AVFrame *frame, int poc)
            "could not free room for POC %d\n", poc);
     return -1;
 }
-
-int ff_hevc_add_ref(HEVCContext *s, AVFrame *frame, int poc)
+int ff_hevc_set_new_ref(HEVCContext *s, AVFrame **frame, int poc)
 {
     int i;
-    update_refs(s);
-
     for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
         HEVCFrame *ref = &s->short_refs[i];
         if (!ref->frame->buf[0]) {
-            ref->poc = poc;
-            av_frame_ref(ref->frame, frame);
-            return 0;
+            *frame     = ref->frame;
+            s->ref     = ref;
+            ref->poc   = poc;
+            ref->flags = 3;
+            return ff_reget_buffer(s->avctx, *frame);
         }
     }
     av_log(s->avctx, AV_LOG_ERROR,
            "short_refs is full, could not add ref with POC %d\n", poc);
     return -1;
+}
+int ff_hevc_find_display(HEVCContext *s, AVFrame *frame)
+{
+    int i;
+    for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
+        HEVCFrame *ref = &s->short_refs[i];
+        if (ref->poc == s->poc_display ) {
+            ref->flags &= 2;
+            if (av_frame_ref(frame, ref->frame) < 0)
+                return -1;
+            s->poc_display = ref->poc+1;
+            return sizeof(AVFrame);
+        }
+    }
+    return 0;
 }
 
 void ff_hevc_compute_poc(HEVCContext *s, int poc_lsb)
@@ -116,7 +133,7 @@ static void set_ref_pic_list(HEVCContext *s)
 {
     SliceHeader *sh = &s->sh;
     RefPicList  *refPocList = s->sh.refPocList;
-    RefPicList  *refPicList =  s->short_refs[ff_hevc_find_next_ref(s, s->frame, s->poc)].refPicList;
+    RefPicList  *refPicList = s->short_refs[ff_hevc_find_next_ref(s, s->poc)].refPicList;
 
     uint8_t num_ref_idx_lx_act[2];
     uint8_t cIdx;

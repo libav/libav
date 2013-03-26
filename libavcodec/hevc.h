@@ -666,6 +666,7 @@ typedef struct HEVCFrame {
     int poc;
     MvField *tab_mvf;
     RefPicList refPicList[2];
+    uint8_t flags;
 } HEVCFrame;
 
 typedef struct HEVCContext {
@@ -674,6 +675,7 @@ typedef struct HEVCContext {
     AVCodecContext *avctx;
     AVFrame *frame;
     AVFrame *sao_frame;
+    AVFrame *tmp_frame;
 
     HEVCPredContext hpc;
     HEVCDSPContext hevcdsp;
@@ -720,13 +722,13 @@ typedef struct HEVCContext {
     TransformUnit tu;
     ResidualCoding rc;
     int poc;
+    int poc_display;
 
     uint8_t *cbf_luma; // cbf_luma of colocated TU
     uint8_t *is_pcm;
 
     HEVCFrame *ref;
-
-    HEVCFrame short_refs[16];
+    HEVCFrame short_refs[32];
     int decode_checksum_sei;
     uint8_t md5[3][16];
 } HEVCContext;
@@ -803,5 +805,7 @@ int ff_hevc_coeff_sign_flag(HEVCContext *s, uint8_t nb);
 
 void ff_hevc_luma_mv_merge_mode(HEVCContext *s, int x0, int y0, int nPbW, int nPbH, int log2_cb_size, int part_idx, int merge_idx, MvField *mv);
 void ff_hevc_luma_mv_mvp_mode(HEVCContext *s, int x0, int y0, int nPbW, int nPbH, int log2_cb_size, int part_idx, int merge_idx, MvField *mv , int mvp_lx_flag, int LX);
-int ff_hevc_find_next_ref(HEVCContext *s, AVFrame *frame, int poc);
+int ff_hevc_find_next_ref(HEVCContext *s, int poc);
+int ff_hevc_set_new_ref(HEVCContext *s, AVFrame **frame, int poc);
+int ff_hevc_find_display(HEVCContext *s, AVFrame *frame);
 #endif // AVCODEC_HEVC_H
