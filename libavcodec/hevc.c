@@ -251,6 +251,7 @@ static int hls_slice_header(HEVCContext *s)
             else
                 sh->slice_temporal_mvp_enabled_flag = 0;
         } else {
+            s->sh.short_term_rps = NULL;
             s->poc = 0;
             s->sh.short_term_rps = NULL;
         }
