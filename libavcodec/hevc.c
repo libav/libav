@@ -251,6 +251,7 @@ static int hls_slice_header(HEVCContext *s)
             }
         } else {
             s->poc = 0;
+            s->sh.short_term_rps = NULL;
         }
         if (!s->pps) {
             av_log(s->avctx, AV_LOG_ERROR, "No PPS active while decoding slice\n");
@@ -2057,24 +2058,15 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             av_picture_copy((AVPicture*)s->sao_frame, (AVPicture*)s->frame,
                             s->avctx->pix_fmt, s->avctx->width, s->avctx->height);
             sao_filter(s);
-	        if (s->decode_checksum_sei) {
-                calc_md5(s->md5[0], s->sao_frame->data[0], s->sao_frame->linesize[0], s->sao_frame->width, s->sao_frame->height);
-                calc_md5(s->md5[1], s->sao_frame->data[1], s->sao_frame->linesize[1], s->sao_frame->width/2, s->sao_frame->height/2);
-                calc_md5(s->md5[2], s->sao_frame->data[2], s->sao_frame->linesize[2], s->sao_frame->width/2, s->sao_frame->height/2);
-	        }
-            if ((ret = ff_hevc_find_display(s, data)) < 0)
-                return ret;
             av_frame_unref(s->tmp_frame);
-        } else {
-	        if (s->decode_checksum_sei) {
-                calc_md5(s->md5[0], s->frame->data[0], s->frame->linesize[0], s->frame->width, s->frame->height);
-                calc_md5(s->md5[1], s->frame->data[1], s->frame->linesize[1], s->frame->width/2, s->frame->height/2);
-                calc_md5(s->md5[2], s->frame->data[2], s->frame->linesize[2], s->frame->width/2, s->frame->height/2);
-            }
-            if ((ret = ff_hevc_find_display(s, data)) < 0)
-                return ret;
         }
-
+        if (s->decode_checksum_sei == 1) {
+            calc_md5(s->md5[0], s->ref->frame->data[0], s->ref->frame->linesize[0], s->ref->frame->width  , s->ref->frame->height  );
+            calc_md5(s->md5[1], s->ref->frame->data[1], s->ref->frame->linesize[1], s->ref->frame->width/2, s->ref->frame->height/2);
+            calc_md5(s->md5[2], s->ref->frame->data[2], s->ref->frame->linesize[2], s->ref->frame->width/2, s->ref->frame->height/2);
+        }
+        if ((ret = ff_hevc_find_display(s, data)) < 0)
+            return ret;
         s->frame->pict_type = AV_PICTURE_TYPE_I;
         s->frame->key_frame = 1;
         *data_size = ret;

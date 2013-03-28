@@ -61,7 +61,9 @@ void ff_hevc_clear_refs(HEVCContext *s)
     int i;
     for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
         HEVCFrame *ref = &s->short_refs[i];
-        av_frame_unref(ref->frame);
+        ref->flags &= 1;
+        if ( ref->flags == 0)
+           av_frame_unref(ref->frame);
     }
 }
 
@@ -100,14 +102,30 @@ int ff_hevc_set_new_ref(HEVCContext *s, AVFrame **frame, int poc)
 int ff_hevc_find_display(HEVCContext *s, AVFrame *frame)
 {
     int i;
+    int nbReadyDisplay = 0;
+    int minPoc         = 0xFFFF;
     for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
         HEVCFrame *ref = &s->short_refs[i];
-        if (ref->poc == s->poc_display ) {
-            ref->flags &= 2;
-            if (av_frame_ref(frame, ref->frame) < 0)
-                return -1;
-            s->poc_display = ref->poc+1;
-            return sizeof(AVFrame);
+        if ((ref->flags & 1) == 1 ) {
+            nbReadyDisplay ++;
+            if (ref->poc > s->poc_display && ref->poc < minPoc) {
+                minPoc = ref->poc;
+            }
+        }
+    }
+    if (minPoc == 0xFFFF)
+        minPoc = 0;
+    for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
+        HEVCFrame *ref = &s->short_refs[i];
+        int numPic     = ref->refPicList[0].numPic + ref->refPicList[1].numPic;
+        if (nbReadyDisplay >= numPic) {
+            if (ref->poc == minPoc ) {
+                ref->flags &= 2;
+                if (av_frame_ref(frame, ref->frame) < 0)
+                   return -1;
+                s->poc_display = ref->poc;
+                return sizeof(AVFrame);
+            }
         }
     }
     return 0;
