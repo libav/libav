@@ -246,9 +246,10 @@ static int hls_slice_header(HEVCContext *s)
                 av_log(s->avctx, AV_LOG_ERROR, "TODO: long_term_ref_pics_present_flag\n");
                 return -1;
             }
-            if (s->sps->sps_temporal_mvp_enabled_flag) {
+            if (s->sps->sps_temporal_mvp_enabled_flag)
                 sh->slice_temporal_mvp_enabled_flag = get_bits1(gb);
-            }
+            else
+                sh->slice_temporal_mvp_enabled_flag = 0;
         } else {
             s->poc = 0;
             s->sh.short_term_rps = NULL;
