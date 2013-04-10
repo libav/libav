@@ -598,6 +598,7 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
     pps->transform_skip_enabled_flag = get_bits1(gb);
 
     pps->cu_qp_delta_enabled_flag = get_bits1(gb);
+    pps->diff_cu_qp_delta_depth   = 0;
     if (pps->cu_qp_delta_enabled_flag)
         pps->diff_cu_qp_delta_depth = get_ue_golomb(gb);
 

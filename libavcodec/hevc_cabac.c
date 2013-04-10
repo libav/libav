@@ -399,6 +399,30 @@ int ff_hevc_skip_flag_decode(HEVCContext *s, int x_cb, int y_cb)
 
     return GET_CABAC(elem_offset[SKIP_FLAG] + inc);
 }
+int ff_hevc_cu_qp_delta_abs(HEVCContext *s)
+{
+    int prefixVal = 0;
+    int suffixVal = 0;
+    int inc = 0;
+    while (prefixVal < 5 && GET_CABAC(elem_offset[CU_QP_DELTA] + inc)) {
+        prefixVal++;
+        inc = 1;
+    }
+    if (prefixVal >= 5) {
+        int k = 0;
+        while (get_cabac_bypass(&s->cc)) {
+            suffixVal += 1 << k;
+            k++;
+        }
+        while (k--)
+            suffixVal += get_cabac_bypass(&s->cc) << k;
+    }
+    return prefixVal+suffixVal;
+}
+int ff_hevc_cu_qp_delta_sign_flag(HEVCContext *s)
+{
+    return get_cabac_bypass(&s->cc);
+}
 int ff_hevc_pred_mode_decode(HEVCContext *s)
 {
     return GET_CABAC(elem_offset[PRED_MODE_FLAG]);

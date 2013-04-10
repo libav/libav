@@ -763,6 +763,8 @@ int ff_hevc_sao_eo_class_decode(HEVCContext *s);
 int ff_hevc_end_of_slice_flag_decode(HEVCContext *s);
 int ff_hevc_cu_transquant_bypass_flag_decode(HEVCContext *s);
 int ff_hevc_skip_flag_decode(HEVCContext *s, int x_cb, int y_cb);
+int ff_hevc_cu_qp_delta_abs(HEVCContext *s);
+int ff_hevc_cu_qp_delta_sign_flag(HEVCContext *s);
 int ff_hevc_pred_mode_decode(HEVCContext *s);
 int ff_hevc_split_coding_unit_flag_decode(HEVCContext *s, int ct_depth, int x0, int y0);
 int ff_hevc_part_mode_decode(HEVCContext *s, int log2_cb_size);

@@ -912,6 +912,7 @@ static void hls_transform_unit(HEVCContext *s, int x0, int  y0, int xBase, int y
                                int log2_trafo_size, int trafo_depth, int blk_idx) {
     int scan_idx = SCAN_DIAG;
     int scan_idx_c = SCAN_DIAG;
+
     if (s->cu.pred_mode == MODE_INTRA) {
         s->hpc.intra_pred(s, x0, y0, log2_trafo_size, 0);
         if (log2_trafo_size > 2) {
@@ -927,7 +928,10 @@ static void hls_transform_unit(HEVCContext *s, int x0, int  y0, int xBase, int y
         SAMPLE_CBF(s->tt.cbf_cb[trafo_depth], x0, y0) ||
         SAMPLE_CBF(s->tt.cbf_cr[trafo_depth], x0, y0)) {
         if (s->pps->cu_qp_delta_enabled_flag && !s->tu.is_cu_qp_delta_coded) {
-            av_log(s->avctx, AV_LOG_ERROR, "TODO: cu_qp_delta_enabled_flag\n");
+            s->tu.cu_qp_delta = ff_hevc_cu_qp_delta_abs(s);
+            if (s->tu.cu_qp_delta != 0)
+                if (ff_hevc_cu_qp_delta_sign_flag(s) == 1)
+                    s->tu.cu_qp_delta = -s->tu.cu_qp_delta;
             s->tu.is_cu_qp_delta_coded = 1;
         }
 
@@ -1839,6 +1843,10 @@ static int hls_coding_tree(HEVCContext *s, int x0, int y0, int log2_cb_size, int
     }
     av_dlog(s->avctx, "split_coding_unit_flag: %d\n",
            SAMPLE(s->split_coding_unit_flag, x0, y0));
+    if( s->pps->cu_qp_delta_enabled_flag && log2_cb_size >= s->sps->log2_ctb_size + s->pps->diff_cu_qp_delta_depth ) {
+        s->tu.is_cu_qp_delta_coded = 0;
+        s->tu.cu_qp_delta = 0;
+    }
 
     if (SAMPLE(s->split_coding_unit_flag, x0, y0)) {
         int more_data = 0;
