@@ -28,7 +28,6 @@
 #include "libavutil/common.h"
 #include "libavutil/log.h"
 #include "avfilter.h"
-#include "avfiltergraph.h"
 #include "formats.h"
 #include "internal.h"
 
@@ -47,18 +46,34 @@ AVFilterGraph *avfilter_graph_alloc(void)
     return ret;
 }
 
+void ff_filter_graph_remove_filter(AVFilterGraph *graph, AVFilterContext *filter)
+{
+    int i;
+    for (i = 0; i < graph->nb_filters; i++) {
+        if (graph->filters[i] == filter) {
+            FFSWAP(AVFilterContext*, graph->filters[i],
+                   graph->filters[graph->nb_filters - 1]);
+            graph->nb_filters--;
+            return;
+        }
+    }
+}
+
 void avfilter_graph_free(AVFilterGraph **graph)
 {
     if (!*graph)
         return;
-    for (; (*graph)->nb_filters > 0; (*graph)->nb_filters--)
-        avfilter_free((*graph)->filters[(*graph)->nb_filters - 1]);
+
+    while ((*graph)->nb_filters)
+        avfilter_free((*graph)->filters[0]);
+
     av_freep(&(*graph)->scale_sws_opts);
     av_freep(&(*graph)->resample_lavr_opts);
     av_freep(&(*graph)->filters);
     av_freep(graph);
 }
 
+#if FF_API_AVFILTER_OPEN
 int avfilter_graph_add_filter(AVFilterGraph *graph, AVFilterContext *filter)
 {
     AVFilterContext **filters = av_realloc(graph->filters,
@@ -73,8 +88,11 @@ int avfilter_graph_add_filter(AVFilterGraph *graph, AVFilterContext *filter)
     graph->filter_count = graph->nb_filters;
 #endif
 
+    filter->graph = graph;
+
     return 0;
 }
+#endif
 
 int avfilter_graph_create_filter(AVFilterContext **filt_ctx, AVFilter *filt,
                                  const char *name, const char *args, void *opaque,
@@ -82,12 +100,14 @@ int avfilter_graph_create_filter(AVFilterContext **filt_ctx, AVFilter *filt,
 {
     int ret;
 
-    if ((ret = avfilter_open(filt_ctx, filt, name)) < 0)
+    *filt_ctx = avfilter_graph_alloc_filter(graph_ctx, filt, name);
+    if (!*filt_ctx)
+        return AVERROR(ENOMEM);
+
+    ret = avfilter_init_str(*filt_ctx, args);
+    if (ret < 0)
         goto fail;
-    if ((ret = avfilter_init_filter(*filt_ctx, args, opaque)) < 0)
-        goto fail;
-    if ((ret = avfilter_graph_add_filter(graph_ctx, *filt_ctx)) < 0)
-        goto fail;
+
     return 0;
 
 fail:
@@ -95,6 +115,34 @@ fail:
         avfilter_free(*filt_ctx);
     *filt_ctx = NULL;
     return ret;
+}
+
+AVFilterContext *avfilter_graph_alloc_filter(AVFilterGraph *graph,
+                                             const AVFilter *filter,
+                                             const char *name)
+{
+    AVFilterContext **filters, *s;
+
+    s = ff_filter_alloc(filter, name);
+    if (!s)
+        return NULL;
+
+    filters = av_realloc(graph->filters, sizeof(*filters) * (graph->nb_filters + 1));
+    if (!filters) {
+        avfilter_free(s);
+        return NULL;
+    }
+
+    graph->filters = filters;
+    graph->filters[graph->nb_filters++] = s;
+
+#if FF_API_FOO_COUNT
+    graph->filter_count = graph->nb_filters;
+#endif
+
+    s->graph = graph;
+
+    return s;
 }
 
 /**

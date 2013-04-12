@@ -1440,7 +1440,8 @@ av_cold int ff_h264_decode_init(AVCodecContext *avctx)
     h->dequant_coeff_pps = -1;
 
     /* needed so that IDCT permutation is known early */
-    ff_dsputil_init(&h->dsp, h->avctx);
+    if (CONFIG_ERROR_RESILIENCE)
+        ff_dsputil_init(&h->dsp, h->avctx);
     ff_videodsp_init(&h->vdsp, 8);
 
     memset(h->pps.scaling_matrix4, 16, 6 * 16 * sizeof(uint8_t));
@@ -1612,6 +1613,9 @@ static int decode_update_thread_context(AVCodecContext *dst,
         memset(h->pps_buffers, 0, sizeof(h->pps_buffers));
         memset(&h->er, 0, sizeof(h->er));
         memset(&h->me, 0, sizeof(h->me));
+        memset(&h->mb, 0, sizeof(h->mb));
+        memset(&h->mb_luma_dc, 0, sizeof(h->mb_luma_dc));
+        memset(&h->mb_padding, 0, sizeof(h->mb_padding));
         h->context_initialized = 0;
 
         memset(&h->cur_pic, 0, sizeof(h->cur_pic));
@@ -1640,8 +1644,6 @@ static int decode_update_thread_context(AVCodecContext *dst,
 
         h->thread_context[0] = h;
 
-        h->dsp.clear_blocks(h->mb);
-        h->dsp.clear_blocks(h->mb + (24 * 16 << h->pixel_shift));
         h->context_initialized = 1;
     }
 
@@ -2256,7 +2258,7 @@ static av_always_inline void hl_decode_mb_predict_luma(H264Context *h,
         if (IS_8x8DCT(mb_type)) {
             if (transform_bypass) {
                 idct_dc_add  =
-                idct_add     = h->h264dsp.h264_add_pixels8;
+                idct_add     = h->h264dsp.h264_add_pixels8_clear;
             } else {
                 idct_dc_add = h->h264dsp.h264_idct8_dc_add;
                 idct_add    = h->h264dsp.h264_idct8_add;
@@ -2281,7 +2283,7 @@ static av_always_inline void hl_decode_mb_predict_luma(H264Context *h,
         } else {
             if (transform_bypass) {
                 idct_dc_add  =
-                idct_add     = h->h264dsp.h264_add_pixels4;
+                idct_add     = h->h264dsp.h264_add_pixels4_clear;
             } else {
                 idct_dc_add = h->h264dsp.h264_idct_dc_add;
                 idct_add    = h->h264dsp.h264_idct_add;
@@ -2378,9 +2380,9 @@ static av_always_inline void hl_decode_mb_idct_luma(H264Context *h, int mb_type,
                         for (i = 0; i < 16; i++)
                             if (h->non_zero_count_cache[scan8[i + p * 16]] ||
                                 dctcoef_get(h->mb, pixel_shift, i * 16 + p * 256))
-                                h->h264dsp.h264_add_pixels4(dest_y + block_offset[i],
-                                                            h->mb + (i * 16 + p * 256 << pixel_shift),
-                                                            linesize);
+                                h->h264dsp.h264_add_pixels4_clear(dest_y + block_offset[i],
+                                                                  h->mb + (i * 16 + p * 256 << pixel_shift),
+                                                                  linesize);
                     }
                 } else {
                     h->h264dsp.h264_idct_add16intra(dest_y, block_offset,
@@ -2391,8 +2393,8 @@ static av_always_inline void hl_decode_mb_idct_luma(H264Context *h, int mb_type,
             } else if (h->cbp & 15) {
                 if (transform_bypass) {
                     const int di = IS_8x8DCT(mb_type) ? 4 : 1;
-                    idct_add = IS_8x8DCT(mb_type) ? h->h264dsp.h264_add_pixels8
-                                                  : h->h264dsp.h264_add_pixels4;
+                    idct_add = IS_8x8DCT(mb_type) ? h->h264dsp.h264_add_pixels8_clear
+                                                  : h->h264dsp.h264_add_pixels4_clear;
                     for (i = 0; i < 16; i += di)
                         if (h->non_zero_count_cache[scan8[i + p * 16]])
                             idct_add(dest_y + block_offset[i],
@@ -2914,7 +2916,8 @@ static int h264_set_parameter_from_sps(H264Context *h)
             ff_h264_pred_init(&h->hpc, h->avctx->codec_id, h->sps.bit_depth_luma,
                               h->sps.chroma_format_idc);
             h->dsp.dct_bits = h->sps.bit_depth_luma > 8 ? 32 : 16;
-            ff_dsputil_init(&h->dsp, h->avctx);
+            if (CONFIG_ERROR_RESILIENCE)
+                ff_dsputil_init(&h->dsp, h->avctx);
             ff_videodsp_init(&h->vdsp, h->sps.bit_depth_luma);
         } else {
             av_log(h->avctx, AV_LOG_ERROR, "Unsupported bit depth: %d\n",

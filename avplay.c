@@ -41,7 +41,6 @@
 
 #if CONFIG_AVFILTER
 # include "libavfilter/avfilter.h"
-# include "libavfilter/avfiltergraph.h"
 # include "libavfilter/buffersink.h"
 # include "libavfilter/buffersrc.h"
 #endif
@@ -1247,9 +1246,6 @@ static void do_exit(void)
         cur_stream = NULL;
     }
     uninit_opts();
-#if CONFIG_AVFILTER
-    avfilter_uninit();
-#endif
     avformat_network_deinit();
     if (show_status)
         printf("\n");

@@ -28,7 +28,6 @@
 #include "libavcodec/avcodec.h"
 
 #include "libavfilter/avfilter.h"
-#include "libavfilter/avfiltergraph.h"
 
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
@@ -2014,6 +2013,7 @@ void show_help_default(const char *opt, const char *arg)
         show_help_children(avcodec_get_class(), flags);
         show_help_children(avformat_get_class(), flags);
         show_help_children(sws_get_class(), flags);
+        show_help_children(avfilter_get_class(), AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_AUDIO_PARAM);
     }
 }
 

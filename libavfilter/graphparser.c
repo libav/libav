@@ -26,7 +26,6 @@
 #include "libavutil/avstring.h"
 #include "libavutil/mem.h"
 #include "avfilter.h"
-#include "avfiltergraph.h"
 
 #define WHITESPACES " \n\t"
 
@@ -110,16 +109,11 @@ static int create_filter(AVFilterContext **filt_ctx, AVFilterGraph *ctx, int ind
         return AVERROR(EINVAL);
     }
 
-    ret = avfilter_open(filt_ctx, filt, inst_name);
+    *filt_ctx = avfilter_graph_alloc_filter(ctx, filt, inst_name);
     if (!*filt_ctx) {
         av_log(log_ctx, AV_LOG_ERROR,
                "Error creating filter '%s'\n", filt_name);
-        return ret;
-    }
-
-    if ((ret = avfilter_graph_add_filter(ctx, *filt_ctx)) < 0) {
-        avfilter_free(*filt_ctx);
-        return ret;
+        return AVERROR(ENOMEM);
     }
 
     if (!strcmp(filt_name, "scale") && args && !strstr(args, "flags") &&
@@ -129,7 +123,8 @@ static int create_filter(AVFilterContext **filt_ctx, AVFilterGraph *ctx, int ind
         args = tmp_args;
     }
 
-    if ((ret = avfilter_init_filter(*filt_ctx, args, NULL)) < 0) {
+    ret = avfilter_init_str(*filt_ctx, args);
+    if (ret < 0) {
         av_log(log_ctx, AV_LOG_ERROR,
                "Error initializing filter '%s' with args '%s'\n", filt_name, args);
         return ret;
@@ -436,8 +431,8 @@ int avfilter_graph_parse2(AVFilterGraph *graph, const char *filters,
     return 0;
 
  fail:
-    for (; graph->nb_filters > 0; graph->nb_filters--)
-        avfilter_free(graph->filters[graph->nb_filters - 1]);
+    while (graph->nb_filters)
+        avfilter_free(graph->filters[0]);
     av_freep(&graph->filters);
     avfilter_inout_free(&open_inputs);
     avfilter_inout_free(&open_outputs);
@@ -501,8 +496,8 @@ int avfilter_graph_parse(AVFilterGraph *graph, const char *filters,
 
  fail:
     if (ret < 0) {
-        for (; graph->nb_filters > 0; graph->nb_filters--)
-            avfilter_free(graph->filters[graph->nb_filters - 1]);
+        while (graph->nb_filters)
+            avfilter_free(graph->filters[0]);
         av_freep(&graph->filters);
     }
     avfilter_inout_free(&inputs);

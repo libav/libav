@@ -13,6 +13,26 @@ libavutil:     2012-10-22
 
 API changes, most recent first:
 
+2013-xx-xx - lavfi 3.8.0
+  Move all content from avfiltergraph.h to avfilter.h. Deprecate
+  avfilterhraph.h, user applications should include just avfilter.h
+  Add avfilter_graph_alloc_filter(), deprecate avfilter_open() and
+  avfilter_graph_add_filter().
+  Add AVFilterContext.graph pointing to the AVFilterGraph that contains the
+  filter.
+  Add avfilter_init_str(), deprecate avfilter_init_filter().
+  Add avfilter_init_dict().
+  Add AVFilter.flags field and AVFILTER_FLAG_DYNAMIC_{INPUTS,OUTPUTS} flags.
+  Add avfilter_pad_count() for counting filter inputs/outputs.
+  Add avfilter_next(), deprecate av_filter_next().
+  Deprecate avfilter_uninit().
+
+2013-xx-xx - lavfi 3.7.0 - avfilter.h
+  Add AVFilter.priv_class for exporting filter options through the AVOptions API
+  in the similar way private options work in lavc and lavf.
+  Add avfilter_get_class().
+  Switch all filters to use AVOptions.
+
 2013-xx-xx - lavu 52.9.0 - pixdesc.h
   Add av_pix_fmt_count_planes() function for counting planes in a pixel format.
 

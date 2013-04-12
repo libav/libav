@@ -64,19 +64,9 @@ static const AVClass async_class = {
     .version    = LIBAVUTIL_VERSION_INT,
 };
 
-static int init(AVFilterContext *ctx, const char *args)
+static int init(AVFilterContext *ctx)
 {
     ASyncContext *s = ctx->priv;
-    int ret;
-
-    s->class = &async_class;
-    av_opt_set_defaults(s);
-
-    if ((ret = av_set_options_string(s, args, "=", ":")) < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Error parsing options string '%s'.\n", args);
-        return ret;
-    }
-    av_opt_free(s);
 
     s->pts         = AV_NOPTS_VALUE;
     s->first_frame = 1;
@@ -325,6 +315,7 @@ AVFilter avfilter_af_asyncts = {
     .uninit      = uninit,
 
     .priv_size   = sizeof(ASyncContext),
+    .priv_class  = &async_class,
 
     .inputs      = avfilter_af_asyncts_inputs,
     .outputs     = avfilter_af_asyncts_outputs,
