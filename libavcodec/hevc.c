@@ -342,7 +342,7 @@ static int hls_slice_header(HEVCContext *s)
             if (sh->entry_point_offset) {
                 av_freep(&sh->entry_point_offset);
             }
-            sh->entry_point_offset = av_malloc(num_entry_point_offsets);
+            sh->entry_point_offset = av_malloc(num_entry_point_offsets*sizeof(int));
             for( i = 0; i < num_entry_point_offsets; i++ ) {
                 sh->entry_point_offset[i] = get_bits(gb, offset_len);
             }
@@ -1843,7 +1843,7 @@ static int hls_coding_tree(HEVCContext *s, int x0, int y0, int log2_cb_size, int
     }
     av_dlog(s->avctx, "split_coding_unit_flag: %d\n",
            SAMPLE(s->split_coding_unit_flag, x0, y0));
-    if( s->pps->cu_qp_delta_enabled_flag && log2_cb_size >= s->sps->log2_ctb_size + s->pps->diff_cu_qp_delta_depth ) {
+    if( s->pps->cu_qp_delta_enabled_flag && log2_cb_size >= s->sps->log2_ctb_size - s->pps->diff_cu_qp_delta_depth ) {
         s->tu.is_cu_qp_delta_coded = 0;
         s->tu.cu_qp_delta = 0;
     }
