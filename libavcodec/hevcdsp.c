@@ -80,8 +80,13 @@ void ff_hevc_dsp_init(HEVCDSPContext *hevcdsp, int bit_depth)
     hevcdsp->put_unweighted_pred_chroma = FUNC(put_unweighted_pred_chroma, depth);        \
     hevcdsp->put_weighted_pred_avg_luma = FUNC(put_weighted_pred_avg_luma, depth);    \
     hevcdsp->put_weighted_pred_avg_chroma = FUNC(put_weighted_pred_avg_chroma, depth);    \
-                                                                            \
-    hevcdsp->hevc_loop_filter_luma = FUNC(hevc_loop_filter_luma, depth);    \
+                                                                                \
+    hevcdsp->weighted_pred_luma = FUNC(weighted_pred_luma, depth);              \
+    hevcdsp->weighted_pred_chroma = FUNC(weighted_pred_chroma, depth);          \
+    hevcdsp->weighted_pred_avg_luma = FUNC(weighted_pred_avg_luma, depth);      \
+    hevcdsp->weighted_pred_avg_chroma = FUNC(weighted_pred_avg_chroma, depth);  \
+                                                                                \
+    hevcdsp->hevc_loop_filter_luma = FUNC(hevc_loop_filter_luma, depth);        \
     hevcdsp->hevc_loop_filter_chroma = FUNC(hevc_loop_filter_chroma, depth);
 
     switch (bit_depth) {

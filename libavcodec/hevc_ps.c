@@ -607,12 +607,7 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
     pps->pic_slice_level_chroma_qp_offsets_present_flag = get_bits1(gb);
 
     pps->weighted_pred_flag            = get_bits1(gb);
-    if (pps->weighted_pred_flag)
-        av_log(s->avctx, AV_LOG_ERROR, "TODO: pps->weighted_pred_flag\n");
-
     pps->weighted_bipred_flag          = get_bits1(gb);
-    if (pps->weighted_bipred_flag)
-        av_log(s->avctx, AV_LOG_ERROR, "TODO: pps->weighted_bipred_flag\n");
 
     pps->transquant_bypass_enable_flag = get_bits1(gb);
     pps->tiles_enabled_flag               = get_bits1(gb);

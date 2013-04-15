@@ -443,6 +443,37 @@ typedef struct SliceHeader {
 
     int* entry_point_offset;
 
+    uint8_t luma_log2_weight_denom;
+    int16_t chroma_log2_weight_denom;
+/////////////////////////////////////////
+   /*
+    *todo
+    uint8_t luma_weight_l0[num_ref_idx_l0_active];
+    uint8_t chroma_weight_l0[num_ref_idx_l0_active][2];
+    uint8_t chroma_weight_l1[num_ref_idx_l0_active][2];
+
+    uint8_t luma_weight_l1[num_ref_idx_l1_active];
+    uint8_t chroma_weight_l1_flag[num_ref_idx_l1_active];
+
+    int luma_offset_l0[num_ref_idx_l0_active];
+    int chroma_offset_l0[num_ref_idx_l0_active][2];
+
+    int luma_offset_l1[num_ref_idx_l1_active];
+    int chroma_offset_l1[num_ref_idx_l0_active][2]; */
+/////////////////////////////////////////////////
+
+    int16_t luma_weight_l0[16];
+    int16_t chroma_weight_l0[16][2];
+    int16_t chroma_weight_l1[16][2];
+    int16_t luma_weight_l1[16];
+
+
+    int16_t luma_offset_l0[16];
+    int16_t chroma_offset_l0[16][2];
+
+    int luma_offset_l1[16];
+    int chroma_offset_l1[16][2];
+
 #if REFERENCE_ENCODER_QUIRKS
     uint8_t tile_marker_flag;
 #endif
