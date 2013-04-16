@@ -706,6 +706,9 @@ typedef struct HEVCContext {
 
     int ctb_addr_rs; ///< CtbAddrRS
     int ctb_addr_ts; ///< CtbAddrTS
+    uint8_t isFristQPgroup;
+    int8_t qp_y;
+    int8_t *qp_y_tab;
 
     uint8_t *split_coding_unit_flag;
     uint8_t *horizontal_bs;
@@ -810,4 +813,7 @@ void ff_hevc_luma_mv_mvp_mode(HEVCContext *s, int x0, int y0, int nPbW, int nPbH
 int ff_hevc_find_next_ref(HEVCContext *s, int poc);
 int ff_hevc_set_new_ref(HEVCContext *s, AVFrame **frame, int poc);
 int ff_hevc_find_display(HEVCContext *s, AVFrame *frame);
+
+int z_scan_block_avail(HEVCContext *s, int xCurr, int yCurr, int xN, int yN);
+
 #endif // AVCODEC_HEVC_H

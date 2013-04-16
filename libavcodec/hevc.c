@@ -68,7 +68,9 @@ static int pic_arrays_init(HEVCContext *s)
         return AVERROR(ENOMEM);
     if (!s->is_pcm)
         return AVERROR(ENOMEM);
-
+    s->qp_y_tab = av_malloc(s->sps->pic_width_in_min_tbs * s->sps->pic_height_in_min_tbs /*pic_size*/*sizeof(int8_t));
+    if (!s->qp_y_tab)
+        return AVERROR(ENOMEM);
     for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
         s->short_refs[i].tab_mvf = av_malloc(pic_width_in_min_pu*pic_height_in_min_pu*sizeof(MvField));
         if (!s->short_refs[i].tab_mvf)
@@ -116,6 +118,8 @@ static void pic_arrays_free(HEVCContext *s)
 
     av_freep(&s->cbf_luma);
     av_freep(&s->is_pcm);
+
+    av_freep(&s->qp_y_tab);
 
     for (i = 0; i < MAX_TRANSFORM_DEPTH; i++) {
         av_freep(&s->tt.cbf_cb[i]);
@@ -479,18 +483,84 @@ static int chroma_tc(HEVCContext *s, int qp_y, int c_idx)
     idxt = av_clip_c(qp + DEFAULT_INTRA_TC_OFFSET + s->sh.tc_offset, 0, 53);
     return tctable[idxt];
 }
-
+int get_qPy_pred(HEVCContext *s, int xC, int yC)
+{
+    int Log2CtbSizeY         = s->sps->log2_ctb_size;
+    int Log2MinTrafoSize     = s->sps->log2_min_transform_block_size;
+    int Log2MinCuQpDeltaSize = Log2CtbSizeY - s->pps->diff_cu_qp_delta_depth;
+    int xQg                  = xC - ( xC & ( ( 1 << Log2MinCuQpDeltaSize) - 1 ) );
+    int yQg                  = yC - ( yC & ( ( 1 << Log2MinCuQpDeltaSize) - 1 ) );
+    int x                    = xC >> Log2MinCuQpDeltaSize;
+    int y                    = yC >> Log2MinCuQpDeltaSize;
+    int qPy_pred;
+    int qPy_a;
+    int qPy_b;
+    int availableA           = z_scan_block_avail(s, xC, yC, xQg-1, yQg  );
+    int availableB           = z_scan_block_avail(s, xC, yC, xQg  , yQg-1);
+    int minTbAddrA;
+    int minTbAddrB;
+    int ctbAddrA = 0;
+    int ctbAddrB = 0;
+    if (availableA != 0) {
+        int tmpX   = (xQg-1) >> Log2MinTrafoSize;
+        int tmpY   =  yQg    >> Log2MinTrafoSize;
+        minTbAddrA = s->pps->min_tb_addr_zs[ tmpX + tmpY * s->sps->pic_width_in_min_tbs];
+        ctbAddrA   = ( minTbAddrA >> 2 ) * (Log2CtbSizeY - Log2MinTrafoSize);
+    }
+    if (availableB != 0) {
+        int tmpX   =  xQg    >> Log2MinTrafoSize;
+        int tmpY   = (yQg-1) >> Log2MinTrafoSize;
+        minTbAddrB = s->pps->min_tb_addr_zs[ tmpX + tmpY * s->sps->pic_width_in_min_tbs];
+        ctbAddrB   = ( minTbAddrB >> 2 ) * (Log2CtbSizeY - Log2MinTrafoSize);
+    }
+    // qPy_pred
+    if (s->isFristQPgroup != 0) {
+        s->isFristQPgroup = 0;
+        qPy_pred = s->sh.slice_qp;
+    } else {
+        qPy_pred = s->qp_y;
+    }
+    // qPy_a
+    if ( (availableA == 0) || (ctbAddrA != s->ctb_addr_ts) ) {
+        qPy_a = qPy_pred;
+    } else {
+        qPy_a = s->qp_y_tab[(x-1) + y * s->sps->pic_width_in_min_tbs];
+    }
+    // qPy_b
+    if ( (availableB == 0) || (ctbAddrB != s->ctb_addr_ts) ) {
+        qPy_b = qPy_pred;
+    } else {
+        qPy_b = s->qp_y_tab[x + (y-1) * s->sps->pic_width_in_min_tbs];
+    }
+    return (qPy_a + qPy_b + 1) >> 1;
+}
+void set_qPy(HEVCContext *s, int xC, int yC)
+{
+    int Log2CtbSizeY         = s->sps->log2_ctb_size;
+    int Log2MinCuQpDeltaSize = Log2CtbSizeY - s->pps->diff_cu_qp_delta_depth;
+    int x                    = xC >> Log2MinCuQpDeltaSize;
+    int y                    = yC >> Log2MinCuQpDeltaSize;
+    if (s->tu.cu_qp_delta != 0) {
+        s->qp_y = ((get_qPy_pred(s, xC, yC) + s->tu.cu_qp_delta + 52 + 2 * s->sps->qp_bd_offset) %
+                (52 + s->sps->qp_bd_offset)) - s->sps->qp_bd_offset;
+    } else {
+        s->qp_y = get_qPy_pred(s, xC, yC);
+    }
+    s->qp_y_tab[x + y * s->sps->pic_width_in_min_tbs] = s->qp_y;
+}
+int get_qPy(HEVCContext *s, int xC, int yC)
+{
+    int Log2CtbSizeY         = s->sps->log2_ctb_size;
+    int Log2MinCuQpDeltaSize = Log2CtbSizeY - s->pps->diff_cu_qp_delta_depth;
+    int x                    = xC >> Log2MinCuQpDeltaSize;
+    int y                    = yC >> Log2MinCuQpDeltaSize;
+    return s->qp_y_tab[x + y * s->sps->pic_width_in_min_tbs];
+}
 static void deblocking_filter(HEVCContext *s)
 {
     uint8_t *src;
     int x, y;
-    int qp_y_pred = s->sh.slice_qp;
-    int qp_y = ((qp_y_pred + s->tu.cu_qp_delta + 52 + 2 * s->sps->qp_bd_offset) %
-        (52 + s->sps->qp_bd_offset)) - s->sps->qp_bd_offset;
-    int qp = qp_y + s->sps->qp_bd_offset; // TODO adaptive QP
     int pixel = 1 + !!(s->sps->bit_depth - 8); // sizeof(pixel)
-    const int idxb = av_clip_c(qp + s->sh.beta_offset, 0, MAX_QP);
-    const int beta = betatable[idxb];
     int pic_width_in_min_pu = s->sps->pic_width_in_min_cbs * 4;
     int min_pu_size = 1 << (s->sps->log2_min_pu_size - 1);
     int log2_min_pu_size = s->sps->log2_min_pu_size - 1;
@@ -501,6 +571,10 @@ static void deblocking_filter(HEVCContext *s)
         for (x = 8; x < s->sps->pic_width_in_luma_samples; x += 8) {
             int bs = s->vertical_bs[(x >> 3) + (y >> 2) * s->bs_width];
             if (bs) {
+                int qp_y = get_qPy(s,x,y);
+                int qp = qp_y + s->sps->qp_bd_offset;
+                const int idxb = av_clip_c(qp + s->sh.beta_offset, 0, MAX_QP);
+                const int beta = betatable[idxb];
                 int no_p = 0;
                 int no_q = 0;
                 const int idxt = av_clip_c(qp + DEFAULT_INTRA_TC_OFFSET * (bs - 1) + s->sh.tc_offset, 0, MAX_QP + DEFAULT_INTRA_TC_OFFSET);
@@ -532,6 +606,10 @@ static void deblocking_filter(HEVCContext *s)
         for (x = 0; x < s->sps->pic_width_in_luma_samples; x += 4) {
             int bs = s->horizontal_bs[(x + y * s->bs_width) >> 2];
             if (bs) {
+                int qp_y = get_qPy(s,x,y);
+                int qp = qp_y + s->sps->qp_bd_offset;
+                const int idxb = av_clip_c(qp + s->sh.beta_offset, 0, MAX_QP);
+                const int beta = betatable[idxb];
                 int no_p = 0;
                 int no_q = 0;
                 const int idxt = av_clip_c(qp + DEFAULT_INTRA_TC_OFFSET * (bs - 1) + s->sh.tc_offset, 0, MAX_QP + DEFAULT_INTRA_TC_OFFSET);
@@ -871,10 +949,7 @@ static void hls_residual_coding(HEVCContext *s, int x0, int y0, int log2_trafo_s
         s->hevcdsp.transquant_bypass(dst, coeffs, stride, log2_trafo_size);
     } else {
         int qp;
-        //TODO: handle non-constant QP
-        int qp_y_pred = s->sh.slice_qp;
-        int qp_y = ((qp_y_pred + s->tu.cu_qp_delta + 52 + 2 * s->sps->qp_bd_offset) %
-                    (52 + s->sps->qp_bd_offset)) - s->sps->qp_bd_offset;
+        int qp_y = s->qp_y;
         static int qp_c[] = { 29, 30, 31, 32, 33, 33, 34, 34, 35, 35, 36, 36, 37, 37 };
         if (c_idx == 0) {
             qp = qp_y + s->sps->qp_bd_offset;
@@ -935,6 +1010,7 @@ static void hls_transform_unit(HEVCContext *s, int x0, int  y0, int xBase, int y
                 if (ff_hevc_cu_qp_delta_sign_flag(s) == 1)
                     s->tu.cu_qp_delta = -s->tu.cu_qp_delta;
             s->tu.is_cu_qp_delta_coded = 1;
+            set_qPy(s, x0, y0);
         }
 
         if (s->cu.pred_mode == MODE_INTRA && log2_trafo_size < 4) {
@@ -1843,6 +1919,7 @@ static void hls_coding_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
 
 static int hls_coding_tree(HEVCContext *s, int x0, int y0, int log2_cb_size, int cb_depth)
 {
+    s->isFristQPgroup += x0 == 0 && (y0&((1<<s->sps->log2_ctb_size)-1)) == 0 ? s->pps->entropy_coding_sync_enabled_flag : 0;
     s->ct.depth = cb_depth;
     if ((x0 + (1 << log2_cb_size) <= s->sps->pic_width_in_luma_samples) &&
         (y0 + (1 << log2_cb_size) <= s->sps->pic_height_in_luma_samples) &&
@@ -2040,6 +2117,7 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     case NAL_IDR_W_DLP:
     case NAL_CRA_NUT:
     case NAL_RASL_R:
+        s->isFristQPgroup = 1;
         if (s->nal_unit_type == NAL_IDR_W_DLP)
             ff_hevc_clear_refs(s);
         if (hls_slice_header(s) < 0)
@@ -2053,7 +2131,9 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             memset(s->cbf_luma, 0 , pic_width_in_min_pu * pic_height_in_min_pu);
             memset(s->is_pcm, 0 , pic_width_in_min_pu * pic_height_in_min_pu);
         }
-
+        s->qp_y = ((s->sh.slice_qp + 52 + 2 * s->sps->qp_bd_offset) %
+                        (52 + s->sps->qp_bd_offset)) - s->sps->qp_bd_offset;
+        memset(s->qp_y_tab, s->qp_y , s->sps->pic_width_in_min_tbs * s->sps->pic_height_in_min_tbs);
         ff_hevc_cabac_init(s);
         if (s->sps->sample_adaptive_offset_enabled_flag) {
             if ((ret = ff_reget_buffer(s->avctx, s->tmp_frame)) < 0)
