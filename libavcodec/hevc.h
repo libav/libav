@@ -30,6 +30,7 @@
 #include "hevcpred.h"
 #include "hevcdsp.h"
 
+#define DEBLOCKING_IN_LOOP
 /**
  * Enable to diverge from the spec when the reference encoder
  * does so.
@@ -705,6 +706,9 @@ typedef struct HEVCContext {
 
     AVCodecContext *avctx;
     AVFrame *frame;
+#ifdef DEBLOCKING_IN_LOOP
+    AVFrame *dbf_frame;
+#endif
     AVFrame *sao_frame;
     AVFrame *tmp_frame;
 
@@ -845,6 +849,13 @@ int ff_hevc_find_next_ref(HEVCContext *s, int poc);
 int ff_hevc_set_new_ref(HEVCContext *s, AVFrame **frame, int poc);
 int ff_hevc_find_display(HEVCContext *s, AVFrame *frame);
 
-int z_scan_block_avail(HEVCContext *s, int xCurr, int yCurr, int xN, int yN);
-
+int ff_hevc_z_scan_block_avail(HEVCContext *s, int xCurr, int yCurr, int xN, int yN);
+void ff_hevc_set_qPy(HEVCContext *s, int xC, int yC);
+void ff_hevc_deblocking_boundary_strengths(HEVCContext *s, int x0, int y0, int log2_trafo_size);
+#ifndef DEBLOCKING_IN_LOOP
+void ff_hevc_deblocking_filter(HEVCContext *s);
+#else
+void ff_hevc_deblocking_filter(HEVCContext *s, int x0, int y0, int log2_trafo_size);
+#endif
+void ff_hevc_sao_filter(HEVCContext *s);
 #endif // AVCODEC_HEVC_H
