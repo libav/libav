@@ -1493,7 +1493,7 @@ static void hls_prediction_unit(HEVCContext *s, int x0, int y0, int nPbW, int nP
             }
         }
     }
-    if (current_mv.pred_flag[0] && !current_mv.pred_flag[1] || identical_mvs(&current_mv, refPicList)) {
+    if (current_mv.pred_flag[0] && !current_mv.pred_flag[1]) {
         int16_t tmp[MAX_PB_SIZE*MAX_PB_SIZE];
         int16_t tmp2[MAX_PB_SIZE*MAX_PB_SIZE];
 
