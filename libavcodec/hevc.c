@@ -1804,6 +1804,10 @@ static int hls_slice_data(HEVCContext *s)
         if (y_ctb > 1<< s->sps->log2_ctb_size) {
             if(!s->sh.disable_deblocking_filter_flag)
                 ff_hevc_deblocking_filter(s, x_ctb, y_ctb - (2<< s->sps->log2_ctb_size), s->sps->log2_ctb_size);
+#ifdef SAO_IN_LOOP
+//            if (s->sps->sample_adaptive_offset_enabled_flag)
+//                ff_hevc_sao_filter(s, x_ctb, y_ctb - (2<< s->sps->log2_ctb_size));
+#endif
         }
 #endif
         if (!more_data)
@@ -1968,14 +1972,37 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             for( x_ctb = 0; x_ctb < s->sps->pic_width_in_ctbs; x_ctb++) {
                 if(!s->sh.disable_deblocking_filter_flag)
                     ff_hevc_deblocking_filter(s, x_ctb<<s->sps->log2_ctb_size, y_ctb<<s->sps->log2_ctb_size, s->sps->log2_ctb_size);
-           }
+#ifdef SAO_IN_LOOP
+//                if (s->sps->sample_adaptive_offset_enabled_flag)
+//                    ff_hevc_sao_filter(s, x_ctb<<s->sps->log2_ctb_size, y_ctb<<s->sps->log2_ctb_size);
+#endif
+            }
+#endif
+#ifdef SAO_IN_LOOP
+        int x, y;
+        for( y = 0; y < s->sps->pic_height_in_luma_samples; y++)
+            for( x = 0; x < s->sps->pic_width_in_luma_samples; x++)
+                printf("luma_dbf(%d, %d) = %d\n", x, y, s->frame->data[0][y * s->frame->linesize[0] + x]);
 #endif
         if (s->sps->sample_adaptive_offset_enabled_flag) {
+#ifndef SAO_IN_LOOP
             av_picture_copy((AVPicture*)s->sao_frame, (AVPicture*)s->frame,
                     s->avctx->pix_fmt, s->avctx->width, s->avctx->height);
             ff_hevc_sao_filter(s);
+#else
+            for( y_ctb = 0; y_ctb < s->sps->pic_height_in_ctbs; y_ctb++)
+                for( x_ctb = 0; x_ctb < s->sps->pic_width_in_ctbs; x_ctb++) {
+                        ff_hevc_sao_filter(s, x_ctb<<s->sps->log2_ctb_size, y_ctb<<s->sps->log2_ctb_size);
+                }
+#endif
             av_frame_unref(s->tmp_frame);
         }
+#ifdef SAO_IN_LOOP
+        for( y = 0; y < s->sps->pic_height_in_luma_samples; y++)
+            for( x = 0; x < s->sps->pic_width_in_luma_samples; x++)
+                printf("luma_sao(%d, %d) = %d\n", x, y, s->sao_frame->data[0][y * s->sao_frame->linesize[0] + x]);
+        exit(0);
+#endif
         if (s->decode_checksum_sei == 1) {
             calc_md5(s->md5[0], s->ref->frame->data[0], s->ref->frame->linesize[0], s->ref->frame->width  , s->ref->frame->height  );
             calc_md5(s->md5[1], s->ref->frame->data[1], s->ref->frame->linesize[1], s->ref->frame->width/2, s->ref->frame->height/2);

@@ -599,31 +599,32 @@ static void FUNC(sao_edge_filter)(uint8_t *_dst, uint8_t *_src, ptrdiff_t _strid
             height--;
         }
     }
-    for (y = init_y; y < height; y++) {
 #ifdef OPTIMIZATION_ENABLE
-        int y_stride     = init_y * stride;
-        int pos_0_0      = pos[sao_eo_class][0][0];
-        int pos_0_1      = pos[sao_eo_class][0][1];
-        int pos_1_0      = pos[sao_eo_class][1][0];
-        int pos_1_1      = pos[sao_eo_class][1][1];
-        int y_stride_0_1 = (init_y + pos_0_1) * stride;
-        int y_stride_1_1 = (init_y + pos_1_1) * stride;
-        for (y = init_y; y < height; y++) {
-            for (x = init_x; x < width; x++) {
-                int diff0         = CMP(src[x + y_stride], src[x + pos_0_0 + y_stride_0_1]);
-                int diff1         = CMP(src[x + y_stride], src[x + pos_1_0 + y_stride_1_1]);
-                int offset_val    = edge_idx[2 + diff0 + diff1];
-                dst[x + y_stride] = av_clip_pixel(src[x + y_stride] + sao_offset_val[offset_val]);
-            }
-            y_stride     += stride;
-            y_stride_0_1 += stride;
-            y_stride_1_1 += stride;
+    int y_stride     = init_y * stride;
+    int pos_0_0      = pos[sao_eo_class][0][0];
+    int pos_0_1      = pos[sao_eo_class][0][1];
+    int pos_1_0      = pos[sao_eo_class][1][0];
+    int pos_1_1      = pos[sao_eo_class][1][1];
+    int y_stride_0_1 = (init_y + pos_0_1) * stride;
+    int y_stride_1_1 = (init_y + pos_1_1) * stride;
+    for (y = init_y; y < height; y++) {
+        for (x = init_x; x < width; x++) {
+            int diff0         = CMP(src[x + y_stride], src[x + pos_0_0 + y_stride_0_1]);
+            int diff1         = CMP(src[x + y_stride], src[x + pos_1_0 + y_stride_1_1]);
+            int offset_val    = edge_idx[2 + diff0 + diff1];
+            dst[x + y_stride] = av_clip_pixel(src[x + y_stride] + sao_offset_val[offset_val]);
         }
+        y_stride     += stride;
+        y_stride_0_1 += stride;
+        y_stride_1_1 += stride;
+    }
 #else
+    for (y = init_y; y < height; y++) {
         for (x = init_x; x < width; x++)
             FILTER(x, y, edge_idx[2 + DIFF(x, y, 0) + DIFF(x, y, 1)]);
-#endif
     }
+#endif
+
 #ifndef OPTIMIZATION_ENABLE
 #undef DST
 #undef SRC
