@@ -41,7 +41,6 @@ static void update_refs(HEVCContext *s)
 {
     int i, j;
     int used[FF_ARRAY_ELEMS(s->short_refs)] = { 0 };
-
     for (i = 0; i < 5; i++) {
         RefPicList *rpl = &s->sh.refPocList[i];
         for (j = 0; j < rpl->numPic; j++)
@@ -53,6 +52,7 @@ static void update_refs(HEVCContext *s)
             ref->flags &= 1;
         if ( ref->flags == 0)
             av_frame_unref(ref->frame);
+
     }
 }
 
@@ -62,8 +62,8 @@ void ff_hevc_clear_refs(HEVCContext *s)
     for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
         HEVCFrame *ref = &s->short_refs[i];
         ref->flags &= 1;
-        if ( ref->flags == 0)
-           av_frame_unref(ref->frame);
+        if (ref->flags == 0)
+            av_frame_unref(ref->frame);
     }
 }
 
@@ -117,8 +117,7 @@ int ff_hevc_find_display(HEVCContext *s, AVFrame *frame)
         minPoc = 0;
     for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
         HEVCFrame *ref = &s->short_refs[i];
-        int numPic     = ref->refPicList[0].numPic + ref->refPicList[1].numPic;
-        if (nbReadyDisplay >= numPic) {
+        if (nbReadyDisplay > s->sps->temporal_layer[0].num_reorder_pics) {
             if (ref->poc == minPoc ) {
                 ref->flags &= 2;
                 if (av_frame_ref(frame, ref->frame) < 0)
@@ -215,7 +214,7 @@ void ff_hevc_set_ref_poc_list(HEVCContext *s)
                 j++;
             } else {
                 refPocList[ST_FOLL].list[k] = s->poc + rps->delta_poc[i];
-                refPocList[ST_FOLL].idx[j] = find_ref_idx(s, refPocList[ST_FOLL].list[k]);
+                refPocList[ST_FOLL].idx[k] = find_ref_idx(s, refPocList[ST_FOLL].list[k]);
                 k++;
             }
         }
@@ -228,7 +227,7 @@ void ff_hevc_set_ref_poc_list(HEVCContext *s)
                 j++;
             } else {
                 refPocList[ST_FOLL].list[k] = s->poc + rps->delta_poc[i];
-                refPocList[ST_FOLL].idx[j] = find_ref_idx(s, refPocList[ST_FOLL].list[k]);
+                refPocList[ST_FOLL].idx[k] = find_ref_idx(s, refPocList[ST_FOLL].list[k]);
                 k++;
             }
         }
