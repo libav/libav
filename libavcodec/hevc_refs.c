@@ -50,8 +50,10 @@ static void update_refs(HEVCContext *s)
         HEVCFrame *ref = &s->short_refs[i];
         if (!used[i])
             ref->flags &= 1;
-        if ( ref->flags == 0)
+        if (ref->frame->buf[0] && ref->flags == 0) {
             av_frame_unref(ref->frame);
+            printf("unref->poc %d\n", ref->poc);
+        }
 
     }
 }
@@ -59,10 +61,23 @@ static void update_refs(HEVCContext *s)
 void ff_hevc_clear_refs(HEVCContext *s)
 {
     int i;
+     int nbReadyDisplay = 0;
+    int minPoc         = 0xFFFF;
+    for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
+        HEVCFrame *ref = &s->short_refs[i];
+        if ((ref->flags & 1) == 1 ) {
+            nbReadyDisplay ++;
+            if (ref->poc >= s->poc_display && ref->poc < minPoc) {
+                minPoc = ref->poc;
+            }
+        }
+    }
+    if (minPoc == 0xFFFF)
+        minPoc = 0;
     for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
         HEVCFrame *ref = &s->short_refs[i];
         ref->flags &= 1;
-        if (ref->flags == 0)
+        if (ref->frame->buf[0] && (ref->flags == 0))
             av_frame_unref(ref->frame);
     }
 }
@@ -220,8 +235,8 @@ void ff_hevc_set_ref_poc_list(HEVCContext *s)
         }
         refPocList[ST_CURR_BEF].numPic = j;
         j = 0;
-        for( i = rps->num_negative_pics; i < rps->num_delta_pocs; i ++ ) {
-            if (rps->used[i] ==1) {
+        for (i = rps->num_negative_pics; i < rps->num_delta_pocs; i ++) {
+            if (rps->used[i] == 1) {
                 refPocList[ST_CURR_AFT].list[j] = s->poc + rps->delta_poc[i];
                 refPocList[ST_CURR_AFT].idx[j] = find_ref_idx(s, refPocList[ST_CURR_AFT].list[j]);
                 j++;

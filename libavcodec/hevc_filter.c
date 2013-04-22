@@ -71,8 +71,8 @@ static int get_qPy_pred(HEVCContext *s, int xC, int yC)
         ctbAddrB   = ( minTbAddrB >> 2 ) * (Log2CtbSizeY - Log2MinTrafoSize);
     }
     // qPy_pred
-    if (s->isFristQPgroup != 0) {
-        s->isFristQPgroup = 0;
+    if (s->isFirstQPgroup != 0) {
+        s->isFirstQPgroup = 0;
         qPy_pred = s->sh.slice_qp;
     } else {
         qPy_pred = s->qp_y;
