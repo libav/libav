@@ -1885,6 +1885,7 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
     int ret;
 
+    int i;
 
     *data_size = 0;
 
@@ -1929,8 +1930,10 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     case NAL_RASL_N:
     case NAL_RASL_R:
         s->isFirstQPgroup = 1;
-        if (s->nal_unit_type == NAL_IDR_W_DLP)
+        if (s->nal_unit_type == NAL_IDR_W_DLP) {
             ff_hevc_clear_refs(s);
+            s->dpb++;
+        }
         if (hls_slice_header(s) < 0)
             return -1;
 
@@ -2038,6 +2041,8 @@ static av_cold int hevc_decode_init(AVCodecContext *avctx)
     if (!s->tmp_frame)
         return AVERROR(ENOMEM);
     s->poc_display = 0;
+    s->dpb = 0;
+    s->renderer = 1;
     for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
         s->short_refs[i].frame = av_frame_alloc();
         if (!s->short_refs[i].frame)
