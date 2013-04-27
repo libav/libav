@@ -356,4 +356,4 @@ EXAMPLES  = metadata output
 TESTPROGS = seek
 TOOLS     = aviocat pktdumper probetest
 
-$(SUBDIR)output-example$(EXESUF): ELIBS = -lswscale
+$(SUBDIR)output-example$(EXESUF): ELIBS = -lswscale -lavutil
