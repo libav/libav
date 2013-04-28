@@ -264,10 +264,10 @@ static void derive_spatial_merge_candidates(HEVCContext *s, int x0, int y0, int 
     int available_a0_flag=0;
     int available_b2_flag=0;
     struct MvField spatialCMVS[MRG_MAX_NUM_CANDS];
-    struct MvField l0Cand = {0};
-    struct MvField l1Cand = {0};
-    struct MvField combCand = {0};
-    struct MvField TMVPCand = {0};
+    struct MvField l0Cand   = {{{ 0 }}};
+    struct MvField l1Cand   = {{{ 0 }}};
+    struct MvField combCand = {{{ 0 }}};
+    struct MvField TMVPCand = {{{ 0 }}};
     struct Mv  mvL0Col = {0};
     struct Mv  mvL1Col = {0};
 
@@ -654,7 +654,7 @@ void ff_hevc_luma_mv_merge_mode(HEVCContext *s, int x0, int y0, int nPbW, int nP
 {
     int singleMCLFlag = 0;
     int nCS = 1 << log2_cb_size;
-    struct MvField mergecand_list[MRG_MAX_NUM_CANDS] = {0};
+    struct MvField mergecand_list[MRG_MAX_NUM_CANDS] = {{{{ 0 }}}};
 
     if ((s->pps->log2_parallel_merge_level -2 > 0) && (nCS == 8)) {
         singleMCLFlag = 1;
