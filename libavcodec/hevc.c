@@ -114,17 +114,14 @@ static int pic_arrays_init(HEVCContext *s)
             goto fail;
     }
 
-    s->horizontal_bs = av_malloc(2 * s->bs_width * s->bs_height);
-    s->vertical_bs   = av_malloc(2 * s->bs_width * s->bs_height);
+    s->horizontal_bs = av_mallocz(2 * s->bs_width * s->bs_height);
+    s->vertical_bs   = av_mallocz(2 * s->bs_width * s->bs_height);
 
     if (!s->sao || !s->split_coding_unit_flag || !s->cu.skip_flag ||
         !s->cu.left_ct_depth || !s->cu.top_ct_depth ||
         !s->pu.left_ipm || !s->pu.top_ipm ||
         !s->horizontal_bs || !s->vertical_bs)
         goto fail;
-
-    memset(s->horizontal_bs, 0, 2 * s->bs_width * s->bs_height);
-    memset(s->vertical_bs,   0, 2 * s->bs_width * s->bs_height);
 
     for (i = 0; i < MAX_TRANSFORM_DEPTH; i++) {
         s->tt.cbf_cb[i] = av_malloc(MAX_CU_SIZE*MAX_CU_SIZE);
