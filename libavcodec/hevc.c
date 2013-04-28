@@ -1843,8 +1843,8 @@ static int hls_nal_unit(HEVCContext *s)
     ret = (get_bits(gb, 6) != 0);
 
     av_log(s->avctx, AV_LOG_DEBUG,
-           "nal_ref_flag: %d, nal_unit_type: %d, temporal_id: %d\n",
-           s->nal_ref_flag, s->nal_unit_type, s->temporal_id);
+           "nal_unit_type: %d, temporal_id: %d\n",
+           s->nal_unit_type, s->temporal_id);
 
     return ret;
 }

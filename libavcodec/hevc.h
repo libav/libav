@@ -722,7 +722,6 @@ typedef struct HEVCContext {
     uint8_t cabac_state[HEVC_CONTEXTS];
     uint8_t cabac_state_save[HEVC_CONTEXTS];
 
-    int nal_ref_flag;
     enum NALUnitType nal_unit_type;
     int temporal_id;  ///< temporal_id_plus1 - 1
 
