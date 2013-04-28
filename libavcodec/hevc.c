@@ -111,7 +111,9 @@ static int pic_arrays_init(HEVCContext *s)
         goto fail;
 
     for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
-        s->short_refs[i].tab_mvf = av_malloc(pic_width_in_min_pu  * pic_height_in_min_pu * sizeof(MvField));
+        s->short_refs[i].tab_mvf = av_malloc(pic_width_in_min_pu  *
+                                             pic_height_in_min_pu *
+                                             sizeof(*s->short_refs[i].tab_mvf));
         if (!s->short_refs[i].tab_mvf)
             goto fail;
     }
