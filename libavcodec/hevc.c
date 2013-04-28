@@ -42,69 +42,10 @@
  */
 #define INVERSE_RASTER_SCAN(a, b, c, d, e) ((e) ? ((a) / (ROUNDED_DIV(d, b)))*(c) : ((a)%(ROUNDED_DIV(d, b)))*(b))
 
-static int pic_arrays_init(HEVCContext *s)
-{
-    int i;
-    int pic_size = s->sps->pic_width_in_luma_samples * s->sps->pic_height_in_luma_samples;
-    int ctb_count = s->sps->pic_width_in_ctbs * s->sps->pic_height_in_ctbs;
-    int pic_width_in_min_pu  = s->sps->pic_width_in_min_cbs * 4;
-    int pic_height_in_min_pu = s->sps->pic_height_in_min_cbs * 4;
-    s->bs_width = s->sps->pic_width_in_luma_samples >> 3;
-    s->bs_height = s->sps->pic_height_in_luma_samples >> 3;
-
-    s->sao = av_mallocz(ctb_count * sizeof(*s->sao));
-
-    s->split_coding_unit_flag = av_malloc(pic_size);
-    s->cu.skip_flag = av_malloc(pic_size);
-
-    s->cu.left_ct_depth = av_malloc(s->sps->pic_height_in_min_cbs);
-    s->cu.top_ct_depth  = av_malloc(s->sps->pic_width_in_min_cbs);
-
-    s->pu.left_ipm = av_malloc(pic_height_in_min_pu);
-    s->pu.top_ipm  = av_malloc(pic_width_in_min_pu);
-
-    s->cbf_luma = av_malloc(pic_width_in_min_pu * pic_height_in_min_pu);
-    s->is_pcm   = av_malloc(pic_width_in_min_pu * pic_height_in_min_pu);
-
-    if (!s->cbf_luma)
-        return AVERROR(ENOMEM);
-    if (!s->is_pcm)
-        return AVERROR(ENOMEM);
-    s->qp_y_tab = av_malloc(s->sps->pic_width_in_min_tbs * s->sps->pic_height_in_min_tbs);
-    if (!s->qp_y_tab)
-        return AVERROR(ENOMEM);
-
-    for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
-        s->short_refs[i].tab_mvf = av_malloc(pic_width_in_min_pu  * pic_height_in_min_pu * sizeof(MvField));
-        if (!s->short_refs[i].tab_mvf)
-            return AVERROR(ENOMEM);
-    }
-
-    s->horizontal_bs = av_malloc(2 * s->bs_width * s->bs_height);
-    s->vertical_bs   = av_malloc(2 * s->bs_width * s->bs_height);
-
-    if (!s->sao || !s->split_coding_unit_flag || !s->cu.skip_flag ||
-        !s->cu.left_ct_depth || !s->cu.top_ct_depth ||
-        !s->pu.left_ipm || !s->pu.top_ipm ||
-        !s->horizontal_bs || !s->vertical_bs)
-        return AVERROR(ENOMEM);
-
-    memset(s->horizontal_bs, 0, 2 * s->bs_width * s->bs_height);
-    memset(s->vertical_bs,   0, 2 * s->bs_width * s->bs_height);
-
-    for (i = 0; i < MAX_TRANSFORM_DEPTH; i++) {
-        s->tt.cbf_cb[i] = av_malloc(MAX_CU_SIZE*MAX_CU_SIZE);
-        s->tt.cbf_cr[i] = av_malloc(MAX_CU_SIZE*MAX_CU_SIZE);
-        if (!s->tt.cbf_cb[i] || !s->tt.cbf_cr[i])
-            return AVERROR(ENOMEM);
-    }
-
-    return 0;
-}
-
 static void pic_arrays_free(HEVCContext *s)
 {
     int i;
+
     av_freep(&s->sao);
 
     av_freep(&s->split_coding_unit_flag);
@@ -133,7 +74,70 @@ static void pic_arrays_free(HEVCContext *s)
     for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
         av_freep(&s->short_refs[i].tab_mvf);
     }
+}
 
+static int pic_arrays_init(HEVCContext *s)
+{
+    int i;
+    int pic_size = s->sps->pic_width_in_luma_samples * s->sps->pic_height_in_luma_samples;
+    int ctb_count = s->sps->pic_width_in_ctbs * s->sps->pic_height_in_ctbs;
+    int pic_width_in_min_pu  = s->sps->pic_width_in_min_cbs * 4;
+    int pic_height_in_min_pu = s->sps->pic_height_in_min_cbs * 4;
+    s->bs_width = s->sps->pic_width_in_luma_samples >> 3;
+    s->bs_height = s->sps->pic_height_in_luma_samples >> 3;
+
+    s->sao = av_mallocz(ctb_count * sizeof(*s->sao));
+
+    s->split_coding_unit_flag = av_malloc(pic_size);
+    s->cu.skip_flag = av_malloc(pic_size);
+
+    s->cu.left_ct_depth = av_malloc(s->sps->pic_height_in_min_cbs);
+    s->cu.top_ct_depth  = av_malloc(s->sps->pic_width_in_min_cbs);
+
+    s->pu.left_ipm = av_malloc(pic_height_in_min_pu);
+    s->pu.top_ipm  = av_malloc(pic_width_in_min_pu);
+
+    s->cbf_luma = av_malloc(pic_width_in_min_pu * pic_height_in_min_pu);
+    s->is_pcm   = av_malloc(pic_width_in_min_pu * pic_height_in_min_pu);
+
+    if (!s->cbf_luma)
+        goto fail;
+    if (!s->is_pcm)
+        goto fail;
+    s->qp_y_tab = av_malloc(s->sps->pic_width_in_min_tbs * s->sps->pic_height_in_min_tbs);
+    if (!s->qp_y_tab)
+        goto fail;
+
+    for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
+        s->short_refs[i].tab_mvf = av_malloc(pic_width_in_min_pu  * pic_height_in_min_pu * sizeof(MvField));
+        if (!s->short_refs[i].tab_mvf)
+            goto fail;
+    }
+
+    s->horizontal_bs = av_malloc(2 * s->bs_width * s->bs_height);
+    s->vertical_bs   = av_malloc(2 * s->bs_width * s->bs_height);
+
+    if (!s->sao || !s->split_coding_unit_flag || !s->cu.skip_flag ||
+        !s->cu.left_ct_depth || !s->cu.top_ct_depth ||
+        !s->pu.left_ipm || !s->pu.top_ipm ||
+        !s->horizontal_bs || !s->vertical_bs)
+        goto fail;
+
+    memset(s->horizontal_bs, 0, 2 * s->bs_width * s->bs_height);
+    memset(s->vertical_bs,   0, 2 * s->bs_width * s->bs_height);
+
+    for (i = 0; i < MAX_TRANSFORM_DEPTH; i++) {
+        s->tt.cbf_cb[i] = av_malloc(MAX_CU_SIZE*MAX_CU_SIZE);
+        s->tt.cbf_cr[i] = av_malloc(MAX_CU_SIZE*MAX_CU_SIZE);
+        if (!s->tt.cbf_cb[i] || !s->tt.cbf_cr[i])
+            goto fail;
+    }
+
+    return 0;
+
+fail:
+    pic_arrays_free(s);
+    return AVERROR(ENOMEM);
 }
 
 static void pred_weight_table(HEVCContext *s, GetBitContext *gb) {
@@ -262,10 +266,8 @@ static int hls_slice_header(HEVCContext *s)
         //TODO: Handle switching between different SPS better
         pic_arrays_free(s);
         ret = pic_arrays_init(s);
-        if (ret < 0) {
-            pic_arrays_free(s);
+        if (ret < 0)
             return AVERROR(ENOMEM);
-        }
 
         s->avctx->width = s->sps->pic_width_in_luma_samples;
         s->avctx->height = s->sps->pic_height_in_luma_samples;
