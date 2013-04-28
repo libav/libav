@@ -1841,6 +1841,8 @@ static int hls_nal_unit(HEVCContext *s)
 
     nuh_layer_id = get_bits(gb, 6);
     s->temporal_id = get_bits(gb, 3) - 1;
+    if (s->temporal_id < 0)
+        return AVERROR_INVALIDDATA;
 
     av_log(s->avctx, AV_LOG_DEBUG,
            "nal_unit_type: %d, nuh_layer_id: %dtemporal_id: %d\n",
