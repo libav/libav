@@ -1912,6 +1912,8 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *got_output,
     case NAL_IDR_W_DLP:
     case NAL_IDR_N_LP:
     case NAL_CRA_NUT:
+    case NAL_RADL_N:
+    case NAL_RADL_R:
     case NAL_RASL_N:
     case NAL_RASL_R:
         s->isFirstQPgroup = 1;
