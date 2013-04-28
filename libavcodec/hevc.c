@@ -1832,21 +1832,21 @@ static int hls_slice_data(HEVCContext *s)
 static int hls_nal_unit(HEVCContext *s)
 {
     GetBitContext *gb = &s->gb;
-    int ret;
+    int nuh_layer_id;
 
     if (get_bits1(gb) != 0)
         return AVERROR_INVALIDDATA;
 
     s->nal_unit_type = get_bits(gb, 6);
 
+    nuh_layer_id = get_bits(gb, 6);
     s->temporal_id = get_bits(gb, 3) - 1;
-    ret = (get_bits(gb, 6) != 0);
 
     av_log(s->avctx, AV_LOG_DEBUG,
-           "nal_unit_type: %d, temporal_id: %d\n",
-           s->nal_unit_type, s->temporal_id);
+           "nal_unit_type: %d, nuh_layer_id: %dtemporal_id: %d\n",
+           s->nal_unit_type, nuh_layer_id, s->temporal_id);
 
-    return ret;
+    return (nuh_layer_id == 0);
 }
 
 static void calc_md5(uint8_t *md5, uint8_t* src, int stride, int width, int height) {
