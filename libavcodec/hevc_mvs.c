@@ -211,14 +211,14 @@ static int temporal_luma_motion_vector(HEVCContext *s, int x0, int y0, int nPbW,
 
     if((s->sh.slice_type == B_SLICE) && (s->sh.collocated_from_l0_flag == 0)) {
         short_ref_idx = refPicList[1].idx[s->sh.collocated_ref_idx];
-        coloc_tab_mvf = s->short_refs[short_ref_idx].tab_mvf;
-        colPic = s->short_refs[short_ref_idx].poc;
+        coloc_tab_mvf = s->DPB[short_ref_idx].tab_mvf;
+        colPic = s->DPB[short_ref_idx].poc;
     }
     else if(((s->sh.slice_type == B_SLICE) && (s->sh.collocated_from_l0_flag == 1))
             || (s->sh.slice_type == P_SLICE)) {
         short_ref_idx = refPicList[0].idx[s->sh.collocated_ref_idx];
-        coloc_tab_mvf = s->short_refs[short_ref_idx].tab_mvf;
-        colPic = s->short_refs[short_ref_idx].poc;
+        coloc_tab_mvf = s->DPB[short_ref_idx].tab_mvf;
+        colPic = s->DPB[short_ref_idx].poc;
     }
     //bottom right collocated motion vector
     xPRb = x0 + nPbW;
@@ -230,7 +230,7 @@ static int temporal_luma_motion_vector(HEVCContext *s, int x0, int y0, int nPbW,
         xPRb_pu = xPRb >> s->sps->log2_min_pu_size;
         yPRb_pu = yPRb >> s->sps->log2_min_pu_size;
         temp_col = coloc_tab_mvf[(yPRb_pu) * pic_width_in_min_pu + xPRb_pu];
-        availableFlagLXCol = derive_temporal_colocated_mvs(s, temp_col, refIdxLx, mvLXCol, X, colPic, s->short_refs[short_ref_idx].refPicList);
+        availableFlagLXCol = derive_temporal_colocated_mvs(s, temp_col, refIdxLx, mvLXCol, X, colPic, s->DPB[short_ref_idx].refPicList);
     } else {
         mvLXCol->x = 0;
         mvLXCol->y = 0;
@@ -246,7 +246,7 @@ static int temporal_luma_motion_vector(HEVCContext *s, int x0, int y0, int nPbW,
         xPCtr_pu = xPCtr >> s->sps->log2_min_pu_size;
         yPCtr_pu = yPCtr >> s->sps->log2_min_pu_size;
         temp_col = coloc_tab_mvf[(yPCtr_pu) * pic_width_in_min_pu + xPCtr_pu];
-        availableFlagLXCol = derive_temporal_colocated_mvs(s, temp_col, refIdxLx, mvLXCol, X, colPic, s->short_refs[short_ref_idx].refPicList);
+        availableFlagLXCol = derive_temporal_colocated_mvs(s, temp_col, refIdxLx, mvLXCol, X, colPic, s->DPB[short_ref_idx].refPicList);
     }
     return availableFlagLXCol;
 }

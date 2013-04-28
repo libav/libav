@@ -27,8 +27,8 @@ static int find_ref_idx(HEVCContext *s, int poc)
 {
     int i;
 
-    for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
-        HEVCFrame *ref = &s->short_refs[i];
+    for (i = 0; i < FF_ARRAY_ELEMS(s->DPB); i++) {
+        HEVCFrame *ref = &s->DPB[i];
         if (ref->frame->buf[0] && (s->dpb == ref->dpb) && ref->poc == poc)
             return i;
     }
@@ -42,14 +42,14 @@ static void update_refs(HEVCContext *s)
 {
     int i, j;
 
-    int used[FF_ARRAY_ELEMS(s->short_refs)] = { 0 };
+    int used[FF_ARRAY_ELEMS(s->DPB)] = { 0 };
     for (i = 0; i < 5; i++) {
         RefPicList *rpl = &s->sh.refPocList[i];
         for (j = 0; j < rpl->numPic; j++)
             used[rpl->idx[j]] = 1;
     }
-    for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
-        HEVCFrame *ref = &s->short_refs[i];
+    for (i = 0; i < FF_ARRAY_ELEMS(s->DPB); i++) {
+        HEVCFrame *ref = &s->DPB[i];
         if (ref->frame->buf[0] && !used[i])
             ref->flags &= 1;
         if (ref->frame->buf[0] && ref->flags == 0)
@@ -60,8 +60,8 @@ static void update_refs(HEVCContext *s)
 void ff_hevc_clear_refs(HEVCContext *s)
 {
     int i;
-    for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
-        HEVCFrame *ref = &s->short_refs[i];
+    for (i = 0; i < FF_ARRAY_ELEMS(s->DPB); i++) {
+        HEVCFrame *ref = &s->DPB[i];
         if (ref->frame->buf[0]) {
             if(!ref->flags && ref->dpb == s->dpb ) {
                 av_frame_unref(ref->frame);
@@ -76,8 +76,8 @@ int ff_hevc_find_next_ref(HEVCContext *s, int poc)
     int i;
     update_refs(s);
 
-    for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
-        HEVCFrame *ref = &s->short_refs[i];
+    for (i = 0; i < FF_ARRAY_ELEMS(s->DPB); i++) {
+        HEVCFrame *ref = &s->DPB[i];
         if (!ref->frame->buf[0]) {
             return i;
         }
@@ -89,8 +89,8 @@ int ff_hevc_find_next_ref(HEVCContext *s, int poc)
 int ff_hevc_set_new_ref(HEVCContext *s, AVFrame **frame, int poc)
 {
     int i;
-    for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
-        HEVCFrame *ref = &s->short_refs[i];
+    for (i = 0; i < FF_ARRAY_ELEMS(s->DPB); i++) {
+        HEVCFrame *ref = &s->DPB[i];
         if (!ref->frame->buf[0]) {
             *frame     = ref->frame;
             s->ref     = ref;
@@ -101,7 +101,7 @@ int ff_hevc_set_new_ref(HEVCContext *s, AVFrame **frame, int poc)
         }
     }
     av_log(s->avctx, AV_LOG_ERROR,
-           "short_refs is full, could not add ref with POC %d\n", poc);
+           "DPB is full, could not add ref with POC %d\n", poc);
     return -1;
 }
 
@@ -110,8 +110,8 @@ int ff_hevc_find_display(HEVCContext *s, AVFrame *frame)
     int i;
     int nbReadyDisplay = 0;
     int minPoc         = 0xFFFF;
-    for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
-        HEVCFrame *ref = &s->short_refs[i];
+    for (i = 0; i < FF_ARRAY_ELEMS(s->DPB); i++) {
+        HEVCFrame *ref = &s->DPB[i];
         if ((ref->flags & 1) == 1 ) {
             nbReadyDisplay ++;
             if (s->renderer == ref->dpb && ref->poc >= s->poc_display && ref->poc < minPoc) {
@@ -122,8 +122,8 @@ int ff_hevc_find_display(HEVCContext *s, AVFrame *frame)
     if (minPoc == 0xFFFF) {
         s->renderer++;
         s->poc_display = 0;
-        for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
-            HEVCFrame *ref = &s->short_refs[i];
+        for (i = 0; i < FF_ARRAY_ELEMS(s->DPB); i++) {
+            HEVCFrame *ref = &s->DPB[i];
             if ((ref->flags & 1) == 1 ) {
                 nbReadyDisplay ++;
                 if (s->renderer == ref->dpb && ref->poc >= s->poc_display && ref->poc < minPoc) {
@@ -135,8 +135,8 @@ int ff_hevc_find_display(HEVCContext *s, AVFrame *frame)
     if (minPoc == 0xFFFF)
         minPoc=0;
 
-    for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
-        HEVCFrame *ref = &s->short_refs[i];
+    for (i = 0; i < FF_ARRAY_ELEMS(s->DPB); i++) {
+        HEVCFrame *ref = &s->DPB[i];
         if (nbReadyDisplay > s->sps->temporal_layer[0].num_reorder_pics) {
             if ((s->renderer == ref->dpb) && ref->poc == minPoc ) {
                 ref->flags &= 2;
@@ -170,7 +170,7 @@ static void set_ref_pic_list(HEVCContext *s)
 {
     SliceHeader *sh = &s->sh;
     RefPicList  *refPocList = s->sh.refPocList;
-    RefPicList  *refPicList = s->short_refs[ff_hevc_find_next_ref(s, s->poc)].refPicList;
+    RefPicList  *refPicList = s->DPB[ff_hevc_find_next_ref(s, s->poc)].refPicList;
 
     uint8_t num_ref_idx_lx_act[2];
     uint8_t cIdx;

@@ -765,7 +765,7 @@ typedef struct HEVCContext {
     uint8_t *is_pcm;
 
     HEVCFrame *ref;
-    HEVCFrame short_refs[32];
+    HEVCFrame DPB[32];
     int decode_checksum_sei;
     uint8_t md5[3][16];
     uint8_t dpb;
