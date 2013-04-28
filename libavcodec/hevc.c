@@ -87,23 +87,26 @@ static int pic_arrays_init(HEVCContext *s)
     s->bs_height = s->sps->pic_height_in_luma_samples >> 3;
 
     s->sao = av_mallocz(ctb_count * sizeof(*s->sao));
-
     s->split_coding_unit_flag = av_malloc(pic_size);
-    s->cu.skip_flag = av_malloc(pic_size);
+    if (!s->sao || !s->split_coding_unit_flag)
+        goto fail;
 
+    s->cu.skip_flag     = av_malloc(pic_size);
     s->cu.left_ct_depth = av_malloc(s->sps->pic_height_in_min_cbs);
     s->cu.top_ct_depth  = av_malloc(s->sps->pic_width_in_min_cbs);
+    if (!s->cu.skip_flag || !s->cu.left_ct_depth || !s->cu.top_ct_depth)
+        goto fail;
 
     s->pu.left_ipm = av_malloc(pic_height_in_min_pu);
     s->pu.top_ipm  = av_malloc(pic_width_in_min_pu);
+    if (!s->pu.left_ipm || !s->pu.top_ipm)
+        goto fail;
 
     s->cbf_luma = av_malloc(pic_width_in_min_pu * pic_height_in_min_pu);
     s->is_pcm   = av_malloc(pic_width_in_min_pu * pic_height_in_min_pu);
+    if (!s->cbf_luma ||!s->is_pcm)
+        goto fail;
 
-    if (!s->cbf_luma)
-        goto fail;
-    if (!s->is_pcm)
-        goto fail;
     s->qp_y_tab = av_malloc(s->sps->pic_width_in_min_tbs * s->sps->pic_height_in_min_tbs);
     if (!s->qp_y_tab)
         goto fail;
@@ -116,11 +119,7 @@ static int pic_arrays_init(HEVCContext *s)
 
     s->horizontal_bs = av_mallocz(2 * s->bs_width * s->bs_height);
     s->vertical_bs   = av_mallocz(2 * s->bs_width * s->bs_height);
-
-    if (!s->sao || !s->split_coding_unit_flag || !s->cu.skip_flag ||
-        !s->cu.left_ct_depth || !s->cu.top_ct_depth ||
-        !s->pu.left_ipm || !s->pu.top_ipm ||
-        !s->horizontal_bs || !s->vertical_bs)
+    if (!s->horizontal_bs || !s->vertical_bs)
         goto fail;
 
     for (i = 0; i < MAX_TRANSFORM_DEPTH; i++) {
