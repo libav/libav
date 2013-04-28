@@ -51,19 +51,20 @@ static int pic_arrays_init(HEVCContext *s)
     int pic_height_in_min_pu = s->sps->pic_height_in_min_cbs * 4;
     s->bs_width = s->sps->pic_width_in_luma_samples >> 3;
     s->bs_height = s->sps->pic_height_in_luma_samples >> 3;
+
     s->sao = av_mallocz(ctb_count * sizeof(*s->sao));
 
     s->split_coding_unit_flag = av_malloc(pic_size);
     s->cu.skip_flag = av_malloc(pic_size);
 
     s->cu.left_ct_depth = av_malloc(s->sps->pic_height_in_min_cbs);
-    s->cu.top_ct_depth = av_malloc(s->sps->pic_width_in_min_cbs);
+    s->cu.top_ct_depth  = av_malloc(s->sps->pic_width_in_min_cbs);
 
     s->pu.left_ipm = av_malloc(pic_height_in_min_pu);
-    s->pu.top_ipm = av_malloc(pic_width_in_min_pu);
+    s->pu.top_ipm  = av_malloc(pic_width_in_min_pu);
 
-    s->cbf_luma = av_malloc(pic_width_in_min_pu*pic_height_in_min_pu);
-    s->is_pcm   = av_malloc(pic_width_in_min_pu*pic_height_in_min_pu);
+    s->cbf_luma = av_malloc(pic_width_in_min_pu * pic_height_in_min_pu);
+    s->is_pcm   = av_malloc(pic_width_in_min_pu * pic_height_in_min_pu);
 
     if (!s->cbf_luma)
         return AVERROR(ENOMEM);
@@ -72,8 +73,9 @@ static int pic_arrays_init(HEVCContext *s)
     s->qp_y_tab = av_malloc(s->sps->pic_width_in_min_tbs * s->sps->pic_height_in_min_tbs);
     if (!s->qp_y_tab)
         return AVERROR(ENOMEM);
+
     for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
-        s->short_refs[i].tab_mvf = av_malloc(pic_width_in_min_pu*pic_height_in_min_pu*sizeof(MvField));
+        s->short_refs[i].tab_mvf = av_malloc(pic_width_in_min_pu  * pic_height_in_min_pu * sizeof(MvField));
         if (!s->short_refs[i].tab_mvf)
             return AVERROR(ENOMEM);
     }
@@ -88,13 +90,12 @@ static int pic_arrays_init(HEVCContext *s)
         return AVERROR(ENOMEM);
 
     memset(s->horizontal_bs, 0, 2 * s->bs_width * s->bs_height);
-    memset(s->vertical_bs, 0, s->bs_width * 2 * s->bs_height);
+    memset(s->vertical_bs,   0, 2 * s->bs_width * s->bs_height);
 
     for (i = 0; i < MAX_TRANSFORM_DEPTH; i++) {
         s->tt.cbf_cb[i] = av_malloc(MAX_CU_SIZE*MAX_CU_SIZE);
         s->tt.cbf_cr[i] = av_malloc(MAX_CU_SIZE*MAX_CU_SIZE);
-        if (!s->tt.cbf_cb[i] ||
-            !s->tt.cbf_cr[i])
+        if (!s->tt.cbf_cb[i] || !s->tt.cbf_cr[i])
             return AVERROR(ENOMEM);
     }
 
