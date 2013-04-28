@@ -1032,7 +1032,7 @@ void ff_hevc_luma_mv_mvp_mode(HEVCContext *s, int x0, int y0, int nPbW, int nPbH
         mvpcand_list[numMVPCandLX].y = 0;
         numMVPCandLX++;
     }
-    
+
     if (LX == 0) {
         mv->mv[0].x  = mvpcand_list[mvp_lx_flag].x;
         mv->mv[0].y  = mvpcand_list[mvp_lx_flag].y;

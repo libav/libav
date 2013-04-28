@@ -224,7 +224,7 @@ static void pred_weight_table(HEVCContext *s, GetBitContext *gb) {
                 s->sh.chroma_weight_l1[i][1] = 1 << s->sh.chroma_log2_weight_denom;
                 s->sh.chroma_offset_l1[i][1] = 0;
             }
-            
+
         }
     }
 }
@@ -1342,7 +1342,7 @@ static void hls_prediction_unit(HEVCContext *s, int x0, int y0, int nPbW, int nP
             luma_mc(s, tmp, tmpstride,
                     s->short_refs[refPicList[1].idx[current_mv.ref_idx[1]]].frame,
                     &current_mv.mv[1], x0, y0, nPbW, nPbH);
-            s->hevcdsp.weighted_pred_luma(s->sh.luma_log2_weight_denom,                                          
+            s->hevcdsp.weighted_pred_luma(s->sh.luma_log2_weight_denom,
                                           s->sh.luma_weight_l1[current_mv.ref_idx[1]],
                                           s->sh.luma_offset_l1[current_mv.ref_idx[1]],
                                           dst0, s->frame->linesize[0], tmp, tmpstride, nPbW, nPbH);
@@ -1350,11 +1350,11 @@ static void hls_prediction_unit(HEVCContext *s, int x0, int y0, int nPbW, int nP
                      s->short_refs[refPicList[1].idx[current_mv.ref_idx[1]]].frame,
                       &current_mv.mv[1], x0/2, y0/2, nPbW/2, nPbH/2);
 
-            s->hevcdsp.weighted_pred_chroma(s->sh.chroma_log2_weight_denom ,                                            
+            s->hevcdsp.weighted_pred_chroma(s->sh.chroma_log2_weight_denom ,
                                             s->sh.chroma_weight_l1[current_mv.ref_idx[1]][0],
                                             s->sh.chroma_offset_l1[current_mv.ref_idx[1]][0],
                                             dst1, s->frame->linesize[1], tmp, tmpstride, nPbW/2, nPbH/2);
-            s->hevcdsp.weighted_pred_chroma(s->sh.chroma_log2_weight_denom ,                                           
+            s->hevcdsp.weighted_pred_chroma(s->sh.chroma_log2_weight_denom ,
                                             s->sh.chroma_weight_l1[current_mv.ref_idx[1]][1],
                                             s->sh.chroma_offset_l1[current_mv.ref_idx[1]][1],
                                             dst2, s->frame->linesize[2], tmp2, tmpstride, nPbW/2, nPbH/2);

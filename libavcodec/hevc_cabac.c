@@ -283,11 +283,11 @@ const uint8_t init_values[3][HEVC_CONTEXTS] = {
 
 void save_states(HEVCContext *s)
 {
-	memcpy(s->cabac_state_save, s->cabac_state, sizeof(s->cabac_state));
+    memcpy(s->cabac_state_save, s->cabac_state, sizeof(s->cabac_state));
 }
 void load_states(HEVCContext *s)
 {
-	memcpy(s->cabac_state, s->cabac_state_save, sizeof(s->cabac_state));
+    memcpy(s->cabac_state, s->cabac_state_save, sizeof(s->cabac_state));
 }
 
 void ff_hevc_cabac_reinit(HEVCContext *s)
@@ -550,7 +550,7 @@ int ff_hevc_ref_idx_lx_decode(HEVCContext *s, int num_ref_idx_lx)
     int i = 0;
     int max = num_ref_idx_lx - 1;
     int max_ctx = FFMIN(max, 2);
-    
+
     while (i < max_ctx && GET_CABAC(elem_offset[REF_IDX_L0] + i))
         i++;
     if (i==2) {

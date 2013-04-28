@@ -167,9 +167,9 @@ static int decode_profile_tier_level(HEVCContext *s, PTL *ptl,
         ptl->sub_layer_profile_present_flag[i] = get_bits1(gb);
         ptl->sub_layer_level_present_flag[i] = get_bits1(gb);
     }
-	if( max_num_sub_layers - 1 > 0 )
-		for( i = max_num_sub_layers - 1; i < 8; i++ )
-			skip_bits(gb, 2);/*reserved_zero_2bits[ i ]*/
+    if( max_num_sub_layers - 1 > 0 )
+        for( i = max_num_sub_layers - 1; i < 8; i++ )
+            skip_bits(gb, 2);/*reserved_zero_2bits[ i ]*/
     for (i = 0; i < max_num_sub_layers - 1; i++) {
         if (profile_present_flag && ptl->sub_layer_profile_present_flag[i]) {
             ptl->sub_layer_profile_space[i] = get_bits(gb, 2);
