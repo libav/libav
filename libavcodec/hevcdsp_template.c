@@ -600,6 +600,7 @@ static void FUNC(sao_edge_filter)(uint8_t *_dst, uint8_t *_src, ptrdiff_t _strid
         }
     }
 #ifdef OPTIMIZATION_ENABLE
+    {
     int y_stride     = init_y * stride;
     int pos_0_0      = pos[sao_eo_class][0][0];
     int pos_0_1      = pos[sao_eo_class][0][1];
@@ -617,6 +618,7 @@ static void FUNC(sao_edge_filter)(uint8_t *_dst, uint8_t *_src, ptrdiff_t _strid
         y_stride     += stride;
         y_stride_0_1 += stride;
         y_stride_1_1 += stride;
+    }
     }
 #else
     for (y = init_y; y < height; y++) {
