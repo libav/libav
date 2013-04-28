@@ -64,12 +64,11 @@ static void pic_arrays_free(HEVCContext *s)
 
     av_freep(&s->qp_y_tab);
 
+    av_freep(&s->sh.entry_point_offset);
+
     for (i = 0; i < MAX_TRANSFORM_DEPTH; i++) {
         av_freep(&s->tt.cbf_cb[i]);
         av_freep(&s->tt.cbf_cr[i]);
-    }
-    if (s->sh.entry_point_offset) {
-        av_freep(&s->sh.entry_point_offset);
     }
     for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
         av_freep(&s->short_refs[i].tab_mvf);
@@ -442,9 +441,7 @@ static int hls_slice_header(HEVCContext *s)
         int num_entry_point_offsets = get_ue_golomb(gb);
         if( num_entry_point_offsets > 0 ) {
             int offset_len = get_ue_golomb(gb)+1;
-            if (sh->entry_point_offset) {
-                av_freep(&sh->entry_point_offset);
-            }
+            av_freep(&sh->entry_point_offset);
             sh->entry_point_offset = av_malloc(num_entry_point_offsets*sizeof(int));
             for( i = 0; i < num_entry_point_offsets; i++ ) {
                 sh->entry_point_offset[i] = get_bits(gb, offset_len);
