@@ -78,8 +78,8 @@ static int pic_arrays_init(HEVCContext *s)
             return AVERROR(ENOMEM);
     }
 
-    s->horizontal_bs = (uint8_t*)av_malloc(2 * s->bs_width * s->bs_height);
-    s->vertical_bs = (uint8_t*)av_malloc(s->bs_width * 2 * s->bs_height);
+    s->horizontal_bs = av_malloc(2 * s->bs_width * s->bs_height);
+    s->vertical_bs   = av_malloc(2 * s->bs_width * s->bs_height);
 
     if (!s->sao || !s->split_coding_unit_flag || !s->cu.skip_flag ||
         !s->cu.left_ct_depth || !s->cu.top_ct_depth ||
