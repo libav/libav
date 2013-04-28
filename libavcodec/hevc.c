@@ -62,14 +62,14 @@ static int pic_arrays_init(HEVCContext *s)
     s->pu.left_ipm = av_malloc(pic_height_in_min_pu);
     s->pu.top_ipm = av_malloc(pic_width_in_min_pu);
 
-    s->cbf_luma = av_malloc(pic_width_in_min_pu*pic_height_in_min_pu*sizeof(uint8_t));
-    s->is_pcm   = av_malloc(pic_width_in_min_pu*pic_height_in_min_pu*sizeof(uint8_t));
+    s->cbf_luma = av_malloc(pic_width_in_min_pu*pic_height_in_min_pu);
+    s->is_pcm   = av_malloc(pic_width_in_min_pu*pic_height_in_min_pu);
 
     if (!s->cbf_luma)
         return AVERROR(ENOMEM);
     if (!s->is_pcm)
         return AVERROR(ENOMEM);
-    s->qp_y_tab = av_malloc(s->sps->pic_width_in_min_tbs * s->sps->pic_height_in_min_tbs /*pic_size*/*sizeof(int8_t));
+    s->qp_y_tab = av_malloc(s->sps->pic_width_in_min_tbs * s->sps->pic_height_in_min_tbs);
     if (!s->qp_y_tab)
         return AVERROR(ENOMEM);
     for (i = 0; i < FF_ARRAY_ELEMS(s->short_refs); i++) {
