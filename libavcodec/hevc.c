@@ -143,9 +143,6 @@ static void pred_weight_table(HEVCContext *s, GetBitContext *gb) {
     uint8_t chroma_weight_l0_flag[16];
     uint8_t luma_weight_l1_flag[16];
     uint8_t chroma_weight_l1_flag[16];
-    int delta_luma_weight_l1[16];
-    int delta_chroma_weight_l1[16][2];
-    int delta_chroma_offset_l1[16][2];
 
     s->sh.luma_log2_weight_denom = get_ue_golomb(gb);
     if (s->sps->chroma_format_idc != 0){
@@ -926,7 +923,6 @@ static void hls_transform_tree(HEVCContext *s, int x0, int y0,
                                int trafo_depth, int blk_idx)
 {
 
-    MvField *tab_mvf = s->ref->tab_mvf;
     uint8_t split_transform_flag;
     if (trafo_depth > 0 && log2_trafo_size == 2) {
         SAMPLE_CBF(s->tt.cbf_cb[trafo_depth], x0, y0) =
@@ -1038,7 +1034,6 @@ static void hls_pcm_sample(HEVCContext *s, int x0, int y0, int log2_cb_size)
     uint8_t *dst1 = &s->frame->data[1][(y0 >> s->sps->vshift[1]) * stride1 + (x0 >> s->sps->hshift[1])];
     int stride2 = s->frame->linesize[2];
     uint8_t *dst2 = &s->frame->data[2][(y0 >> s->sps->vshift[2]) * stride2 + (x0 >> s->sps->hshift[2])];
-    MvField *tab_mvf = s->ref->tab_mvf;
 
     int length = cb_size * cb_size * 3 / 2 * s->sps->pcm.bit_depth;
     uint8_t *pcm = skip_bytes(&s->cc, length >> 3);
@@ -1191,13 +1186,6 @@ static void chroma_mc(HEVCContext *s, int16_t *dst1, int16_t *dst2, ptrdiff_t ds
         s->hevcdsp.put_hevc_epel[!!my][!!mx](dst1, dststride, src1, src1stride, block_w, block_h, mx, my);
         s->hevcdsp.put_hevc_epel[!!my][!!mx](dst2, dststride, src2, src2stride, block_w, block_h, mx, my);
     }
-}
-
-static int identical_mvs(MvField *mv, RefPicList *refPicList) {
-    if (mv->pred_flag[0] + mv->pred_flag[1] == 2)
-        return (refPicList[0].list[mv->ref_idx[0]] == refPicList[1].list[mv->ref_idx[1]] && mv->mv[0].x == mv->mv[1].x && mv->mv[0].y == mv->mv[1].y);
-    else
-        return 0;
 }
 
 static void hls_prediction_unit(HEVCContext *s, int x0, int y0, int nPbW, int nPbH, int log2_cb_size, int partIdx)
@@ -1884,8 +1872,6 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     GetBitContext *gb = &s->gb;
 
     int ret;
-
-    int i;
 
     *data_size = 0;
 
