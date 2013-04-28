@@ -85,7 +85,7 @@ static int pic_arrays_init(HEVCContext *s)
         !s->cu.left_ct_depth || !s->cu.top_ct_depth ||
         !s->pu.left_ipm || !s->pu.top_ipm ||
         !s->horizontal_bs || !s->vertical_bs)
-        return -1;
+        return AVERROR(ENOMEM);
 
     memset(s->horizontal_bs, 0, 2 * s->bs_width * s->bs_height);
     memset(s->vertical_bs, 0, s->bs_width * 2 * s->bs_height);
@@ -95,7 +95,7 @@ static int pic_arrays_init(HEVCContext *s)
         s->tt.cbf_cr[i] = av_malloc(MAX_CU_SIZE*MAX_CU_SIZE);
         if (!s->tt.cbf_cb[i] ||
             !s->tt.cbf_cr[i])
-            return -1;
+            return AVERROR(ENOMEM);
     }
 
     return 0;
@@ -232,7 +232,7 @@ static void pred_weight_table(HEVCContext *s, GetBitContext *gb) {
 
 static int hls_slice_header(HEVCContext *s)
 {
-    int i;
+    int i, ret;
     GetBitContext *gb = &s->gb;
     SliceHeader *sh = &s->sh;
     int slice_address_length = 0;
@@ -252,7 +252,7 @@ static int hls_slice_header(HEVCContext *s)
     sh->pps_id = get_ue_golomb(gb);
     if (sh->pps_id >= MAX_PPS_COUNT || !s->pps_list[sh->pps_id]) {
         av_log(s->avctx, AV_LOG_ERROR, "PPS id out of range: %d\n", sh->pps_id);
-        return -1;
+        return AVERROR_INVALIDDATA;
     }
     s->pps = s->pps_list[sh->pps_id];
     if (s->sps != s->sps_list[s->pps->sps_id]) {
@@ -260,9 +260,10 @@ static int hls_slice_header(HEVCContext *s)
         s->vps = s->vps_list[s->sps->vps_id];
         //TODO: Handle switching between different SPS better
         pic_arrays_free(s);
-        if (pic_arrays_init(s) < 0) {
+        ret = pic_arrays_init(s);
+        if (ret < 0) {
             pic_arrays_free(s);
-            return -1;
+            return AVERROR(ENOMEM);
         }
 
         s->avctx->width = s->sps->pic_width_in_luma_samples;
@@ -271,7 +272,7 @@ static int hls_slice_header(HEVCContext *s)
             av_log(s->avctx, AV_LOG_ERROR,
                    "TODO: s->sps->chroma_format_idc == 0 || "
                    "s->sps->separate_colour_plane_flag\n");
-            return -1;
+            return AVERROR_PATCHWELCOME;
         }
 
         if (s->sps->chroma_format_idc == 1) {
@@ -288,7 +289,7 @@ static int hls_slice_header(HEVCContext *s)
             }
         } else {
             av_log(s->avctx, AV_LOG_ERROR, "non-4:2:0 support is currently unspecified.\n");
-            return -1;
+            return AVERROR_PATCHWELCOME;
         }
         s->sps->hshift[0] = s->sps->vshift[0] = 0;
         s->sps->hshift[2] =
@@ -344,7 +345,7 @@ static int hls_slice_header(HEVCContext *s)
             }
             if (s->sps->long_term_ref_pics_present_flag) {
                 av_log(s->avctx, AV_LOG_ERROR, "TODO: long_term_ref_pics_present_flag\n");
-                return -1;
+                return AVERROR_PATCHWELCOME;
             }
             if (s->sps->sps_temporal_mvp_enabled_flag)
                 sh->slice_temporal_mvp_enabled_flag = get_bits1(gb);
@@ -357,7 +358,7 @@ static int hls_slice_header(HEVCContext *s)
         }
         if (!s->pps) {
             av_log(s->avctx, AV_LOG_ERROR, "No PPS active while decoding slice\n");
-            return -1;
+            return AVERROR_INVALIDDATA;
         }
 
         if (s->sps->sample_adaptive_offset_enabled_flag) {
@@ -381,7 +382,7 @@ static int hls_slice_header(HEVCContext *s)
             }
             if (s->pps->lists_modification_present_flag) {
                 av_log(s->avctx, AV_LOG_ERROR, "TODO: ref_pic_list_modification() \n");
-                return -1;
+                return AVERROR_PATCHWELCOME;
             }
 
             if (sh->slice_type == B_SLICE)
@@ -1922,8 +1923,10 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *got_output,
             ff_hevc_clear_refs(s);
             s->dpb++;
         }
-        if (hls_slice_header(s) < 0)
-            return -1;
+
+        ret = hls_slice_header(s);
+        if (ret < 0)
+            return ret;
 
         if(!s->sh.disable_deblocking_filter_flag) {
             int pic_width_in_min_pu  = s->sps->pic_width_in_min_cbs * 4;
@@ -1950,10 +1953,11 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *got_output,
         if (!s->edge_emu_buffer)
             s->edge_emu_buffer = av_malloc((MAX_PB_SIZE + 7) * s->frame->linesize[0]);
         if (!s->edge_emu_buffer)
-            return -1;
+            return AVERROR(ENOMEM);
 
-        if (hls_slice_data(s) < 0)
-            return -1;
+        ret = hls_slice_data(s);
+        if (ret < 0)
+            return ret;
 
 #ifndef DEBLOCKING_IN_LOOP
         if(!s->sh.disable_deblocking_filter_flag) {
