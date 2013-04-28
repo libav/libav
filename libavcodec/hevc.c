@@ -1036,7 +1036,7 @@ static void hls_pcm_sample(HEVCContext *s, int x0, int y0, int log2_cb_size)
     uint8_t *dst2 = &s->frame->data[2][(y0 >> s->sps->vshift[2]) * stride2 + (x0 >> s->sps->hshift[2])];
 
     int length = cb_size * cb_size * 3 / 2 * s->sps->pcm.bit_depth;
-    uint8_t *pcm = skip_bytes(&s->cc, length >> 3);
+    const uint8_t *pcm = skip_bytes(&s->cc, length >> 3);
 
     for (j = y0 >> log2_min_pu_size; j < ((y0 + cb_size) >> log2_min_pu_size); j++)
         for (i = x0 >> log2_min_pu_size; i < ((x0 + cb_size) >> log2_min_pu_size); i++)
