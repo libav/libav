@@ -1865,15 +1865,13 @@ static void calc_md5(uint8_t *md5, uint8_t* src, int stride, int width, int heig
 }
 
 
-static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
+static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *got_output,
                              AVPacket *avpkt)
 {
     HEVCContext *s = avctx->priv_data;
     GetBitContext *gb = &s->gb;
 
     int ret;
-
-    *data_size = 0;
 
     init_get_bits(gb, avpkt->data, avpkt->size*8);
     av_log(s->avctx, AV_LOG_DEBUG, "=================\n");
@@ -2004,7 +2002,7 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             return ret;
         s->frame->pict_type = AV_PICTURE_TYPE_I;
         s->frame->key_frame = 1;
-        *data_size = ret;
+        *got_output = ret;
         break;
     case NAL_AUD:
         return avpkt->size;

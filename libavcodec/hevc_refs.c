@@ -143,7 +143,7 @@ int ff_hevc_find_display(HEVCContext *s, AVFrame *frame)
                 if (av_frame_ref(frame, ref->frame) < 0)
                    return -1;
                 s->poc_display = ref->poc;
-                return sizeof(AVFrame);
+                return 1;
             }
         }
     }
