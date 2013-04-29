@@ -1919,7 +1919,7 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *got_output,
         s->isFirstQPgroup = 1;
         if (s->nal_unit_type == NAL_IDR_W_DLP) {
             ff_hevc_clear_refs(s);
-            s->dpb++;
+            s->seq_decode = (s->seq_decode + 1) & 0xff;
         }
 
         ret = hls_slice_header(s);
@@ -2031,8 +2031,6 @@ static av_cold int hevc_decode_init(AVCodecContext *avctx)
     if (!s->tmp_frame)
         return AVERROR(ENOMEM);
     s->poc_display = 0;
-    s->dpb = 0;
-    s->renderer = 1;
     for (i = 0; i < FF_ARRAY_ELEMS(s->DPB); i++) {
         s->DPB[i].frame = av_frame_alloc();
         if (!s->DPB[i].frame)

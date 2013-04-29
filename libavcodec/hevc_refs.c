@@ -29,7 +29,8 @@ static int find_ref_idx(HEVCContext *s, int poc)
 
     for (i = 0; i < FF_ARRAY_ELEMS(s->DPB); i++) {
         HEVCFrame *ref = &s->DPB[i];
-        if (ref->frame->buf[0] && (s->dpb == ref->dpb) && ref->poc == poc)
+        if (ref->frame->buf[0] && ref->flags & HEVC_FRAME_FLAG_SHORT_REF &&
+            ref->poc == poc)
             return i;
     }
     av_log(s->avctx, AV_LOG_ERROR,
@@ -51,8 +52,8 @@ static void update_refs(HEVCContext *s)
     for (i = 0; i < FF_ARRAY_ELEMS(s->DPB); i++) {
         HEVCFrame *ref = &s->DPB[i];
         if (ref->frame->buf[0] && !used[i])
-            ref->flags &= 1;
-        if (ref->frame->buf[0] && ref->flags == 0)
+            ref->flags &= ~HEVC_FRAME_FLAG_SHORT_REF;
+        if (ref->frame->buf[0] && !ref->flags)
             av_frame_unref(ref->frame);
     }
 }
@@ -62,11 +63,9 @@ void ff_hevc_clear_refs(HEVCContext *s)
     int i;
     for (i = 0; i < FF_ARRAY_ELEMS(s->DPB); i++) {
         HEVCFrame *ref = &s->DPB[i];
-        if (ref->frame->buf[0]) {
-            if(!ref->flags && ref->dpb == s->dpb ) {
-                av_frame_unref(ref->frame);
-                ref->flags = 0;
-            }
+        if (!(ref->flags & HEVC_FRAME_FLAG_OUTPUT)) {
+            av_frame_unref(ref->frame);
+            ref->flags = 0;
         }
     }
 }
@@ -95,8 +94,8 @@ int ff_hevc_set_new_ref(HEVCContext *s, AVFrame **frame, int poc)
             *frame     = ref->frame;
             s->ref     = ref;
             ref->poc   = poc;
-            ref->flags = 3;
-            ref->dpb   = s->dpb;
+            ref->flags = HEVC_FRAME_FLAG_OUTPUT | HEVC_FRAME_FLAG_SHORT_REF;
+            ref->sequence = s->seq_decode;
             return ff_reget_buffer(s->avctx, *frame);
         }
     }
@@ -105,48 +104,47 @@ int ff_hevc_set_new_ref(HEVCContext *s, AVFrame **frame, int poc)
     return -1;
 }
 
-int ff_hevc_find_display(HEVCContext *s, AVFrame *frame)
+int ff_hevc_find_display(HEVCContext *s, AVFrame *out)
 {
-    int i;
-    int nbReadyDisplay = 0;
-    int minPoc         = 0xFFFF;
-    for (i = 0; i < FF_ARRAY_ELEMS(s->DPB); i++) {
-        HEVCFrame *ref = &s->DPB[i];
-        if ((ref->flags & 1) == 1 ) {
-            nbReadyDisplay ++;
-            if (s->renderer == ref->dpb && ref->poc >= s->poc_display && ref->poc < minPoc) {
-                minPoc = ref->poc;
-            }
-        }
-    }
-    if (minPoc == 0xFFFF) {
-        s->renderer++;
-        s->poc_display = 0;
+    int nb_output = 0;
+    int min_poc   = 0xFFFF;
+    int i, min_idx, ret;
+
+    while (s->seq_output <= s->seq_decode) {
         for (i = 0; i < FF_ARRAY_ELEMS(s->DPB); i++) {
-            HEVCFrame *ref = &s->DPB[i];
-            if ((ref->flags & 1) == 1 ) {
-                nbReadyDisplay ++;
-                if (s->renderer == ref->dpb && ref->poc >= s->poc_display && ref->poc < minPoc) {
-                    minPoc = ref->poc;
+            HEVCFrame *frame = &s->DPB[i];
+            if (frame->flags & HEVC_FRAME_FLAG_OUTPUT &&
+                frame->sequence == s->seq_output) {
+                nb_output++;
+                if (frame->poc < min_poc) {
+                    min_poc = frame->poc;
+                    min_idx = i;
                 }
             }
         }
-    }
-    if (minPoc == 0xFFFF)
-        minPoc=0;
 
-    for (i = 0; i < FF_ARRAY_ELEMS(s->DPB); i++) {
-        HEVCFrame *ref = &s->DPB[i];
-        if (nbReadyDisplay > s->sps->temporal_layer[0].num_reorder_pics) {
-            if ((s->renderer == ref->dpb) && ref->poc == minPoc ) {
-                ref->flags &= 2;
-                if (av_frame_ref(frame, ref->frame) < 0)
-                   return -1;
-                s->poc_display = ref->poc;
-                return 1;
-            }
+        /* wait for more frames before output */
+        if (s->seq_output == s->seq_decode &&
+            nb_output <= s->sps->temporal_layer[0].num_reorder_pics)
+            return 0;
+
+        if (nb_output) {
+            HEVCFrame *frame = &s->DPB[min_idx];
+
+            frame->flags &= ~HEVC_FRAME_FLAG_OUTPUT;
+
+            ret = av_frame_ref(out, frame->frame);
+            if (ret < 0)
+                return ret;
+            return 1;
         }
+
+        if (s->seq_output != s->seq_decode)
+            s->seq_output = (s->seq_output + 1) & 0xff;
+        else
+            break;
     }
+
     return 0;
 }
 

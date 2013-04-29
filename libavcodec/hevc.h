@@ -696,13 +696,24 @@ typedef struct SAOParams {
     int offset_val[3][5]; ///<SaoOffsetVal
 } SAOParams;
 
+#define HEVC_FRAME_FLAG_OUTPUT    (1 << 0)
+#define HEVC_FRAME_FLAG_SHORT_REF (1 << 1)
+
 typedef struct HEVCFrame {
     AVFrame *frame;
     int poc;
     MvField *tab_mvf;
     RefPicList refPicList[2];
+    /**
+     * A combination of HEVC_FRAME_FLAG_*
+     */
     uint8_t flags;
-    uint8_t dpb;
+
+    /**
+     * A sequence counter, so that old frames are output first
+     * after a POC reset
+     */
+    uint16_t sequence;
 } HEVCFrame;
 
 typedef struct HEVCContext {
@@ -768,8 +779,13 @@ typedef struct HEVCContext {
     HEVCFrame DPB[32];
     int decode_checksum_sei;
     uint8_t md5[3][16];
-    uint8_t dpb;
-    uint8_t renderer;
+
+    /**
+     * Sequence counters for decoded and output frames, so that old
+     * frames are output first after a POC reset
+     */
+    uint16_t seq_decode;
+    uint16_t seq_output;
 } HEVCContext;
 
 enum ScanType {
