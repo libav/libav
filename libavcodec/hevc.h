@@ -864,7 +864,7 @@ void ff_hevc_luma_mv_merge_mode(HEVCContext *s, int x0, int y0, int nPbW, int nP
 void ff_hevc_luma_mv_mvp_mode(HEVCContext *s, int x0, int y0, int nPbW, int nPbH, int log2_cb_size, int part_idx, int merge_idx, MvField *mv , int mvp_lx_flag, int LX);
 int ff_hevc_find_next_ref(HEVCContext *s, int poc);
 int ff_hevc_set_new_ref(HEVCContext *s, AVFrame **frame, int poc);
-int ff_hevc_find_display(HEVCContext *s, AVFrame *frame);
+int ff_hevc_find_display(HEVCContext *s, AVFrame *frame, int flush);
 
 int ff_hevc_z_scan_block_avail(HEVCContext *s, int xCurr, int yCurr, int xN, int yN);
 void ff_hevc_set_qPy(HEVCContext *s, int xC, int yC);

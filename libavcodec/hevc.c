@@ -1872,6 +1872,15 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *got_output,
 
     int ret;
 
+    if (!avpkt->size) {
+        ret = ff_hevc_find_display(s, data, 1);
+        if (ret < 0)
+            return ret;
+
+        *got_output = ret;
+        return 0;
+    }
+
     init_get_bits(gb, avpkt->data, avpkt->size*8);
     av_log(s->avctx, AV_LOG_DEBUG, "=================\n");
 
@@ -2004,7 +2013,7 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *got_output,
             calc_md5(s->md5[1], s->ref->frame->data[1], s->ref->frame->linesize[1], s->ref->frame->width/2, s->ref->frame->height/2);
             calc_md5(s->md5[2], s->ref->frame->data[2], s->ref->frame->linesize[2], s->ref->frame->width/2, s->ref->frame->height/2);
         }
-        if ((ret = ff_hevc_find_display(s, data)) < 0)
+        if ((ret = ff_hevc_find_display(s, data, 0)) < 0)
             return ret;
         s->frame->pict_type = AV_PICTURE_TYPE_I;
         s->frame->key_frame = 1;
@@ -2111,7 +2120,7 @@ AVCodec ff_hevc_decoder = {
     .init           = hevc_decode_init,
     .close          = hevc_decode_free,
     .decode         = hevc_decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = CODEC_CAP_DR1 | CODEC_CAP_DELAY,
     .flush          = hevc_decode_flush,
     .long_name      = NULL_IF_CONFIG_SMALL("HEVC (High Efficiency Video Coding)"),
 };

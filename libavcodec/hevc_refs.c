@@ -104,7 +104,7 @@ int ff_hevc_set_new_ref(HEVCContext *s, AVFrame **frame, int poc)
     return -1;
 }
 
-int ff_hevc_find_display(HEVCContext *s, AVFrame *out)
+int ff_hevc_find_display(HEVCContext *s, AVFrame *out, int flush)
 {
     int nb_output = 0;
     int min_poc   = 0xFFFF;
@@ -124,7 +124,7 @@ int ff_hevc_find_display(HEVCContext *s, AVFrame *out)
         }
 
         /* wait for more frames before output */
-        if (s->seq_output == s->seq_decode &&
+        if (!flush && s->seq_output == s->seq_decode &&
             nb_output <= s->sps->temporal_layer[0].num_reorder_pics)
             return 0;
 
