@@ -195,26 +195,6 @@ static int decode_profile_tier_level(HEVCContext *s, PTL *ptl,
     return 0;
 }
 
-static void decode_bit_rate_pic_rate(HEVCContext *s, int tempLevelLow, int tempLevelHigh)
-{
-    int i;
-    int bit_rate_info_present_flag, pic_rate_info_present_flag;
-    GetBitContext *gb = &s->gb;
-
-    for (i = tempLevelLow; i <= tempLevelHigh; i++) {
-        bit_rate_info_present_flag = get_bits1(gb);
-        pic_rate_info_present_flag = get_bits1(gb);
-        if (bit_rate_info_present_flag) {
-            skip_bits(gb, 16); // avg_bit_rate[i]
-            skip_bits(gb, 16); // max_bit_rate[i]
-        }
-        if (pic_rate_info_present_flag) {
-            skip_bits(gb, 2);  // constant_pic_rate_idc[i]
-            skip_bits(gb, 16); // avg_pic_rate[i]
-        }
-    }
-}
-
 static void decode_hrd(HEVCContext *s)
 {
     av_log(s->avctx, AV_LOG_ERROR, "HRD parsing not yet implemented\n");
@@ -306,7 +286,7 @@ int ff_hevc_decode_nal_vps(HEVCContext *s)
 
     if (!vps)
         return -1;
-    vps_id = get_bits(gb, 4) + 1;
+    vps_id = get_bits(gb, 4);
 
     if (vps_id >= MAX_VPS_COUNT) {
         av_log(s->avctx, AV_LOG_ERROR, "VPS id out of range: %d\n", vps_id);
@@ -318,11 +298,7 @@ int ff_hevc_decode_nal_vps(HEVCContext *s)
         goto err;
     }
 
-    if (get_bits(gb, 6) != 0) { // vps_reserved_zero_6bits
-        av_log(s->avctx, AV_LOG_ERROR, "vps_reserved_zero_6bits is not zero\n");
-        goto err;
-    }
-
+    vps->vps_max_layers = get_bits(gb, 6) + 1;
     vps->vps_max_sub_layers = get_bits(gb, 3) + 1;
     vps->vps_temporal_id_nesting_flag = get_bits1(gb);
     if (get_bits(gb, 16) != 0xffff) { // vps_reserved_ffff_16bits
@@ -336,33 +312,42 @@ int ff_hevc_decode_nal_vps(HEVCContext *s)
         goto err;
     }
 
-    if (decode_profile_tier_level(s, &vps->ptl, 1, vps->vps_max_sub_layers) != 0) {
+    if (decode_profile_tier_level(s, &vps->ptl, 1, vps->vps_max_sub_layers) < 0) {
         av_log(s->avctx, AV_LOG_ERROR, "error decoding profile tier level");
         goto err;
     }
-    decode_bit_rate_pic_rate(s, 0, vps->vps_max_sub_layers - 1);
-
     vps->vps_sub_layer_ordering_info_present_flag = get_bits1(gb);
-    j = vps->vps_sub_layer_ordering_info_present_flag ? 0 : (vps->vps_max_sub_layers - 1);
-    for (i = j; i < vps->vps_max_sub_layers; i++) {
+
+    i = vps->vps_sub_layer_ordering_info_present_flag ? 0 : (vps->vps_max_sub_layers - 1);
+    for (; i < vps->vps_max_sub_layers; i++) {
         vps->vps_max_dec_pic_buffering[i] = get_ue_golomb(gb);
         vps->vps_num_reorder_pics[i] = get_ue_golomb(gb);
         vps->vps_max_latency_increase[i] = get_ue_golomb(gb);
+
+        if (vps->vps_max_dec_pic_buffering[i] >= MAX_DPB_SIZE) {
+            av_log(s->avctx, AV_LOG_ERROR, "vps_max_dec_pic_buffering_minus1 out of range: %d\n",
+                   vps->vps_max_dec_pic_buffering[i] - 1);
+            goto err;
+        }
+        if (vps->vps_num_reorder_pics[i] > vps->vps_max_dec_pic_buffering[i]) {
+            av_log(s->avctx, AV_LOG_ERROR, "vps_max_num_reorder_pics out of range: %d\n",
+                   vps->vps_num_reorder_pics[i]);
+            goto err;
+        }
     }
 
-    vps->vps_max_nuh_reserved_zero_layer_id = get_bits(gb, 6);
-    vps->vps_max_op_sets = get_ue_golomb(gb) + 1;
-    for (j = 1; j < vps->vps_max_op_sets; j++)
-    {
-        for (i = 0; i <= vps->vps_max_nuh_reserved_zero_layer_id; i++)
-            skip_bits(gb, 1); // layer_id_included_flag[opsIdx][i]
-    }
+    vps->vps_max_layer_id = get_bits(gb, 6);
+    vps->vps_num_layer_sets = get_ue_golomb(gb) + 1;
+    for (i = 1; i < vps->vps_num_layer_sets; i++)
+        for (j = 0; j <= vps->vps_max_layer_id; j++)
+            skip_bits(gb, 1); // layer_id_included_flag[i][j]
+
     vps->vps_timing_info_present_flag = get_bits1(gb);
-    if(vps->vps_timing_info_present_flag) {
+    if (vps->vps_timing_info_present_flag) {
         vps->vps_num_units_in_tick = get_bits_long(gb, 32);
         vps->vps_time_scale = get_bits_long(gb, 32);
         vps->vps_poc_proportional_to_timing_flag = get_bits1(gb);
-        if(vps->vps_poc_proportional_to_timing_flag)
+        if (vps->vps_poc_proportional_to_timing_flag)
             vps->vps_num_ticks_poc_diff_one = get_ue_golomb(gb) + 1;
         vps->vps_num_hrd_parameters = get_ue_golomb(gb);
         if (vps->vps_num_hrd_parameters != 0) {

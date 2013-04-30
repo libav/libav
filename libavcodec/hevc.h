@@ -30,6 +30,8 @@
 #include "hevcpred.h"
 #include "hevcdsp.h"
 
+#define MAX_DPB_SIZE 16 // A.4.1
+
 //#define DEBLOCKING_IN_LOOP
 #ifdef DEBLOCKING_IN_LOOP
 #define SAO_IN_LOOP
@@ -231,15 +233,16 @@ typedef struct PTL {
 
 typedef struct VPS {
     uint8_t vps_temporal_id_nesting_flag;
+    int vps_max_layers;
     int vps_max_sub_layers; ///< vps_max_temporal_layers_minus1 + 1
 
     PTL ptl;
     int vps_sub_layer_ordering_info_present_flag;
-    int vps_max_dec_pic_buffering[MAX_SUB_LAYERS];
-    int vps_num_reorder_pics[MAX_SUB_LAYERS];
-    int vps_max_latency_increase[MAX_SUB_LAYERS];
-    int vps_max_nuh_reserved_zero_layer_id;
-    int vps_max_op_sets; ///< vps_max_op_sets_minus1 + 1
+    unsigned int vps_max_dec_pic_buffering[MAX_SUB_LAYERS];
+    unsigned int vps_num_reorder_pics[MAX_SUB_LAYERS];
+    unsigned int vps_max_latency_increase[MAX_SUB_LAYERS];
+    int vps_max_layer_id;
+    int vps_num_layer_sets; ///< vps_num_layer_sets_minus1 + 1
     uint8_t vps_timing_info_present_flag;
     uint32_t vps_num_units_in_tick;
     uint32_t vps_time_scale;
