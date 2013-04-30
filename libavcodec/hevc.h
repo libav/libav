@@ -252,7 +252,7 @@ typedef struct VPS {
 } VPS;
 
 typedef struct SPS {
-    int vps_id;
+    unsigned int vps_id;
 
     int sps_max_sub_layers; ///< sps_max_sub_layers_minus1 + 1
 
@@ -267,7 +267,7 @@ typedef struct SPS {
     uint8_t pic_conformance_flag;
     HEVCWindow pic_conf_win;
 
-    int bit_depth; ///< bit_depth_luma_minus8 + 8
+    unsigned int bit_depth; ///< bit_depth_luma_minus8 + 8
 
     int pcm_enabled_flag;
     struct {
@@ -277,24 +277,22 @@ typedef struct SPS {
         uint8_t loop_filter_disable_flag;
     } pcm;
 
-    int log2_max_poc_lsb; ///< log2_max_pic_order_cnt_lsb_minus4 + 4
+    unsigned int log2_max_poc_lsb; ///< log2_max_pic_order_cnt_lsb_minus4 + 4
     uint8_t sps_sub_layer_ordering_info_present_flag;
     struct {
-        int max_dec_pic_buffering;
-        int num_reorder_pics;
-        int max_latency_increase;
+        unsigned int max_dec_pic_buffering; ///< sps_max_dec_pic_buffering_minus1 + 1
+        unsigned int num_reorder_pics; ///< sps_max_num_reorder_pics
+        unsigned int max_latency_increase; ///< sps_max_latency_increase_plus1 - 1
     } temporal_layer[MAX_SUB_LAYERS];
 
     uint8_t restricted_ref_pic_lists_flag;
 
-    int log2_min_coding_block_size; ///< log2_min_coding_block_size_minus3 + 3
-    int log2_diff_max_min_coding_block_size;
-    int log2_min_transform_block_size; ///< log2_min_transform_block_size_minus2 + 2
-    int log2_diff_max_min_transform_block_size;
+    unsigned int log2_min_coding_block_size; ///< log2_min_luma_coding_block_size_minus3 + 3
+    unsigned int log2_diff_max_min_coding_block_size;
+    unsigned int log2_min_transform_block_size; ///< log2_min_transform_block_size_minus2 + 2
 
-
-    int max_transform_hierarchy_depth_inter;
-    int max_transform_hierarchy_depth_intra;
+    unsigned int max_transform_hierarchy_depth_inter;
+    unsigned int max_transform_hierarchy_depth_intra;
 
     int scaling_list_enable_flag;
 
@@ -326,6 +324,8 @@ typedef struct SPS {
     int pic_width_in_min_tbs;
     int pic_height_in_min_tbs;
 
+    int log2_max_transform_block_size; ///< Log2MaxTrafoSize
+    int log2_diff_ctb_min_tb_size;
     int log2_min_pu_size;
 
     int hshift[3];
@@ -337,7 +337,7 @@ typedef struct SPS {
 } SPS;
 
 typedef struct PPS {
-    int sps_id; ///< seq_parameter_set_id
+    unsigned int sps_id; ///< seq_parameter_set_id
 
     uint8_t sign_data_hiding_flag;
 
@@ -345,13 +345,12 @@ typedef struct PPS {
 
     int num_ref_idx_l0_default_active; ///< num_ref_idx_l0_default_active_minus1 + 1
     int num_ref_idx_l1_default_active; ///< num_ref_idx_l1_default_active_minus1 + 1
-    int pic_init_qp_minus26;
+    int init_qp; ///< init_qp_minus26 + 26
 
     uint8_t constrained_intra_pred_flag;
     uint8_t transform_skip_enabled_flag;
 
     uint8_t cu_qp_delta_enabled_flag;
-    int diff_cu_qp_delta_depth;
 
     int cb_qp_offset;
     int cr_qp_offset;
@@ -365,8 +364,8 @@ typedef struct PPS {
     uint8_t tiles_enabled_flag;
     uint8_t entropy_coding_sync_enabled_flag;
 
-    int num_tile_columns; ///< num_tile_columns_minus1 + 1
-    int num_tile_rows; ///< num_tile_rows_minus1 + 1
+    unsigned int num_tile_columns; ///< num_tile_columns_minus1 + 1
+    unsigned int num_tile_rows; ///< num_tile_rows_minus1 + 1
     uint8_t uniform_spacing_flag;
     uint8_t loop_filter_across_tiles_enabled_flag;
 
@@ -381,7 +380,7 @@ typedef struct PPS {
     int pps_scaling_list_data_present_flag;
 
     uint8_t lists_modification_present_flag;
-    int log2_parallel_merge_level; ///< log2_parallel_merge_level_minus2 + 2
+    unsigned int log2_parallel_merge_level; ///< log2_parallel_merge_level_minus2 + 2
     int num_extra_slice_header_bits;
     uint8_t slice_header_extension_present_flag;
 
@@ -389,10 +388,12 @@ typedef struct PPS {
     uint8_t pps_extension_data_flag;
 
     // Inferred parameters
-    int *column_width; ///< ColumnWidth
-    int *row_height; ///< RowHeight
-    int *col_bd; ///< ColBd
-    int *row_bd; ///< RowBd
+    unsigned int log2_min_cu_qp_delta_size; ///< Log2MinCuQpDeltaSize
+
+    unsigned int *column_width; ///< ColumnWidth
+    unsigned int *row_height; ///< RowHeight
+    unsigned int *col_bd; ///< ColBd
+    unsigned int *row_bd; ///< RowBd
 
     int *ctb_addr_rs_to_ts; ///< CtbAddrRSToTS
     int *ctb_addr_ts_to_rs; ///< CtbAddrTSToRS
@@ -415,7 +416,7 @@ typedef struct SliceHeader {
     enum SliceType slice_type;
 
     uint8_t dependent_slice_segment_flag;
-    int pps_id; ///< pic_parameter_set_id
+    unsigned int pps_id; ///< pic_parameter_set_id
     uint8_t pic_output_flag;
     uint8_t colour_plane_id;
 

@@ -44,7 +44,7 @@ static int get_qPy_pred(HEVCContext *s, int xC, int yC)
 {
     int Log2CtbSizeY         = s->sps->log2_ctb_size;
     int Log2MinTrafoSize     = s->sps->log2_min_transform_block_size;
-    int Log2MinCuQpDeltaSize = Log2CtbSizeY - s->pps->diff_cu_qp_delta_depth;
+    int Log2MinCuQpDeltaSize = s->pps->log2_min_cu_qp_delta_size;
     int xQg                  = xC - ( xC & ( ( 1 << Log2MinCuQpDeltaSize) - 1 ) );
     int yQg                  = yC - ( yC & ( ( 1 << Log2MinCuQpDeltaSize) - 1 ) );
     int x                    = xC >> Log2MinCuQpDeltaSize;
@@ -94,7 +94,7 @@ static int get_qPy_pred(HEVCContext *s, int xC, int yC)
 void ff_hevc_set_qPy(HEVCContext *s, int xC, int yC)
 {
     int Log2CtbSizeY         = s->sps->log2_ctb_size;
-    int Log2MinCuQpDeltaSize = Log2CtbSizeY - s->pps->diff_cu_qp_delta_depth;
+    int Log2MinCuQpDeltaSize = s->pps->log2_min_cu_qp_delta_size;
     int x                    = xC >> Log2MinCuQpDeltaSize;
     int y                    = yC >> Log2MinCuQpDeltaSize;
     if (s->tu.cu_qp_delta != 0) {
@@ -108,7 +108,7 @@ void ff_hevc_set_qPy(HEVCContext *s, int xC, int yC)
 static int get_qPy(HEVCContext *s, int xC, int yC)
 {
     int Log2CtbSizeY         = s->sps->log2_ctb_size;
-    int Log2MinCuQpDeltaSize = Log2CtbSizeY - s->pps->diff_cu_qp_delta_depth;
+    int Log2MinCuQpDeltaSize = s->pps->log2_min_cu_qp_delta_size;
     int x                    = xC >> Log2MinCuQpDeltaSize;
     int y                    = yC >> Log2MinCuQpDeltaSize;
     return s->qp_y_tab[x + y * s->sps->pic_width_in_min_tbs];

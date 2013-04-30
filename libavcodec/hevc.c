@@ -456,7 +456,7 @@ static int hls_slice_header(HEVCContext *s)
     }
 
     // Inferred parameters
-    sh->slice_qp = 26 + s->pps->pic_init_qp_minus26 + sh->slice_qp_delta;
+    sh->slice_qp = s->pps->init_qp + sh->slice_qp_delta;
     sh->slice_ctb_addr_rs = sh->slice_address;
     sh->slice_cb_addr_zs = sh->slice_address <<
                            (s->sps->log2_diff_max_min_coding_block_size << 1);
@@ -944,8 +944,7 @@ static void hls_transform_tree(HEVCContext *s, int x0, int y0,
                               s->cu.pred_mode == MODE_INTER &&
                               s->cu.part_mode != PART_2Nx2N && trafo_depth == 0);
 
-    if (log2_trafo_size <= s->sps->log2_min_transform_block_size +
-        s->sps->log2_diff_max_min_transform_block_size &&
+    if (log2_trafo_size <= s->sps->log2_max_transform_block_size &&
         log2_trafo_size > s->sps->log2_min_transform_block_size &&
         trafo_depth < s->cu.max_trafo_depth &&
         !(s->cu.intra_split_flag && trafo_depth == 0)) {
@@ -955,9 +954,7 @@ static void hls_transform_tree(HEVCContext *s, int x0, int y0,
                 "split_transform_flag: %d\n", split_transform_flag);
     } else {
         split_transform_flag =
-        (log2_trafo_size >
-         s->sps->log2_min_transform_block_size +
-         s->sps->log2_diff_max_min_transform_block_size ||
+        (log2_trafo_size > s->sps->log2_max_transform_block_size ||
          (s->cu.intra_split_flag && (trafo_depth == 0)) ||
          s->tt.inter_split_flag);
     }
@@ -1718,7 +1715,7 @@ static int hls_coding_tree(HEVCContext *s, int x0, int y0, int log2_cb_size, int
     }
     av_dlog(s->avctx, "split_coding_unit_flag: %d\n",
            SAMPLE(s->split_coding_unit_flag, x0, y0));
-    if( s->pps->cu_qp_delta_enabled_flag && log2_cb_size >= s->sps->log2_ctb_size - s->pps->diff_cu_qp_delta_depth ) {
+    if (s->pps->cu_qp_delta_enabled_flag && log2_cb_size >= s->pps->log2_min_cu_qp_delta_size) {
         s->tu.is_cu_qp_delta_coded = 0;
         s->tu.cu_qp_delta = 0;
     }
