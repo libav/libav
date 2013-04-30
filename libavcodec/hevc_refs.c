@@ -52,7 +52,7 @@ static void update_refs(HEVCContext *s)
     for (i = 0; i < FF_ARRAY_ELEMS(s->DPB); i++) {
         HEVCFrame *ref = &s->DPB[i];
         if (ref->frame->buf[0] && !used[i])
-            ref->flags &= 1;
+            ref->flags &= ~HEVC_FRAME_FLAG_SHORT_REF;
         if (ref->frame->buf[0] && !ref->flags)
             av_frame_unref(ref->frame);
     }
