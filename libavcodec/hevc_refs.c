@@ -63,7 +63,7 @@ void ff_hevc_clear_refs(HEVCContext *s)
     int i;
     for (i = 0; i < FF_ARRAY_ELEMS(s->DPB); i++) {
         HEVCFrame *ref = &s->DPB[i];
-        if (!(ref->flags & HEVC_FRAME_FLAG_OUTPUT) && (ref->sequence == s->seq_decode)) {
+        if (!(ref->flags & HEVC_FRAME_FLAG_OUTPUT)) {
             av_frame_unref(ref->frame);
             ref->flags = 0;
         }
