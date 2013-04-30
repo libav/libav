@@ -30,7 +30,7 @@ static int find_ref_idx(HEVCContext *s, int poc)
     for (i = 0; i < FF_ARRAY_ELEMS(s->DPB); i++) {
         HEVCFrame *ref = &s->DPB[i];
         if (ref->frame->buf[0] && ref->flags & HEVC_FRAME_FLAG_SHORT_REF &&
-            ref->poc == poc)
+            ref->poc == poc && (ref->sequence == s->seq_decode))
             return i;
     }
     av_log(s->avctx, AV_LOG_ERROR,
@@ -52,7 +52,7 @@ static void update_refs(HEVCContext *s)
     for (i = 0; i < FF_ARRAY_ELEMS(s->DPB); i++) {
         HEVCFrame *ref = &s->DPB[i];
         if (ref->frame->buf[0] && !used[i])
-            ref->flags &= ~HEVC_FRAME_FLAG_SHORT_REF;
+            ref->flags &= 1;
         if (ref->frame->buf[0] && !ref->flags)
             av_frame_unref(ref->frame);
     }
@@ -63,7 +63,7 @@ void ff_hevc_clear_refs(HEVCContext *s)
     int i;
     for (i = 0; i < FF_ARRAY_ELEMS(s->DPB); i++) {
         HEVCFrame *ref = &s->DPB[i];
-        if (!(ref->flags & HEVC_FRAME_FLAG_OUTPUT)) {
+        if (!(ref->flags & HEVC_FRAME_FLAG_OUTPUT) && (ref->sequence == s->seq_decode)) {
             av_frame_unref(ref->frame);
             ref->flags = 0;
         }
