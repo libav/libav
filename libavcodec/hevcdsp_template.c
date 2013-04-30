@@ -1189,9 +1189,9 @@ static void FUNC(weighted_pred_avg_luma)(uint8_t denom, int16_t wl0Flag, int16_t
 }
 
 
-static void FUNC(weighted_pred_chroma)(uint8_t denom, int16_t wlxFlag, int16_t olxFlag, uint8_t *_dst, ptrdiff_t _dststride,
+static void FUNC(weighted_pred_chroma)(uint8_t denom, int16_t wlxFlag, int olxFlag, uint8_t *_dst, ptrdiff_t _dststride,
                                         int16_t *src, ptrdiff_t srcstride,
-                                        int width, int height, int8_t predFlagL0, int8_t predFlagL1)
+                                        int width, int height)
 {
     int shift;
     int log2Wd;
