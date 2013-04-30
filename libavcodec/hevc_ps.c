@@ -177,7 +177,17 @@ static int decode_profile_tier_level(HEVCContext *s, PTL *ptl,
             ptl->sub_layer_profile_idc[i] = get_bits(gb, 5);
             for (j = 0; j < 32; j++)
                 ptl->sub_layer_profile_compatibility_flags[i][j] = get_bits1(gb);
-            skip_bits(gb, 16); // sub_layer_reserved_zero_16bits[i]
+            skip_bits1(gb);// sub_layer_progressive_source_flag
+            skip_bits1(gb);// sub_layer_interlaced_source_flag
+            skip_bits1(gb);// sub_layer_non_packed_constraint_flag
+            skip_bits1(gb);// sub_layer_frame_only_constraint_flag
+
+            if (get_bits(gb, 16) != 0) // sub_layer_reserved_zero_44bits[0..15]
+                return -1;
+            if (get_bits(gb, 16) != 0) // sub_layer_reserved_zero_44bits[16..31]
+                return -1;
+            if (get_bits(gb, 12) != 0) // sub_layer_reserved_zero_44bits[32..43]
+                return -1;
         }
         if (ptl->sub_layer_level_present_flag[i])
             ptl->sub_layer_level_idc[i] = get_bits(gb, 8);
