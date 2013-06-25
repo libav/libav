@@ -141,9 +141,9 @@ int ff_hevc_find_display(HEVCContext *s, AVFrame *out, int flush, int* poc_displ
     int nb_output = 0;
     int min_poc   = 0xFFFF;
     int i, min_idx, ret;
-    min_idx = 0;
     HEVCSharedContext *sc = s->HEVCsc;
     uint8_t run = 1;
+    min_idx = 0;
     while (run) {
         for (i = 0; i < FF_ARRAY_ELEMS(sc->DPB); i++) {
             HEVCFrame *frame = &sc->DPB[i];

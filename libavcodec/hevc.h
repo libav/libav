@@ -911,6 +911,7 @@ int ff_hevc_coeff_abs_level_greater2_flag_decode(HEVCContext *s, int c_idx,
 int ff_hevc_coeff_abs_level_remaining(HEVCContext *s, int n, int base_level);
 int ff_hevc_coeff_sign_flag(HEVCContext *s, uint8_t nb);
 
+int ff_hevc_get_NumPocTotalCurr(HEVCContext *s);
 
 int ff_hevc_find_next_ref(HEVCContext *s, int poc);
 int ff_hevc_set_new_ref(HEVCContext *s, AVFrame **frame, int poc);
