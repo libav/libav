@@ -21,6 +21,7 @@
  */
 
 #include "golomb.h"
+#include "libavutil/imgutils.h"
 #include "hevc.h"
 
 /**
