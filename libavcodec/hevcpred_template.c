@@ -29,7 +29,7 @@
 static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int c_idx)
 {
 #define MIN_TB_ADDR_ZS(x, y)                                            \
-    s->pps->min_tb_addr_zs[(y) * s->sps->pic_width_in_min_tbs + (x)]
+    sc->pps->min_tb_addr_zs[(y) * sc->sps->pic_width_in_min_tbs + (x)]
 
 #define EXTEND_LEFT(ptr, length)                \
     for (i = 0; i < (length); i++)              \
@@ -39,24 +39,25 @@ static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int
         (ptr)[i+1] = (ptr)[0];
 #define EXTEND_UP(ptr, length) EXTEND_LEFT(ptr, length)
 #define EXTEND_DOWN(ptr, length) EXTEND_RIGHT(ptr, length)
-
+    HEVCSharedContext *sc = s->HEVCsc;
+    HEVCLocalContext *lc = s->HEVClc;
     int i;
-    int hshift = s->sps->hshift[c_idx];
-    int vshift = s->sps->vshift[c_idx];
+    int hshift = sc->sps->hshift[c_idx];
+    int vshift = sc->sps->vshift[c_idx];
     int size = (1 << log2_size);
     int size_in_luma = size << hshift;
-    int size_in_tbs = size_in_luma >> s->sps->log2_min_transform_block_size;
+    int size_in_tbs = size_in_luma >> sc->sps->log2_min_transform_block_size;
     int x = x0 >> hshift;
     int y = y0 >> vshift;
-    int x_tb = x0 >> s->sps->log2_min_transform_block_size;
-    int y_tb = y0 >> s->sps->log2_min_transform_block_size;
+    int x_tb = x0 >> sc->sps->log2_min_transform_block_size;
+    int y_tb = y0 >> sc->sps->log2_min_transform_block_size;
     int cur_tb_addr = MIN_TB_ADDR_ZS(x_tb, y_tb);
 
-    ptrdiff_t stride = s->frame->linesize[c_idx] / sizeof(pixel);
-    pixel *src = (pixel*)s->frame->data[c_idx] + x + y * stride;
+    ptrdiff_t stride = sc->frame->linesize[c_idx] / sizeof(pixel);
+    pixel *src = (pixel*)sc->frame->data[c_idx] + x + y * stride;
 
-    enum IntraPredMode mode = c_idx ? s->pu.intra_pred_mode_c :
-                              s->tu.cur_intra_pred_mode;
+    enum IntraPredMode mode = c_idx ? lc->pu.intra_pred_mode_c :
+                              lc->tu.cur_intra_pred_mode;
 
     pixel left_array[2*MAX_TB_SIZE+1], filtered_left_array[2*MAX_TB_SIZE+1];
     pixel top_array[2*MAX_TB_SIZE+1], filtered_top_array[2*MAX_TB_SIZE+1];
@@ -65,19 +66,50 @@ static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int
     pixel *filtered_left = filtered_left_array + 1;
     pixel *filtered_top = filtered_top_array + 1;
 
+    int x0b = x0 & ((1 << sc->sps->log2_ctb_size) - 1);
+    int y0b = y0 & ((1 << sc->sps->log2_ctb_size) - 1);
 
-    int bottom_left_available = x_tb > 0 && (y_tb + size_in_tbs) < s->sps->pic_height_in_min_tbs &&
+    int cand_up       = (lc->ctb_up_flag || y0b);
+    int cand_up_right = ((x0b + size_in_luma) == (1 << sc->sps->log2_ctb_size)) ? lc->ctb_up_right_flag && !y0b: cand_up;
+    int cand_left     = (lc->ctb_left_flag || x0b);
+
+    int bottom_left_available = cand_left && (y_tb + size_in_tbs) < (lc->end_of_tiles_y>>sc->sps->log2_min_transform_block_size) &&
                                 cur_tb_addr > MIN_TB_ADDR_ZS(x_tb - 1, y_tb + size_in_tbs);
-    int left_available = x0 > 0;
-    int top_left_available = x0 > 0 && y0 > 0;
-    int top_available = y0 > 0;
-    int top_right_available = y_tb > 0 && (x_tb + size_in_tbs) < s->sps->pic_width_in_min_tbs &&
+    int left_available = cand_left;
+    int top_left_available = (!x0b && !y0b) ? lc->ctb_up_left_flag : cand_left && cand_up;
+    int top_available = cand_up;
+    //FIXME : top_right_available can be available even if cand_up is not 
+    int top_right_available = cand_up_right && (x_tb + size_in_tbs) < (lc->end_of_tiles_x>>sc->sps->log2_min_transform_block_size) &&
                               cur_tb_addr > MIN_TB_ADDR_ZS(x_tb + size_in_tbs, y_tb - 1);
 
-    int bottom_left_size = (FFMIN(y0 + 2*size_in_luma, s->sps->pic_height_in_luma_samples) -
+    int bottom_left_size = (FFMIN(y0 + 2*size_in_luma, sc->sps->pic_height_in_luma_samples) -
                             (y0 + size_in_luma)) >> vshift;
-    int top_right_size = (FFMIN(x0 + 2*size_in_luma, s->sps->pic_width_in_luma_samples) -
+    int top_right_size = (FFMIN(x0 + 2*size_in_luma, sc->sps->pic_width_in_luma_samples) -
                           (x0 + size_in_luma)) >> hshift;
+    if (sc->pps->constrained_intra_pred_flag == 1) {
+        int min_pu_size = sc->sps->log2_min_pu_size; 
+        int pic_width_in_min_pu  = sc->sps->pic_width_in_min_cbs * 4;
+        int x_pu         = x0     >> min_pu_size;
+        int y_pu         = y0     >> min_pu_size;
+        int x0_left_pu   = (x0-1) >> min_pu_size;
+        int y0_top_pu    = (y0-1) >> min_pu_size;
+        int x0_right_pu  = (x0+1) >> min_pu_size;
+        int y0_bottom_pu = (y0+1) >> min_pu_size;
+        int x_left_pu    = x0b == 0 ? x_pu - (size_in_luma >> sc->sps->log2_min_pu_size) : x0_left_pu;
+        int y_top_pu     = y0b == 0 ? y_pu - (size_in_luma >> sc->sps->log2_min_pu_size) : y0_top_pu;
+        int x_right_pu   = x0b + size_in_luma >= (1 << sc->sps->log2_ctb_size) ? x_pu + (size_in_luma >> sc->sps->log2_min_pu_size) : x0_right_pu;
+        int y_bottom_pu  = y0b + size_in_luma >= (1 << sc->sps->log2_ctb_size) ? y_pu + (size_in_luma >> sc->sps->log2_min_pu_size) : y0_bottom_pu;
+        if (bottom_left_available == 1)
+            bottom_left_available = sc->ref->tab_mvf[x_left_pu + y_bottom_pu * pic_width_in_min_pu].is_intra;
+        if (left_available == 1)
+            left_available = sc->ref->tab_mvf[x_left_pu + y_pu * pic_width_in_min_pu].is_intra;
+        if (top_left_available == 1)
+            top_left_available = sc->ref->tab_mvf[x_left_pu + y_top_pu * pic_width_in_min_pu].is_intra;
+        if (top_available == 1)
+            top_available = sc->ref->tab_mvf[x_pu + y_top_pu * pic_width_in_min_pu].is_intra;
+        if (top_right_available == 1)
+            top_right_available = sc->ref->tab_mvf[x_right_pu + y_top_pu * pic_width_in_min_pu].is_intra;
+    }
 
     // Fill left and top with the available samples
     if (bottom_left_available) {
@@ -95,7 +127,8 @@ static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int
     if (top_left_available)
         left[-1] = POS(-1, -1);
     if (top_available && top_right_available && top_right_size == size) {
-        top = &POS(0, -1);
+        memcpy(&top[0], &POS(0, -1), size * sizeof(pixel));
+        memcpy(&top[size], &POS(size, -1), top_right_size * sizeof(pixel));
     } else {
         if (top_available)
             memcpy(&top[0], &POS(0, -1), size * sizeof(pixel));
@@ -105,22 +138,18 @@ static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int
                 top[size + i] = POS(size + top_right_size - 1, -1);
         }
     }
-
     // Infer the unavailable samples
     if (!bottom_left_available) {
         if (left_available) {
             EXTEND_DOWN(&left[size-1], size);
-            bottom_left_available = 1;
         } else if (top_left_available) {
             EXTEND_DOWN(&left[-1], 2*size);
             left_available = 1;
-            bottom_left_available = 1;
         } else if (top_available) {
             left[-1] = top[0];
             EXTEND_DOWN(&left[-1], 2*size);
             top_left_available = 1;
             left_available = 1;
-            bottom_left_available = 1;
         } else if (top_right_available) {
             EXTEND_LEFT(&top[size], size);
             left[-1] = top[0];
@@ -128,25 +157,22 @@ static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int
             top_available = 1;
             top_left_available = 1;
             left_available = 1;
-            bottom_left_available = 1;
         } else { // No samples available
             top[0] = left[-1] = (1 << (BIT_DEPTH - 1));
             EXTEND_RIGHT(&top[0], 2*size-1);
             EXTEND_DOWN(&left[-1], 2*size);
         }
     }
+
     if (!left_available) {
         EXTEND_UP(&left[size], size);
-        left_available = 1;
     }
     if (!top_left_available) {
         left[-1] = left[0];
-        top_left_available = 1;
     }
     if (!top_available) {
         top[0] = left[-1];
         EXTEND_RIGHT(&top[0], size-1);
-        top_available = 1;
     }
     if (!top_right_available)
         EXTEND_RIGHT(&top[size-1], size);
@@ -165,7 +191,7 @@ static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int
         int min_dist_vert_hor = FFMIN(FFABS((int)mode-26), FFABS((int)mode-10));
         if (min_dist_vert_hor > intra_hor_ver_dist_thresh[log2_size-3]) {
             int thresold = 1 << (BIT_DEPTH - 5);
-            if (s->sps->sps_strong_intra_smoothing_enable_flag && log2_size == 5 &&
+            if (sc->sps->sps_strong_intra_smoothing_enable_flag && log2_size == 5 &&
                 FFABS(top[-1] + top[63] - 2 * top[31]) < thresold &&
                 FFABS(left[-1] + left[63] - 2 * left[31]) < thresold) {
                 // We can't just overwrite values in top because it could be a pointer into src
@@ -196,16 +222,17 @@ static void FUNCC(intra_pred)(HEVCContext *s, int x0, int y0, int log2_size, int
 
     switch(mode) {
     case INTRA_PLANAR:
-        s->hpc.pred_planar((uint8_t*)src, (uint8_t*)top, (uint8_t*)left, stride, log2_size);
+        sc->hpc.pred_planar((uint8_t*)src, (uint8_t*)top, (uint8_t*)left, stride, log2_size);
         break;
     case INTRA_DC:
-        s->hpc.pred_dc((uint8_t*)src, (uint8_t*)top, (uint8_t*)left, stride, log2_size, c_idx);
+        sc->hpc.pred_dc((uint8_t*)src, (uint8_t*)top, (uint8_t*)left, stride, log2_size, c_idx);
         break;
     default:
-        s->hpc.pred_angular((uint8_t*)src, (uint8_t*)top, (uint8_t*)left, stride, log2_size, c_idx,
+        sc->hpc.pred_angular((uint8_t*)src, (uint8_t*)top, (uint8_t*)left, stride, log2_size, c_idx,
                             mode);
         break;
     }
+
 }
 
 static void FUNCC(pred_planar)(uint8_t *_src, const uint8_t *_top, const uint8_t *_left,

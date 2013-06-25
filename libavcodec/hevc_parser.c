@@ -22,10 +22,12 @@
 
 #include "libavutil/common.h"
 #include "parser.h"
+#include "hevc.h"
+
 
 #define START_CODE 0x000001 ///< start_code_prefix_one_3bytes
 #define EMULATION_CODE 0x03 ///< emulation_prevention_three_byte
-
+#define MAX_SKIPPED_BUFFER_SIZE 64
 typedef struct HEVCParserContext {
     ParseContext pc;
     uint8_t *nal_buffer;
@@ -35,15 +37,16 @@ typedef struct HEVCParserContext {
 /**
  * Annex B.1: Byte stream NAL unit syntax and semantics
  */
-static int hevc_parse_nal_unit(HEVCParserContext *hpc, uint8_t **poutbuf,
-                               int *poutbuf_size, const uint8_t *buf,
-                               int buf_size)
+static int hevc_parse_nal_unit(HEVCParserContext *hpc, HEVCContext *cct, uint8_t **poutbuf,
+		int *poutbuf_size, const uint8_t *buf,
+		int buf_size)
 {
     int i;
     ParseContext *pc = &hpc->pc;
     int mask = 0xFFFFFF;
     int skipped = 0;
     int header = 0;
+    HEVCSharedContext *sc = cct->HEVCsc;
 
     // skip leading zeroes
     if (!pc->frame_start_found) {
@@ -59,6 +62,7 @@ static int hevc_parse_nal_unit(HEVCParserContext *hpc, uint8_t **poutbuf,
             }
         }
     }
+    sc->skipped_bytes = 0;
 
     buf      += header;
     buf_size -= header;
@@ -73,8 +77,15 @@ static int hevc_parse_nal_unit(HEVCParserContext *hpc, uint8_t **poutbuf,
                 *poutbuf_size = FFMAX(i - 2 - skipped, 0);
                 return header + i + 1;
             case EMULATION_CODE:
-                skipped++;
-
+	        skipped++;
+            if(skipped > sc->skipped_buf_size)  {
+                int *temp = sc->skipped_bytes_pos;
+                sc->skipped_bytes_pos = av_malloc((MAX_SKIPPED_BUFFER_SIZE+sc->skipped_buf_size)*sizeof(int));
+                memcpy(sc->skipped_bytes_pos, temp, sc->skipped_buf_size*sizeof(int));
+                av_free(temp);
+                sc->skipped_buf_size += MAX_SKIPPED_BUFFER_SIZE;
+            }
+            sc->skipped_bytes_pos[skipped-1] = i-skipped;
                 if (*poutbuf != hpc->nal_buffer) {
                     hpc->nal_buffer = av_fast_realloc(hpc->nal_buffer,
                                                       &hpc->nal_buffer_size,
@@ -92,7 +103,10 @@ static int hevc_parse_nal_unit(HEVCParserContext *hpc, uint8_t **poutbuf,
         }
     }
 
-    *poutbuf_size = buf_size - skipped;
+    sc->skipped_bytes = skipped;
+	*poutbuf_size = buf_size - skipped;
+	if (buf_size == 0)
+		return 0;
     return END_NOT_FOUND;
 }
 
@@ -104,9 +118,10 @@ static int hevc_parse(AVCodecParserContext *s,
                       const uint8_t *buf, int buf_size)
 {
     HEVCParserContext *hpc = s->priv_data;
+    HEVCContext *cct = avctx->priv_data;
     ParseContext *pc = &hpc->pc;
     int combine_next = 0;
-    int next = hevc_parse_nal_unit(hpc, (uint8_t**)poutbuf, poutbuf_size, buf, buf_size);
+    int next = hevc_parse_nal_unit(hpc, cct, (uint8_t**)poutbuf, poutbuf_size, buf, buf_size);
 
     if (next == AVERROR_INVALIDDATA) {
         av_log(NULL, AV_LOG_ERROR, "Data fed to parser isn't a NAL unit\n");
