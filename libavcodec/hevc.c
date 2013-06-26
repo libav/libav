@@ -1853,10 +1853,20 @@ static void hls_decode_neighbour(HEVCContext *s, int x_ctb, int y_ctb, int ctb_a
     int ctb_size          = 1 << sc->sps->log2_ctb_size;
     int ctb_addr_rs       = sc->pps->ctb_addr_ts_to_rs[ctb_addr_ts];
     int ctb_addr_in_slice = ctb_addr_rs - sc->SliceAddrRs;
-    lc->end_of_tiles_x = sc->sps->pic_width_in_luma_samples;
-    if ((x_ctb + ctb_size < sc->sps->pic_width_in_luma_samples) &&
-        (sc->pps->tile_id[ctb_addr_ts] != sc->pps->tile_id[sc->pps->ctb_addr_rs_to_ts[ctb_addr_rs+1]]))
-        lc->end_of_tiles_x = x_ctb + ctb_size;
+    if (sc->pps->entropy_coding_sync_enabled_flag) {
+        if (x_ctb == 0 && (y_ctb&(ctb_size-1)) == 0)
+            lc->isFirstQPgroup = 1;
+        lc->end_of_tiles_x = sc->sps->pic_width_in_luma_samples;
+    } else if (sc->pps->tiles_enabled_flag ) {
+        if (ctb_addr_ts != 0 && sc->pps->tile_id[ctb_addr_ts] != sc->pps->tile_id[ctb_addr_ts-1]) {
+            int idxX             = (x_ctb >> sc->sps->log2_ctb_size) / sc->pps->column_width[0];
+            lc->start_of_tiles_x = x_ctb;
+            lc->end_of_tiles_x   = x_ctb + (sc->pps->column_width[idxX]<< sc->sps->log2_ctb_size);
+            lc->isFirstQPgroup   = 1;
+        }
+    } else {
+        lc->end_of_tiles_x = sc->sps->pic_width_in_luma_samples;
+    }
     lc->end_of_tiles_y = y_ctb + ctb_size;
     if (y_ctb + ctb_size >= sc->sps->pic_height_in_luma_samples)
         lc->end_of_tiles_y = sc->sps->pic_height_in_luma_samples;
@@ -2123,9 +2133,9 @@ static void printf_ref_pic_list(HEVCContext *s)
         printf("[L%d ",list_idx);
         for(i = 0; i < refPicList[list_idx].numPic; i++) {
             int currIsLongTerm = refPicList[list_idx].isLongTerm[i];
-            if (currIsLongTerm)
-                printf("%d* ",refPicList[list_idx].list[i]);
-            else
+//            if (currIsLongTerm)
+//                printf("%d* ",refPicList[list_idx].list[i]);
+//            else
                 printf("%d ",refPicList[list_idx].list[i]);
         }
         printf("] ");
@@ -2222,8 +2232,8 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *got_output,
     case NAL_RADL_R:
     case NAL_RASL_N:
     case NAL_RASL_R:
-        lc->isFirstQPgroup = 1;
         ret = hls_slice_header(s);
+        lc->isFirstQPgroup = !sc->sh.dependent_slice_segment_flag;
         
         if (ret < 0)
             if (ret == AVERROR_INVALIDDATA)
@@ -2258,9 +2268,13 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *got_output,
             memset(sc->vertical_bs, 0, sc->bs_width * 2 * sc->bs_height);
             memset(sc->cbf_luma, 0 , pic_width_in_min_pu * pic_height_in_min_pu);
             memset(sc->is_pcm, 0 , pic_width_in_min_pu * pic_height_in_min_pu);
+            lc->start_of_tiles_x = 0;
+            if (sc->pps->tiles_enabled_flag )
+	            lc->end_of_tiles_x   = sc->pps->column_width[0]<< sc->sps->log2_ctb_size;
         }
-        lc->qp_y = ((sc->sh.slice_qp + 52 + 2 * sc->sps->qp_bd_offset) %
-                (52 + sc->sps->qp_bd_offset)) - sc->sps->qp_bd_offset;
+        if( !sc->pps->cu_qp_delta_enabled_flag )
+            lc->qp_y = ((sc->sh.slice_qp + 52 + 2 * sc->sps->qp_bd_offset) %
+                    (52 + sc->sps->qp_bd_offset)) - sc->sps->qp_bd_offset;
 
         if (sc->sh.first_slice_in_pic_flag) {
             if (sc->sps->sample_adaptive_offset_enabled_flag) {
@@ -2353,7 +2367,6 @@ static av_cold int hevc_decode_init(AVCodecContext *avctx)
     lc->ctx_set = 0;
     lc->greater1_ctx = 0;
     lc->last_coeff_abs_level_greater1_flag = 0;
-
     if (!sc->tmp_frame)
         return AVERROR(ENOMEM);
     sc->max_ra = INT_MAX;

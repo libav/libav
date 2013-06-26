@@ -747,6 +747,7 @@ typedef struct HEVCLocalContext {
     uint8_t ctb_up_flag;
     uint8_t ctb_up_right_flag;
     uint8_t ctb_up_left_flag;
+    int     start_of_tiles_x;
     int     end_of_tiles_x;
     int     end_of_tiles_y;
     uint8_t *edge_emu_buffer;

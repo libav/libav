@@ -66,6 +66,45 @@ static int get_qPy_pred(HEVCContext *s, int xC, int yC, int xBase, int yBase)
         qPy_pred = sc->sh.slice_qp;
     } else
         qPy_pred = lc->qp_y;
+        if ( log2_cb_size < sc->sps->log2_ctb_size - sc->pps->diff_cu_qp_delta_depth )
+        {
+            int offsetX[8][8] = {
+                    {-1, 1, 3, 1, 7, 1, 3, 1},
+                    { 0, 0, 0, 0, 0, 0, 0, 0},
+                    { 1, 3, 1, 3, 1, 3, 1, 3},
+                    { 2, 2, 2, 2, 2, 2, 2, 2},
+                    { 3, 5, 7, 5, 3, 5, 7, 5},
+                    { 4, 4, 4, 4, 4, 4, 4, 4},
+                    { 5, 7, 5, 7, 5, 7, 5, 7},
+                    { 6, 6, 6, 6, 6, 6, 6, 6}
+            };
+            int offsetY[8][8] = {
+                    { 7, 0, 1, 2, 3, 4, 5, 6},
+                    { 0, 1, 2, 3, 4, 5, 6, 7},
+                    { 1, 0, 3, 2, 5, 4, 7, 6},
+                    { 0, 1, 2, 3, 4, 5, 6, 7},
+                    { 3, 0, 1, 2, 7, 4, 5, 6},
+                    { 0, 1, 2, 3, 4, 5, 6, 7},
+                    { 1, 0, 3, 2, 5, 4, 7, 6},
+                    { 0, 1, 2, 3, 4, 5, 6, 7}
+            };
+            int xC0b = (xC - (xC & ctb_size_mask)) >> sc->sps->log2_min_coding_block_size;
+            int yC0b = (yC - (yC & ctb_size_mask)) >> sc->sps->log2_min_coding_block_size;
+            int idxX = (xQgBase & ctb_size_mask)>>sc->sps->log2_min_coding_block_size;
+            int idxY = (yQgBase & ctb_size_mask)>>sc->sps->log2_min_coding_block_size;
+            int idxMask = ctb_size_mask >> sc->sps->log2_min_coding_block_size;
+            int x, y;
+
+            x = FFMIN(xC0b+offsetX[idxX][idxY], pic_width - 1);
+            y = FFMIN(yC0b+(offsetY[idxX][idxY]&idxMask), pic_height - 1);
+
+            if (xC0b == (lc->start_of_tiles_x >> sc->sps->log2_min_coding_block_size) && offsetX[idxX][idxY] == -1) {
+                x = (lc->end_of_tiles_x >> sc->sps->log2_min_coding_block_size) - 1;
+                y = yC0b - 1;
+            }
+            qPy_pred = sc->qp_y_tab[y * pic_width + x];
+        }
+    }
     // qPy_a
     if (availableA == 0)
         qPy_a = qPy_pred;
