@@ -2334,8 +2334,8 @@ static av_cold int hevc_decode_init(AVCodecContext *avctx)
     HEVCLocalContext *lc;
 
     s->avctx = avctx;
-    s->HEVCsc = av_malloc(sizeof(HEVCSharedContext));
-    s->HEVClc = av_malloc(sizeof(HEVCLocalContext));
+    s->HEVCsc = av_mallocz(sizeof(HEVCSharedContext));
+    s->HEVClc = av_mallocz(sizeof(HEVCLocalContext));
     lc = s->HEVClcList[0] = s->HEVClc;
     sc = s->HEVCsc;
     s->sList[0] = s;
@@ -2362,6 +2362,7 @@ static av_cold int hevc_decode_init(AVCodecContext *avctx)
         if (!sc->DPB[i].frame)
             return AVERROR(ENOMEM);
     }
+    memset(sc->vps_list, 0, sizeof(sc->vps_list));
     memset(sc->sps_list, 0, sizeof(sc->sps_list));
     memset(sc->pps_list, 0, sizeof(sc->pps_list));
     sc->ctb_entry_count  = NULL;
@@ -2372,6 +2373,7 @@ static av_cold int hevc_decode_init(AVCodecContext *avctx)
             return AVERROR(ENOMEM);
     }
     sc->skipped_buf_size = 0;
+    s->threads_number = 1;
     return 0;
 }
 
