@@ -350,7 +350,7 @@ int ff_hevc_decode_nal_vps(HEVCContext *s)
             vps->vps_num_ticks_poc_diff_one = get_ue_golomb(gb) + 1;
         vps->vps_num_hrd_parameters = get_ue_golomb(gb);
         if (vps->vps_num_hrd_parameters != 0) {
-            av_log_missing_feature(s->avctx, "support for vps_num_hrd_parameters != 0", 0);
+            avpriv_report_missing_feature(s->avctx, "support for vps_num_hrd_parameters != 0");
             av_free(vps);
             return AVERROR_PATCHWELCOME;
         }
@@ -408,7 +408,7 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
 
     sps->chroma_format_idc = get_ue_golomb(gb);
     if (sps->chroma_format_idc != 1) {
-        av_log_missing_feature(s->avctx, "chroma_format_idc != 1\n", 0);
+        avpriv_report_missing_feature(s->avctx, "chroma_format_idc != 1\n");
         goto err;
     }
 

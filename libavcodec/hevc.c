@@ -40,7 +40,7 @@
 /**
  * Section 5.7
  */
-//#define POC_DISPLAY_MD5
+#define POC_DISPLAY_MD5
 #define WPP1
 static void pic_arrays_free(HEVCContext *s)
 {
@@ -2100,6 +2100,7 @@ static int hls_nal_unit(HEVCContext *s)
 
     return (nuh_layer_id == 0);
 }
+#ifdef POC_DISPLAY_MD5
 
 static void printf_ref_pic_list(HEVCContext *s)
 {
@@ -2116,7 +2117,7 @@ static void printf_ref_pic_list(HEVCContext *s)
     for ( list_idx = 0; list_idx < 2; list_idx++) {
         printf("[L%d ",list_idx);
         for(i = 0; i < refPicList[list_idx].numPic; i++) {
-            int currIsLongTerm = refPicList[list_idx].isLongTerm[i];
+//            int currIsLongTerm = refPicList[list_idx].isLongTerm[i];
 //            if (currIsLongTerm)
 //                printf("%d* ",refPicList[list_idx].list[i]);
 //            else
@@ -2137,6 +2138,7 @@ static void print_md5(int poc, uint8_t md5[3][16]) {
     printf("\n]");
 
 }
+#endif
 
 static void calc_md5(uint8_t *md5, uint8_t* src, int stride, int width, int height) {
     uint8_t *buf;
@@ -2238,7 +2240,6 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *got_output,
 
         if (sc->nal_unit_type == NAL_RASL_R && sc->poc <= sc->max_ra) {
             sc->is_decoded = 0;
-            printf("not decoded %d %d\n", sc->poc, sc->max_ra);
             break;
         } else {
             if (sc->nal_unit_type == NAL_RASL_R && sc->poc > sc->max_ra)
@@ -2280,23 +2281,21 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *got_output,
         if(s->threads_number>1 && sc->sh.num_entry_point_offsets > 0 ) {
             ctb_addr_ts = hls_slice_data_wpp(s, avpkt);
         } else {
-            //ctb_addr_ts = hls_slice_data_wpp(s, avpkt);
             ctb_addr_ts = hls_slice_data(s);
         }
         if (s->decode_checksum_sei && ctb_addr_ts >= (sc->sps->pic_width_in_ctbs * sc->sps->pic_height_in_ctbs)) {
-#ifdef POC_DISPLAY_MD5
-            AVFrame *frame = (AVFrame *) data;
-            int poc        = poc_display;
-#else
             AVFrame *frame = sc->ref->frame;
+#ifdef POC_DISPLAY_MD5
             int poc        = sc->poc;
 #endif
             calc_md5(sc->md5[0], frame->data[0], frame->linesize[0], frame->width  , frame->height  );
             calc_md5(sc->md5[1], frame->data[1], frame->linesize[1], frame->width/2, frame->height/2);
             calc_md5(sc->md5[2], frame->data[2], frame->linesize[2], frame->width/2, frame->height/2);
             sc->is_decoded = 1;
-            //printf_ref_pic_list(s);
-            //print_md5(poc, sc->md5);
+#ifdef POC_DISPLAY_MD5
+            printf_ref_pic_list(s);
+            print_md5(poc, sc->md5);
+#endif
         }
 
         if (sc->sh.first_slice_in_pic_flag) {
