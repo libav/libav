@@ -413,6 +413,7 @@ typedef struct PPS {
     int *row_height; ///< RowHeight
     int *col_bd; ///< ColBd
     int *row_bd; ///< RowBd
+    int *col_idxX;
 
     int *ctb_addr_rs_to_ts; ///< CtbAddrRSToTS
     int *ctb_addr_ts_to_rs; ///< CtbAddrTSToRS

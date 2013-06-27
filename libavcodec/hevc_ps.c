@@ -756,9 +756,10 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
     pps->pps_extension_flag = get_bits1(gb);
 
     // Inferred parameters
-    pps->col_bd = av_malloc_array(pps->num_tile_columns + 1, sizeof(*pps->col_bd));
-    pps->row_bd = av_malloc_array(pps->num_tile_rows + 1, sizeof(*pps->row_bd));
-    if (!pps->col_bd || !pps->row_bd)
+    pps->col_bd = av_malloc((pps->num_tile_columns + 1) * sizeof(*pps->col_bd));
+    pps->row_bd = av_malloc((pps->num_tile_rows + 1) * sizeof(*pps->row_bd));
+    pps->col_idxX = av_malloc(sps->pic_width_in_ctbs * sizeof(*pps->col_idxX));
+    if (!pps->col_bd || !pps->row_bd || !pps->col_idxX)
         goto err;
 
     if (pps->uniform_spacing_flag) {
@@ -785,6 +786,10 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
     pps->row_bd[0] = 0;
     for (i = 0; i < pps->num_tile_rows; i++)
         pps->row_bd[i+1] = pps->row_bd[i] + pps->row_height[i];
+    for (i = 0, j = 0; i < sps->pic_width_in_ctbs; i++) {
+         if (i > pps->col_bd[j]) j++;
+         pps->col_idxX[i] = j;
+    }
 
 
     /**
@@ -894,6 +899,7 @@ int ff_hevc_decode_nal_pps(HEVCContext *s)
         av_free(pps_f->row_height);
         av_free(pps_f->col_bd);
         av_free(pps_f->row_bd);
+        av_free(pps_f->col_idxX);
         av_free(pps_f->ctb_addr_rs_to_ts);
         av_free(pps_f->ctb_addr_ts_to_rs);
         av_free(pps_f->tile_id);
@@ -910,6 +916,7 @@ err:
     av_free(pps->row_height);
     av_free(pps->col_bd);
     av_free(pps->row_bd);
+    av_free(pps->col_idxX);
     av_free(pps->ctb_addr_rs_to_ts);
     av_free(pps->ctb_addr_ts_to_rs);
     av_free(pps->tile_id);

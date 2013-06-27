@@ -1844,8 +1844,7 @@ static void hls_decode_neighbour(HEVCContext *s, int x_ctb, int y_ctb, int ctb_a
         lc->end_of_tiles_x = sc->sps->pic_width_in_luma_samples;
     } else if (sc->pps->tiles_enabled_flag ) {
         if (ctb_addr_ts != 0 && sc->pps->tile_id[ctb_addr_ts] != sc->pps->tile_id[ctb_addr_ts-1]) {
-            int idxX;
-            for(idxX = 0; sc->pps->col_bd[idxX] < x_ctb >> sc->sps->log2_ctb_size; idxX++);
+            int idxX = sc->pps->col_idxX[x_ctb >> sc->sps->log2_ctb_size];
             lc->start_of_tiles_x = x_ctb;
             lc->end_of_tiles_x   = x_ctb + (sc->pps->column_width[idxX]<< sc->sps->log2_ctb_size);
             lc->isFirstQPgroup   = 1;
@@ -1866,6 +1865,7 @@ static int hls_decode_entry(AVCodecContext *avctxt, void *isFilterThread)
 {
     HEVCContext *s  = avctxt->priv_data;
     HEVCSharedContext *sc = s->HEVCsc;
+    HEVCLocalContext *lc = s->HEVClc;
 
     int ctb_size    = 1 << sc->sps->log2_ctb_size;
     int more_data   = 1;
@@ -1873,11 +1873,13 @@ static int hls_decode_entry(AVCodecContext *avctxt, void *isFilterThread)
     int y_ctb       = 0;
     int ctb_addr_ts = sc->pps->ctb_addr_rs_to_ts[sc->sh.slice_ctb_addr_rs];
 
+    printf("==== mewSlice() slice_qp = %d dependent_slice_segment_flag = %d\n", sc->sh.slice_qp, sc->sh.dependent_slice_segment_flag);
     while (more_data) {
         int ctb_addr_rs       = sc->pps->ctb_addr_ts_to_rs[ctb_addr_ts];
         x_ctb = (ctb_addr_rs % ((sc->sps->pic_width_in_luma_samples + (ctb_size - 1))>> sc->sps->log2_ctb_size)) << sc->sps->log2_ctb_size;
         y_ctb = (ctb_addr_rs / ((sc->sps->pic_width_in_luma_samples + (ctb_size - 1))>> sc->sps->log2_ctb_size)) << sc->sps->log2_ctb_size;
         hls_decode_neighbour(s,x_ctb, y_ctb, ctb_addr_ts);
+        printf("==== ctb(%d, %d) : rs %d ts %d : left %d up %d\n", x_ctb, y_ctb, ctb_addr_rs, ctb_addr_ts, lc->ctb_left_flag, lc->ctb_up_flag);
         ff_hevc_cabac_init(s, ctb_addr_ts);
         if (sc->sh.slice_sample_adaptive_offset_flag[0] || sc->sh.slice_sample_adaptive_offset_flag[1])
             hls_sao_param(s, x_ctb >> sc->sps->log2_ctb_size, y_ctb >> sc->sps->log2_ctb_size);
