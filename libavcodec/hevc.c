@@ -1844,7 +1844,8 @@ static void hls_decode_neighbour(HEVCContext *s, int x_ctb, int y_ctb, int ctb_a
         lc->end_of_tiles_x = sc->sps->pic_width_in_luma_samples;
     } else if (sc->pps->tiles_enabled_flag ) {
         if (ctb_addr_ts != 0 && sc->pps->tile_id[ctb_addr_ts] != sc->pps->tile_id[ctb_addr_ts-1]) {
-            int idxX             = (x_ctb >> sc->sps->log2_ctb_size) / sc->pps->column_width[0];
+            int idxX;
+            for(idxX = 0; sc->pps->col_bd[idxX] < x_ctb >> sc->sps->log2_ctb_size; idxX++);
             lc->start_of_tiles_x = x_ctb;
             lc->end_of_tiles_x   = x_ctb + (sc->pps->column_width[idxX]<< sc->sps->log2_ctb_size);
             lc->isFirstQPgroup   = 1;
