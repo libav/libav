@@ -40,31 +40,29 @@ static int chroma_tc(HEVCSharedContext *s, int qp_y, int c_idx, int tc_offset)
     idxt = av_clip_c(qp + DEFAULT_INTRA_TC_OFFSET + tc_offset, 0, 53);
     return tctable[idxt];
 }
-static int get_qPy_pred(HEVCContext *s, int xC, int yC, int xBase, int yBase)
+static int get_qPy_pred(HEVCContext *s, int xC, int yC, int xBase, int yBase, int log2_cb_size)
 {
-    HEVCSharedContext *sc = s->HEVCsc;
-    HEVCLocalContext *lc = s->HEVClc;
-    int Log2CtbSizeY         = sc->sps->log2_ctb_size;
-    int MinCuQpDeltaSizeMask     = (1 << (Log2CtbSizeY - sc->pps->diff_cu_qp_delta_depth)) - 1;
-    int xQg                  = xC    - ( xC    & MinCuQpDeltaSizeMask );
-    int yQg                  = yC    - ( yC    & MinCuQpDeltaSizeMask );
+    HEVCSharedContext *sc    = s->HEVCsc;
+    HEVCLocalContext *lc     = s->HEVClc;
+    int ctb_size_mask        = (1 << sc->sps->log2_ctb_size) - 1;
+    int MinCuQpDeltaSizeMask = (1 << (sc->sps->log2_ctb_size - sc->pps->diff_cu_qp_delta_depth)) - 1;
     int xQgBase              = xBase - ( xBase & MinCuQpDeltaSizeMask );
     int yQgBase              = yBase - ( yBase & MinCuQpDeltaSizeMask );
-    int log2_min_cb_size     = sc->sps->log2_min_coding_block_size;
-    int pic_width            = sc->sps->pic_width_in_luma_samples>>log2_min_cb_size;
-    int x                    = xQg >> log2_min_cb_size;
-    int y                    = yQg >> log2_min_cb_size;
+    int pic_width            = sc->sps->pic_width_in_luma_samples  >> sc->sps->log2_min_coding_block_size;
+    int pic_height           = sc->sps->pic_height_in_luma_samples >> sc->sps->log2_min_coding_block_size;
+    int x_cb                 = xQgBase >> sc->sps->log2_min_coding_block_size;
+    int y_cb                 = yQgBase >> sc->sps->log2_min_coding_block_size;
+    int availableA           = (xBase & ctb_size_mask) && (xQgBase & ctb_size_mask);
+    int availableB           = (yBase & ctb_size_mask) && (yQgBase & ctb_size_mask);
     int qPy_pred;
     int qPy_a;
     int qPy_b;
-    int availableA           = (xQg & ((1<<Log2CtbSizeY)-1)) != 0 && xQg == xQgBase;
-    int availableB           = (yQg & ((1<<Log2CtbSizeY)-1)) != 0 && yQg == yQgBase;
 
     // qPy_pred
     if (lc->isFirstQPgroup != 0) {
-        lc->isFirstQPgroup = 0;
+        lc->isFirstQPgroup = !lc->tu.is_cu_qp_delta_coded;
         qPy_pred = sc->sh.slice_qp;
-    } else
+    } else {
         qPy_pred = lc->qp_y;
         if ( log2_cb_size < sc->sps->log2_ctb_size - sc->pps->diff_cu_qp_delta_depth )
         {
@@ -109,22 +107,21 @@ static int get_qPy_pred(HEVCContext *s, int xC, int yC, int xBase, int yBase)
     if (availableA == 0)
         qPy_a = qPy_pred;
     else
-        qPy_a = sc->qp_y_tab[(x-1) + y * pic_width];
-
+        qPy_a = sc->qp_y_tab[(x_cb-1) + y_cb * pic_width];
     // qPy_b
     if (availableB == 0)
         qPy_b = qPy_pred;
     else
-        qPy_b = sc->qp_y_tab[x + (y-1) * pic_width];
+        qPy_b = sc->qp_y_tab[x_cb + (y_cb-1) * pic_width];
     return (qPy_a + qPy_b + 1) >> 1;
 }
-void ff_hevc_set_qPy(HEVCContext *s, int xC, int yC, int xBase, int yBase)
+void ff_hevc_set_qPy(HEVCContext *s, int xC, int yC, int xBase, int yBase, int log2_cb_size)
 {
     if (s->HEVClc->tu.cu_qp_delta != 0)
-        s->HEVClc->qp_y = ((get_qPy_pred(s, xC, yC, xBase, yBase) + s->HEVClc->tu.cu_qp_delta + 52 + 2 * s->HEVCsc->sps->qp_bd_offset) %
+        s->HEVClc->qp_y = ((get_qPy_pred(s, xC, yC, xBase, yBase, log2_cb_size) + s->HEVClc->tu.cu_qp_delta + 52 + 2 * s->HEVCsc->sps->qp_bd_offset) %
                 (52 + s->HEVCsc->sps->qp_bd_offset)) - s->HEVCsc->sps->qp_bd_offset;
     else
-        s->HEVClc->qp_y = get_qPy_pred(s, xC, yC, xBase, yBase);
+        s->HEVClc->qp_y = get_qPy_pred(s, xC, yC, xBase, yBase, log2_cb_size);
 }
 static int get_qPy(HEVCContext *s, int xC, int yC)
 {
