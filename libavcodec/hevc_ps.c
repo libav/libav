@@ -450,7 +450,7 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
     }
 
     sps->log2_max_poc_lsb = get_ue_golomb(gb) + 4;
-    if (sps->log2_max_poc_lsb > 12) {
+    if (sps->log2_max_poc_lsb > 16) {
         av_log(s->avctx, AV_LOG_ERROR, "log2_max_pic_order_cnt_lsb_minus4 out range: %d\n",
                sps->log2_max_poc_lsb - 4);
         goto err;
