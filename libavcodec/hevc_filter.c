@@ -223,7 +223,7 @@ void ff_hevc_sao_filter_CTB(HEVCSharedContext *sc, int x, int y, int c_idx_min, 
     }
 }
 
-#define TC_CALC(qp, bs) tctable[av_clip((qp) + DEFAULT_INTRA_TC_OFFSET * ((bs) - 1) + ((sc->sh.tc_offset >> 1) << 1), 0, MAX_QP + DEFAULT_INTRA_TC_OFFSET)]
+#define TC_CALC(qp, bs) tctable[av_clip((qp) + DEFAULT_INTRA_TC_OFFSET * ((bs) - 1) + ((tc_offset >> 1) << 1), 0, MAX_QP + DEFAULT_INTRA_TC_OFFSET)]
 
 void ff_hevc_deblocking_filter_CTB(HEVCContext *s, int x0, int y0)
 {
