@@ -298,8 +298,7 @@ static int hls_slice_header(HEVCContext *s)
         sc->sps->pixel_shift = sc->sps->bit_depth > 8;
 
         ff_hevc_pred_init(&sc->hpc, sc->sps->bit_depth);
-        ff_hevc_dsp_init(&sc->hevcdsp, sc->sps->bit_depth);
-
+        ff_hevc_dsp_init(&sc->hevcdsp, sc->sps->bit_depth, (sc->sps->pcm_enabled_flag && sc->sps->pcm.loop_filter_disable_flag) || sc->pps->transquant_bypass_enable_flag);
         ff_videodsp_init(&sc->vdsp, sc->sps->bit_depth);
     }
     sh->dependent_slice_segment_flag = 0;

@@ -13,7 +13,6 @@
 #define LUMA 0
 #define CB 1
 #define CR 2
-
 static int chroma_tc(HEVCSharedContext *s, int qp_y, int c_idx, int tc_offset)
 {
     static int qp_c[] = { 29, 30, 31, 32, 33, 33, 34, 34, 35, 35, 36, 36, 37, 37 };
@@ -143,6 +142,17 @@ static void copy_CTB(uint8_t *dst, uint8_t *src, int width, int height, int stri
     }
 }
 
+static int get_pcm(HEVCContext *s, int x, int y)
+{
+    HEVCSharedContext *sc = s->HEVCsc;
+    int log2_min_pu_size = sc->sps->log2_min_pu_size - 1;
+    int pic_width_in_min_pu = sc->sps->pic_width_in_min_cbs * 4;
+    if (x < 0)
+        return 0;
+    return sc->is_pcm[(y >> log2_min_pu_size) * pic_width_in_min_pu + (x >> log2_min_pu_size)];
+}
+
+
 #define CTB(tab, x, y) ((tab)[(y) * sc->sps->pic_width_in_ctbs + (x)])
 
 void ff_hevc_sao_filter_CTB(HEVCSharedContext *sc, int x, int y, int c_idx_min, int c_idx_max)
@@ -213,22 +223,31 @@ void ff_hevc_sao_filter_CTB(HEVCSharedContext *sc, int x, int y, int c_idx_min, 
     }
 }
 
+#define TC_CALC(qp, bs) tctable[av_clip((qp) + DEFAULT_INTRA_TC_OFFSET * ((bs) - 1) + ((sc->sh.tc_offset >> 1) << 1), 0, MAX_QP + DEFAULT_INTRA_TC_OFFSET)]
+
 void ff_hevc_deblocking_filter_CTB(HEVCContext *s, int x0, int y0)
 {
+    HEVCSharedContext *sc = s->HEVCsc;
     uint8_t *src;
     int x, y;
-    HEVCSharedContext *sc = s->HEVCsc;
-    int pixel = 1 + !!(sc->sps->bit_depth - 8); // sizeof(pixel)
+    int chroma;
+    int c_tc[2];
+    int beta[2];
+    int tc[2];
+    uint8_t no_p[2] = {0};
+    uint8_t no_q[2] = {0};
+    //int pixel = 1 + !!(sc->sps->bit_depth - 8); // sizeof(pixel)
 
-    int pic_width_in_min_pu = sc->sps->pic_width_in_min_cbs * 4;
-    int min_pu_size = 1 << sc->sps->log2_min_pu_size;
-    int log2_min_pu_size = sc->sps->log2_min_pu_size;
+    //int pic_width_in_min_pu = sc->sps->pic_width_in_min_cbs * 4;
+    //int min_pu_size = 1 << sc->sps->log2_min_pu_size;
+    //int log2_min_pu_size = sc->sps->log2_min_pu_size;
     int log2_ctb_size =  sc->sps->log2_ctb_size;
     int x_end, y_end;
     int ctb_size = 1<<log2_ctb_size;
     int ctb = (x0 >> log2_ctb_size) + (y0 >> log2_ctb_size) * sc->sps->pic_width_in_ctbs;
     int tc_offset = sc->deblock[ctb].tc_offset;
     int beta_offset = sc->deblock[ctb].beta_offset;
+    int pcmf = (sc->sps->pcm_enabled_flag && sc->sps->pcm.loop_filter_disable_flag) || sc->pps->transquant_bypass_enable_flag;
     if (sc->deblock[ctb].disable)
         return;
 
@@ -239,69 +258,104 @@ void ff_hevc_deblocking_filter_CTB(HEVCContext *s, int x0, int y0)
     if (y_end > sc->sps->pic_height_in_luma_samples)
         y_end = sc->sps->pic_height_in_luma_samples;
 
-    // vertical filtering
-    for (x = x0 ? x0:8; x < x_end; x += 8) {
-        for (y = y0; y < y_end; y += 4) {
-            int bs = sc->vertical_bs[(x >> 3) + (y >> 2) * sc->bs_width];
-            if (bs) {
-                int qp = (get_qPy(s, x - 1, y) + get_qPy(s, x, y) + 1) >> 1;
-                const int idxb = av_clip_c(qp + ((beta_offset >> 1) << 1), 0, MAX_QP);
-                const int beta = betatable[idxb];
-                int no_p = 0;
-                int no_q = 0;
-                const int idxt = av_clip_c(qp + DEFAULT_INTRA_TC_OFFSET * (bs - 1) + ((tc_offset >> 1) << 1), 0, MAX_QP + DEFAULT_INTRA_TC_OFFSET);
-                const int tc = tctable[idxt];
-                if((sc->sps->pcm_enabled_flag && sc->sps->pcm.loop_filter_disable_flag) || sc->pps->transquant_bypass_enable_flag) {
-                    int y_pu = y >> log2_min_pu_size;
-                    int xp_pu = (x - 1) / min_pu_size;
-                    int xq_pu = x >> log2_min_pu_size;
-                    if (sc->is_pcm[y_pu * pic_width_in_min_pu + xp_pu])
-                        no_p = 1;
-                    if (sc->is_pcm[y_pu * pic_width_in_min_pu + xq_pu])
-                        no_q = 1;
+    // vertical filtering luma
+    for (y = y0; y < y_end; y += 8) {
+        for (x = x0 ? x0:8; x < x_end; x += 8) {
+            const int bs0 = sc->vertical_bs[(x >> 3) + (y >> 2) * sc->bs_width];
+            const int bs1 = sc->vertical_bs[(x >> 3) + ((y + 4) >> 2) * sc->bs_width];
+            if (bs0 || bs1) {
+                const int qp0 = (get_qPy(s, x - 1, y) + get_qPy(s, x, y) + 1) >> 1;
+                const int qp1 = (get_qPy(s, x - 1, y + 4) + get_qPy(s, x, y + 4) + 1) >> 1;
+                beta[0] = betatable[av_clip(qp0 + ((beta_offset >> 1) << 1), 0, MAX_QP)];
+                beta[1] = betatable[av_clip(qp1 + ((beta_offset >> 1) << 1), 0, MAX_QP)];
+                tc[0] = bs0 ? TC_CALC(qp0, bs0) : 0;
+                tc[1] = bs1 ? TC_CALC(qp1, bs1) : 0;
+                if (pcmf) {
+                        no_p[0] = get_pcm(s, x - 1, y);
+                        no_p[1] = get_pcm(s, x - 1, y + 8);
+                        no_q[0] = get_pcm(s, x, y);
+                        no_q[1] = get_pcm(s, x, y + 8);
                 }
                 src = &sc->frame->data[LUMA][y * sc->frame->linesize[LUMA] + x];
-                sc->hevcdsp.hevc_loop_filter_luma(src, pixel, sc->frame->linesize[LUMA], no_p, no_q, beta, tc);
-
-                if ((x & 15) == 0 && (y & 7) == 0 && bs == 2) {
-                    src = &sc->frame->data[CB][(y / 2) * sc->frame->linesize[CB] + (x / 2)];
-                    sc->hevcdsp.hevc_loop_filter_chroma(src, pixel, sc->frame->linesize[CB], no_p, no_q, chroma_tc(sc, qp, CB, tc_offset));
-                    src = &sc->frame->data[CR][(y / 2) * sc->frame->linesize[CR] + (x / 2)];
-                    sc->hevcdsp.hevc_loop_filter_chroma(src, pixel, sc->frame->linesize[CR], no_p, no_q, chroma_tc(sc, qp, CR, tc_offset));
+                sc->hevcdsp.hevc_v_loop_filter_luma(src, sc->frame->linesize[LUMA], beta, tc, no_p, no_q);
+            }
+        }
+    }
+    // vertical filtering chroma
+    for (chroma = 1; chroma <= 2; chroma++) {
+        for (y = y0; y < y_end; y += 16) {
+            for (x = x0 ? x0:16; x < x_end; x += 16) {
+                const int bs0 = sc->vertical_bs[(x >> 3) + (y >> 2) * sc->bs_width];
+                const int bs1 = sc->vertical_bs[(x >> 3) + ((y + 8) >> 2) * sc->bs_width];
+                if ((bs0 == 2) || (bs1 == 2)) {
+                    const int qp0 = (get_qPy(s, x - 1, y) + get_qPy(s, x, y) + 1) >> 1;
+                    const int qp1 = (get_qPy(s, x - 1, y + 8) + get_qPy(s, x, y + 8) + 1) >> 1;
+                    if (pcmf) {
+                            no_p[0] = get_pcm(s, x - 1, y);
+                            no_p[1] = get_pcm(s, x - 1, y + 8);
+                            no_q[0] = get_pcm(s, x, y);
+                            no_q[1] = get_pcm(s, x, y + 8);
+                    }
+                    c_tc[0] = (bs0 == 2) ? chroma_tc(sc, qp0, chroma, tc_offset) : 0;
+                    c_tc[1] = (bs1 == 2) ? chroma_tc(sc, qp1, chroma, tc_offset) : 0;
+                    src = &sc->frame->data[chroma][(y / 2) * sc->frame->linesize[chroma] + (x / 2)];
+                    sc->hevcdsp.hevc_v_loop_filter_chroma(src, sc->frame->linesize[chroma], c_tc, no_p, no_q);
                 }
             }
         }
     }
-    // horizontal filtering
+    // horizontal filtering luma
     if (x_end != sc->sps->pic_width_in_luma_samples)
         x_end -= 8;
     for (y = y0 ? y0:8; y < y_end; y += 8) {
-        for (x = x0 ? x0-8:0; x < x_end; x += 4) {
-            int bs = sc->horizontal_bs[(x + y * sc->bs_width) >> 2];
-            if (bs) {
-                int qp = (get_qPy(s, x, y - 1) + get_qPy(s, x, y) + 1) >> 1;
-                const int idxb = av_clip_c(qp + ((beta_offset >> 1) << 1), 0, MAX_QP);
-                const int beta = betatable[idxb];
-                int no_p = 0;
-                int no_q = 0;
-                const int idxt = av_clip_c(qp + DEFAULT_INTRA_TC_OFFSET * (bs - 1) + ((tc_offset >> 1) << 1), 0, MAX_QP + DEFAULT_INTRA_TC_OFFSET);
-                const int tc = tctable[idxt];
-                if((sc->sps->pcm_enabled_flag && sc->sps->pcm.loop_filter_disable_flag) || sc->pps->transquant_bypass_enable_flag) {
-                    int yp_pu = (y - 1) / min_pu_size;
-                    int yq_pu = y >> log2_min_pu_size;
-                    int x_pu = x >> log2_min_pu_size;
-                    if (sc->is_pcm[yp_pu * pic_width_in_min_pu + x_pu])
-                        no_p = 1;
-                    if (sc->is_pcm[yq_pu * pic_width_in_min_pu + x_pu])
-                        no_q = 1;
+        for (x = x0 ? x0-8:0; x < x_end; x += 8) {
+            const int bs0 = sc->horizontal_bs[(x + y * sc->bs_width) >> 2];
+            const int bs1 = sc->horizontal_bs[(x + 4 + y * sc->bs_width) >> 2];
+            if (bs0 || bs1) {
+                const int qp0 = (get_qPy(s, x, y - 1) + get_qPy(s, x, y) + 1) >> 1;
+                const int qp1 = (get_qPy(s, x + 4, y - 1) + get_qPy(s, x + 4, y) + 1) >> 1;
+                beta[0]  = betatable[av_clip(qp0 + ((beta_offset >> 1) << 1), 0, MAX_QP)];
+                beta[1]  = betatable[av_clip(qp1 + ((beta_offset >> 1) << 1), 0, MAX_QP)];
+                tc[0] = bs0 ? TC_CALC(qp0, bs0) : 0;
+                tc[1] = bs1 ? TC_CALC(qp1, bs1) : 0;
+                if (pcmf) {
+                        no_p[0] = get_pcm(s, x, y - 1);
+                        no_p[1] = get_pcm(s, x + 8, y - 1);
+                        no_q[0] = get_pcm(s, x, y);
+                        no_q[1] = get_pcm(s, x + 8, y);
                 }
+
                 src = &sc->frame->data[LUMA][y * sc->frame->linesize[LUMA] + x];
-                sc->hevcdsp.hevc_loop_filter_luma(src, sc->frame->linesize[LUMA], pixel, no_p, no_q, beta, tc);
-                if ((x & 7) == 0 && (y & 15) == 0 && bs == 2) {
-                    src = &sc->frame->data[CB][(y / 2) * sc->frame->linesize[CB] + (x / 2)];
-                    sc->hevcdsp.hevc_loop_filter_chroma(src, sc->frame->linesize[CB], pixel, no_p, no_q, chroma_tc(sc, qp, CB, tc_offset));
-                    src = &sc->frame->data[CR][(y / 2) * sc->frame->linesize[CR] + (x / 2)];
-                    sc->hevcdsp.hevc_loop_filter_chroma(src, sc->frame->linesize[CR], pixel, no_p, no_q, chroma_tc(sc, qp, CR, tc_offset));
+                sc->hevcdsp.hevc_h_loop_filter_luma(src, sc->frame->linesize[LUMA], beta, tc, no_p, no_q);
+            }
+        }
+    }
+    // horizontal filtering chroma
+    for (chroma = 1; chroma <= 2; chroma++) {
+        for (y = y0 ? y0:16; y < y_end; y += 16) {
+            for (x = x0-8; x < x_end; x += 16) {
+                int bs0, bs1;
+                // to make sure no memory access over boundary when x = -8
+                // TODO: simplify with row based deblocking
+                if (x < 0)
+                    bs0 = 0;
+                else
+                    bs0 = sc->horizontal_bs[(x + y * sc->bs_width) >> 2];
+                    bs1 = sc->horizontal_bs[(x + 8 + y * sc->bs_width) >> 2];
+                if ((bs0 == 2) || (bs1 == 2)) {
+                    const int qp0 = (bs0 == 2) ? ((get_qPy(s, x, y - 1) + get_qPy(s, x, y) + 1) >> 1) : 0;
+                    const int qp1 = (get_qPy(s, x + 8, y - 1) + get_qPy(s, x + 8, y) + 1) >> 1;
+                    if (pcmf) {
+                            no_p[0] = get_pcm(s, x, y - 1);
+                            no_p[1] = get_pcm(s, x + 8, y - 1);
+                            no_q[0] = get_pcm(s, x, y);
+                            no_q[1] = get_pcm(s, x + 8, y);
+                    }
+
+                    c_tc[0] = (bs0 == 2) ? chroma_tc(sc, qp0, chroma, tc_offset) : 0;
+                    c_tc[1] = (bs1 == 2) ? chroma_tc(sc, qp1, chroma, tc_offset) : 0;
+                    src = &sc->frame->data[chroma][(y / 2) * sc->frame->linesize[chroma] + (x / 2)];
+                    sc->hevcdsp.hevc_h_loop_filter_chroma(src, sc->frame->linesize[chroma], c_tc, no_p, no_q);
                 }
             }
         }
