@@ -44,8 +44,8 @@
 #include <math.h>
 
 #include "libavutil/channel_layout.h"
+#include "libavutil/float_dsp.h"
 #include "avcodec.h"
-#include "dsputil.h"
 #include "libavutil/common.h"
 #include "celp_filters.h"
 #include "acelp_filters.h"
@@ -96,7 +96,6 @@
 #define AMR_AGC_ALPHA      0.9
 
 typedef struct AMRContext {
-    AVFrame                         avframe; ///< AVFrame for decoded samples
     AMRNBFrame                        frame; ///< decoded AMR parameters (lsf coefficients, codebook indexes, etc)
     uint8_t             bad_frame_indicator; ///< bad frame ? 1 : 0
     enum Mode                cur_frame_mode;
@@ -157,7 +156,7 @@ static av_cold int amrnb_decode_init(AVCodecContext *avctx)
     int i;
 
     if (avctx->channels > 1) {
-        av_log_missing_feature(avctx, "multi-channel AMR", 0);
+        avpriv_report_missing_feature(avctx, "multi-channel AMR");
         return AVERROR_PATCHWELCOME;
     }
 
@@ -176,9 +175,6 @@ static av_cold int amrnb_decode_init(AVCodecContext *avctx)
 
     for (i = 0; i < 4; i++)
         p->prediction_error[i] = MIN_ENERGY;
-
-    avcodec_get_frame_defaults(&p->avframe);
-    avctx->coded_frame = &p->avframe;
 
     return 0;
 }
@@ -794,8 +790,8 @@ static int synthesis(AMRContext *p, float *lpc,
 
     // emphasize pitch vector contribution
     if (p->pitch_gain[4] > 0.5 && !overflow) {
-        float energy = ff_scalarproduct_float_c(excitation, excitation,
-                                                AMR_SUBFRAME_SIZE);
+        float energy = avpriv_scalarproduct_float_c(excitation, excitation,
+                                                    AMR_SUBFRAME_SIZE);
         float pitch_factor =
             p->pitch_gain[4] *
             (p->cur_frame_mode == MODE_12k2 ?
@@ -871,8 +867,8 @@ static float tilt_factor(float *lpc_n, float *lpc_d)
     ff_celp_lp_synthesis_filterf(hf, lpc_d, hf, AMR_TILT_RESPONSE,
                                  LP_FILTER_ORDER);
 
-    rh0 = ff_scalarproduct_float_c(hf, hf,     AMR_TILT_RESPONSE);
-    rh1 = ff_scalarproduct_float_c(hf, hf + 1, AMR_TILT_RESPONSE - 1);
+    rh0 = avpriv_scalarproduct_float_c(hf, hf,     AMR_TILT_RESPONSE);
+    rh1 = avpriv_scalarproduct_float_c(hf, hf + 1, AMR_TILT_RESPONSE - 1);
 
     // The spec only specifies this check for 12.2 and 10.2 kbit/s
     // modes. But in the ref source the tilt is always non-negative.
@@ -892,8 +888,8 @@ static void postfilter(AMRContext *p, float *lpc, float *buf_out)
     int i;
     float *samples          = p->samples_in + LP_FILTER_ORDER; // Start of input
 
-    float speech_gain       = ff_scalarproduct_float_c(samples, samples,
-                                                       AMR_SUBFRAME_SIZE);
+    float speech_gain       = avpriv_scalarproduct_float_c(samples, samples,
+                                                           AMR_SUBFRAME_SIZE);
 
     float pole_out[AMR_SUBFRAME_SIZE + LP_FILTER_ORDER];  // Output of pole filter
     const float *gamma_n, *gamma_d;                       // Formant filter factor table
@@ -936,6 +932,7 @@ static int amrnb_decode_frame(AVCodecContext *avctx, void *data,
 {
 
     AMRContext *p = avctx->priv_data;        // pointer to private data
+    AVFrame *frame     = data;
     const uint8_t *buf = avpkt->data;
     int buf_size       = avpkt->size;
     float *buf_out;                          // pointer to the output data buffer
@@ -947,12 +944,12 @@ static int amrnb_decode_frame(AVCodecContext *avctx, void *data,
     const float *synth_fixed_vector;         // pointer to the fixed vector that synthesis should use
 
     /* get output buffer */
-    p->avframe.nb_samples = AMR_BLOCK_SIZE;
-    if ((ret = ff_get_buffer(avctx, &p->avframe, 0)) < 0) {
+    frame->nb_samples = AMR_BLOCK_SIZE;
+    if ((ret = ff_get_buffer(avctx, frame, 0)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }
-    buf_out = (float *)p->avframe.data[0];
+    buf_out = (float *)frame->data[0];
 
     p->cur_frame_mode = unpack_bitstream(p, buf, buf_size);
     if (p->cur_frame_mode == NO_DATA) {
@@ -960,7 +957,7 @@ static int amrnb_decode_frame(AVCodecContext *avctx, void *data,
         return AVERROR_INVALIDDATA;
     }
     if (p->cur_frame_mode == MODE_DTX) {
-        av_log_missing_feature(avctx, "dtx mode", 1);
+        avpriv_request_sample(avctx, "dtx mode");
         return AVERROR_PATCHWELCOME;
     }
 
@@ -998,9 +995,9 @@ static int amrnb_decode_frame(AVCodecContext *avctx, void *data,
 
         p->fixed_gain[4] =
             ff_amr_set_fixed_gain(fixed_gain_factor,
-                                  ff_scalarproduct_float_c(p->fixed_vector,
-                                                           p->fixed_vector,
-                                                           AMR_SUBFRAME_SIZE) /
+                                  avpriv_scalarproduct_float_c(p->fixed_vector,
+                                                               p->fixed_vector,
+                                                               AMR_SUBFRAME_SIZE) /
                                   AMR_SUBFRAME_SIZE,
                        p->prediction_error,
                        energy_mean[p->cur_frame_mode], energy_pred_fac);
@@ -1058,8 +1055,7 @@ static int amrnb_decode_frame(AVCodecContext *avctx, void *data,
     ff_weighted_vector_sumf(p->lsf_avg, p->lsf_avg, p->lsf_q[3],
                             0.84, 0.16, LP_FILTER_ORDER);
 
-    *got_frame_ptr   = 1;
-    *(AVFrame *)data = p->avframe;
+    *got_frame_ptr = 1;
 
     /* return the amount of bytes consumed if everything was OK */
     return frame_sizes_nb[p->cur_frame_mode] + 1; // +7 for rounding and +8 for TOC

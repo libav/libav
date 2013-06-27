@@ -17,7 +17,7 @@
  */
 
 #include "config.h"
-
+#include "libavutil/attributes.h"
 #include "float_dsp.h"
 
 static void vector_fmul_c(float *dst, const float *src0, const float *src1,
@@ -71,13 +71,58 @@ static void vector_fmul_window_c(float *dst, const float *src0,
     }
 }
 
-void avpriv_float_dsp_init(AVFloatDSPContext *fdsp, int bit_exact)
+static void vector_fmul_add_c(float *dst, const float *src0, const float *src1,
+                              const float *src2, int len){
+    int i;
+
+    for (i = 0; i < len; i++)
+        dst[i] = src0[i] * src1[i] + src2[i];
+}
+
+static void vector_fmul_reverse_c(float *dst, const float *src0,
+                                  const float *src1, int len)
+{
+    int i;
+
+    src1 += len-1;
+    for (i = 0; i < len; i++)
+        dst[i] = src0[i] * src1[-i];
+}
+
+static void butterflies_float_c(float *restrict v1, float *restrict v2,
+                                int len)
+{
+    int i;
+
+    for (i = 0; i < len; i++) {
+        float t = v1[i] - v2[i];
+        v1[i] += v2[i];
+        v2[i] = t;
+    }
+}
+
+float avpriv_scalarproduct_float_c(const float *v1, const float *v2, int len)
+{
+    float p = 0.0;
+    int i;
+
+    for (i = 0; i < len; i++)
+        p += v1[i] * v2[i];
+
+    return p;
+}
+
+av_cold void avpriv_float_dsp_init(AVFloatDSPContext *fdsp, int bit_exact)
 {
     fdsp->vector_fmul = vector_fmul_c;
     fdsp->vector_fmac_scalar = vector_fmac_scalar_c;
     fdsp->vector_fmul_scalar = vector_fmul_scalar_c;
     fdsp->vector_dmul_scalar = vector_dmul_scalar_c;
     fdsp->vector_fmul_window = vector_fmul_window_c;
+    fdsp->vector_fmul_add = vector_fmul_add_c;
+    fdsp->vector_fmul_reverse = vector_fmul_reverse_c;
+    fdsp->butterflies_float = butterflies_float_c;
+    fdsp->scalarproduct_float = avpriv_scalarproduct_float_c;
 
 #if ARCH_ARM
     ff_float_dsp_init_arm(fdsp);

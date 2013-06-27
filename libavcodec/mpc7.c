@@ -26,6 +26,7 @@
  */
 
 #include "libavutil/channel_layout.h"
+#include "libavutil/internal.h"
 #include "libavutil/lfg.h"
 #include "avcodec.h"
 #include "get_bits.h"
@@ -64,8 +65,7 @@ static av_cold int mpc7_decode_init(AVCodecContext * avctx)
 
     /* Musepack SV7 is always stereo */
     if (avctx->channels != 2) {
-        av_log_ask_for_sample(avctx, "Unsupported number of channels: %d\n",
-                              avctx->channels);
+        avpriv_request_sample(avctx, "%d channels", avctx->channels);
         return AVERROR_PATCHWELCOME;
     }
 
@@ -138,9 +138,6 @@ static av_cold int mpc7_decode_init(AVCodecContext * avctx)
     }
     vlc_initialized = 1;
 
-    avcodec_get_frame_defaults(&c->frame);
-    avctx->coded_frame = &c->frame;
-
     return 0;
 }
 
@@ -200,6 +197,7 @@ static int get_scale_idx(GetBitContext *gb, int ref)
 static int mpc7_decode_frame(AVCodecContext * avctx, void *data,
                              int *got_frame_ptr, AVPacket *avpkt)
 {
+    AVFrame *frame     = data;
     const uint8_t *buf = avpkt->data;
     int buf_size;
     MPCContext *c = avctx->priv_data;
@@ -229,8 +227,8 @@ static int mpc7_decode_frame(AVCodecContext * avctx, void *data,
     buf_size  -= 4;
 
     /* get output buffer */
-    c->frame.nb_samples = last_frame ? c->lastframelen : MPC_FRAME_SIZE;
-    if ((ret = ff_get_buffer(avctx, &c->frame, 0)) < 0) {
+    frame->nb_samples = last_frame ? c->lastframelen : MPC_FRAME_SIZE;
+    if ((ret = ff_get_buffer(avctx, frame, 0)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }
@@ -294,7 +292,7 @@ static int mpc7_decode_frame(AVCodecContext * avctx, void *data,
         for(ch = 0; ch < 2; ch++)
             idx_to_quant(c, &gb, bands[i].res[ch], c->Q[ch] + off);
 
-    ff_mpc_dequantize_and_synth(c, mb, (int16_t **)c->frame.extended_data, 2);
+    ff_mpc_dequantize_and_synth(c, mb, (int16_t **)frame->extended_data, 2);
 
     bits_used = get_bits_count(&gb);
     bits_avail = buf_size * 8;
@@ -308,8 +306,7 @@ static int mpc7_decode_frame(AVCodecContext * avctx, void *data,
         return avpkt->size;
     }
 
-    *got_frame_ptr   = 1;
-    *(AVFrame *)data = c->frame;
+    *got_frame_ptr = 1;
 
     return avpkt->size;
 }

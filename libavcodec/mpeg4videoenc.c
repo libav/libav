@@ -20,6 +20,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/attributes.h"
 #include "libavutil/log.h"
 #include "libavutil/opt.h"
 #include "mpegvideo.h"
@@ -59,7 +60,7 @@ max run: 29/41
  * Return the number of bits that encoding the 8x8 block in block would need.
  * @param[in]  block_last_index last index in scantable order that refers to a non zero element in block.
  */
-static inline int get_block_rate(MpegEncContext * s, DCTELEM block[64], int block_last_index, uint8_t scantable[64]){
+static inline int get_block_rate(MpegEncContext * s, int16_t block[64], int block_last_index, uint8_t scantable[64]){
     int last=0;
     int j;
     int rate=0;
@@ -91,7 +92,7 @@ static inline int get_block_rate(MpegEncContext * s, DCTELEM block[64], int bloc
  * @param[out] st scantable for each 8x8 block
  * @param[in] zigzag_last_index index referring to the last non zero coefficient in zigzag order
  */
-static inline void restore_ac_coeffs(MpegEncContext * s, DCTELEM block[6][64], const int dir[6], uint8_t *st[6], const int zigzag_last_index[6])
+static inline void restore_ac_coeffs(MpegEncContext * s, int16_t block[6][64], const int dir[6], uint8_t *st[6], const int zigzag_last_index[6])
 {
     int i, n;
     memcpy(s->block_last_index, zigzag_last_index, sizeof(int)*6);
@@ -122,7 +123,7 @@ static inline void restore_ac_coeffs(MpegEncContext * s, DCTELEM block[6][64], c
  * @param[out] st scantable for each 8x8 block
  * @param[out] zigzag_last_index index referring to the last non zero coefficient in zigzag order
  */
-static inline int decide_ac_pred(MpegEncContext * s, DCTELEM block[6][64], const int dir[6], uint8_t *st[6], int zigzag_last_index[6])
+static inline int decide_ac_pred(MpegEncContext * s, int16_t block[6][64], const int dir[6], uint8_t *st[6], int zigzag_last_index[6])
 {
     int score= 0;
     int i, n;
@@ -294,7 +295,7 @@ static inline int mpeg4_get_dc_length(int level, int n){
  * Encode an 8x8 block.
  * @param n block index (0-3 are luma, 4-5 are chroma)
  */
-static inline void mpeg4_encode_block(MpegEncContext * s, DCTELEM * block, int n, int intra_dc,
+static inline void mpeg4_encode_block(MpegEncContext * s, int16_t * block, int n, int intra_dc,
                                uint8_t *scan_table, PutBitContext *dc_pb, PutBitContext *ac_pb)
 {
     int i, last_non_zero;
@@ -345,7 +346,7 @@ static inline void mpeg4_encode_block(MpegEncContext * s, DCTELEM * block, int n
     }
 }
 
-static int mpeg4_get_block_length(MpegEncContext * s, DCTELEM * block, int n, int intra_dc,
+static int mpeg4_get_block_length(MpegEncContext * s, int16_t * block, int n, int intra_dc,
                                uint8_t *scan_table)
 {
     int i, last_non_zero;
@@ -396,7 +397,7 @@ static int mpeg4_get_block_length(MpegEncContext * s, DCTELEM * block, int n, in
     return len;
 }
 
-static inline void mpeg4_encode_blocks(MpegEncContext * s, DCTELEM block[6][64], int intra_dc[6],
+static inline void mpeg4_encode_blocks(MpegEncContext * s, int16_t block[6][64], int intra_dc[6],
                                uint8_t **scan_table, PutBitContext *dc_pb, PutBitContext *ac_pb){
     int i;
 
@@ -425,7 +426,7 @@ static inline void mpeg4_encode_blocks(MpegEncContext * s, DCTELEM block[6][64],
     }
 }
 
-static inline int get_b_cbp(MpegEncContext * s, DCTELEM block[6][64],
+static inline int get_b_cbp(MpegEncContext * s, int16_t block[6][64],
                             int motion_x, int motion_y, int mb_type)
 {
     int cbp = 0, i;
@@ -469,7 +470,7 @@ static inline int get_b_cbp(MpegEncContext * s, DCTELEM block[6][64],
 static const int dquant_code[5]= {1,0,9,2,3};
 
 void ff_mpeg4_encode_mb(MpegEncContext * s,
-                        DCTELEM block[6][64],
+                        int16_t block[6][64],
                         int motion_x, int motion_y)
 {
     int cbpc, cbpy, pred_x, pred_y;
@@ -1083,7 +1084,7 @@ void ff_mpeg4_encode_picture_header(MpegEncContext * s, int picture_number)
 }
 
 
-static void init_uni_dc_tab(void)
+static av_cold void init_uni_dc_tab(void)
 {
     int level, uni_code, uni_len;
 
@@ -1135,7 +1136,9 @@ static void init_uni_dc_tab(void)
     }
 }
 
-static void init_uni_mpeg4_rl_tab(RLTable *rl, uint32_t *bits_tab, uint8_t *len_tab){
+static av_cold void init_uni_mpeg4_rl_tab(RLTable *rl, uint32_t *bits_tab,
+                                          uint8_t *len_tab)
+{
     int slevel, run, last;
 
     assert(MAX_LEVEL >= 64);

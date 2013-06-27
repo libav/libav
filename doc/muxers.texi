@@ -13,7 +13,7 @@ You can disable all the muxers with the configure option
 with the options @code{--enable-muxer=@var{MUXER}} /
 @code{--disable-muxer=@var{MUXER}}.
 
-The option @code{-formats} of the ff* tools will display the list of
+The option @code{-formats} of the av* tools will display the list of
 enabled muxers.
 
 A description of some of the currently available muxers follows.
@@ -171,6 +171,12 @@ avconv -i in.avi -f image2 -frames:v 1 img.jpeg
 @table @option
 @item -start_number @var{number}
 Start the sequence from @var{number}.
+
+@item -update @var{number}
+If @var{number} is nonzero, the filename will always be interpreted as just a
+filename, not a pattern, and this file will be continuously overwritten with new
+images.
+
 @end table
 
 @section MOV/MP4/ISMV
@@ -366,6 +372,27 @@ For example a 3D WebM clip can be created using the following command line:
 @example
 avconv -i sample_left_right_clip.mpg -an -c:v libvpx -metadata STEREO_MODE=left_right -y stereo_clip.webm
 @end example
+
+This muxer supports the following options:
+
+@table @option
+
+@item reserve_index_space
+By default, this muxer writes the index for seeking (called cues in Matroska
+terms) at the end of the file, because it cannot know in advance how much space
+to leave for the index at the beginning of the file. However for some use cases
+-- e.g.  streaming where seeking is possible but slow -- it is useful to put the
+index at the beginning of the file.
+
+If this option is set to a non-zero value, the muxer will reserve a given amount
+of space in the file header and then try to write the cues there when the muxing
+finishes. If the available space does not suffice, muxing will fail. A safe size
+for most use cases should be about 50kB per hour of video.
+
+Note that cues are only written if the output is seekable and this option will
+have no effect if it is not.
+
+@end table
 
 @section segment
 

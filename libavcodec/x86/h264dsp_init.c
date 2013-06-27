@@ -18,11 +18,12 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/attributes.h"
 #include "libavutil/cpu.h"
 #include "libavutil/x86/asm.h"
 #include "libavutil/x86/cpu.h"
 #include "libavcodec/h264dsp.h"
-#include "dsputil_mmx.h"
+#include "dsputil_x86.h"
 
 /***********************************/
 /* IDCT */
@@ -48,7 +49,7 @@ IDCT_ADD_FUNC(8, 10, avx)
 #define IDCT_ADD_REP_FUNC(NUM, REP, DEPTH, OPT)                         \
 void ff_h264_idct ## NUM ## _add ## REP ## _ ## DEPTH ## _ ## OPT       \
     (uint8_t *dst, const int *block_offset,                             \
-     DCTELEM *block, int stride, const uint8_t nnzc[6 * 8]);
+     int16_t *block, int stride, const uint8_t nnzc[6 * 8]);
 
 IDCT_ADD_REP_FUNC(8, 4, 8, mmx)
 IDCT_ADD_REP_FUNC(8, 4, 8, mmxext)
@@ -70,7 +71,7 @@ IDCT_ADD_REP_FUNC(, 16intra, 10, avx)
 #define IDCT_ADD_REP_FUNC2(NUM, REP, DEPTH, OPT)                      \
 void ff_h264_idct ## NUM ## _add ## REP ## _ ## DEPTH ## _ ## OPT     \
     (uint8_t **dst, const int *block_offset,                          \
-     DCTELEM *block, int stride, const uint8_t nnzc[6 * 8]);
+     int16_t *block, int stride, const uint8_t nnzc[6 * 8]);
 
 IDCT_ADD_REP_FUNC2(, 8, 8, mmx)
 IDCT_ADD_REP_FUNC2(, 8, 8, mmxext)
@@ -78,8 +79,8 @@ IDCT_ADD_REP_FUNC2(, 8, 8, sse2)
 IDCT_ADD_REP_FUNC2(, 8, 10, sse2)
 IDCT_ADD_REP_FUNC2(, 8, 10, avx)
 
-void ff_h264_luma_dc_dequant_idct_mmx(DCTELEM *output, DCTELEM *input, int qmul);
-void ff_h264_luma_dc_dequant_idct_sse2(DCTELEM *output, DCTELEM *input, int qmul);
+void ff_h264_luma_dc_dequant_idct_mmx(int16_t *output, int16_t *input, int qmul);
+void ff_h264_luma_dc_dequant_idct_sse2(int16_t *output, int16_t *input, int qmul);
 
 /***********************************/
 /* deblocking */
@@ -131,8 +132,8 @@ LF_FUNCS(uint16_t, 10)
 
 #if ARCH_X86_32 && HAVE_MMXEXT_EXTERNAL
 LF_FUNC(v8, luma, 8, mmxext)
-static void ff_deblock_v_luma_8_mmxext(uint8_t *pix, int stride, int alpha,
-                                       int beta, int8_t *tc0)
+static void deblock_v_luma_8_mmxext(uint8_t *pix, int stride, int alpha,
+                                    int beta, int8_t *tc0)
 {
     if ((tc0[0] & tc0[1]) >= 0)
         ff_deblock_v8_luma_8_mmxext(pix + 0, stride, alpha, beta, tc0);
@@ -140,8 +141,8 @@ static void ff_deblock_v_luma_8_mmxext(uint8_t *pix, int stride, int alpha,
         ff_deblock_v8_luma_8_mmxext(pix + 8, stride, alpha, beta, tc0 + 2);
 }
 LF_IFUNC(v8, luma_intra, 8, mmxext)
-static void ff_deblock_v_luma_intra_8_mmxext(uint8_t *pix, int stride,
-                                             int alpha, int beta)
+static void deblock_v_luma_intra_8_mmxext(uint8_t *pix, int stride,
+                                          int alpha, int beta)
 {
     ff_deblock_v8_luma_intra_8_mmxext(pix + 0, stride, alpha, beta);
     ff_deblock_v8_luma_intra_8_mmxext(pix + 8, stride, alpha, beta);
@@ -207,8 +208,8 @@ H264_BIWEIGHT_10_SSE(16, 10)
 H264_BIWEIGHT_10_SSE(8,  10)
 H264_BIWEIGHT_10_SSE(4,  10)
 
-void ff_h264dsp_init_x86(H264DSPContext *c, const int bit_depth,
-                         const int chroma_format_idc)
+av_cold void ff_h264dsp_init_x86(H264DSPContext *c, const int bit_depth,
+                                 const int chroma_format_idc)
 {
     int mm_flags = av_get_cpu_flags();
 
@@ -246,9 +247,9 @@ void ff_h264dsp_init_x86(H264DSPContext *c, const int bit_depth,
                     c->h264_h_loop_filter_chroma_intra = ff_deblock_h_chroma_intra_8_mmxext;
                 }
 #if ARCH_X86_32 && HAVE_MMXEXT_EXTERNAL
-                c->h264_v_loop_filter_luma       = ff_deblock_v_luma_8_mmxext;
+                c->h264_v_loop_filter_luma       = deblock_v_luma_8_mmxext;
                 c->h264_h_loop_filter_luma       = ff_deblock_h_luma_8_mmxext;
-                c->h264_v_loop_filter_luma_intra = ff_deblock_v_luma_intra_8_mmxext;
+                c->h264_v_loop_filter_luma_intra = deblock_v_luma_intra_8_mmxext;
                 c->h264_h_loop_filter_luma_intra = ff_deblock_h_luma_intra_8_mmxext;
 #endif /* ARCH_X86_32 && HAVE_MMXEXT_EXTERNAL */
                 c->weight_h264_pixels_tab[0] = ff_h264_weight_16_mmxext;

@@ -203,9 +203,9 @@ static int commit_bitstream_and_slice_buffer(AVCodecContext *avctx,
                                   mb_count);
 }
 
-static int start_frame(AVCodecContext *avctx,
-                       av_unused const uint8_t *buffer,
-                       av_unused uint32_t size)
+static int dxva2_mpeg2_start_frame(AVCodecContext *avctx,
+                                   av_unused const uint8_t *buffer,
+                                   av_unused uint32_t size)
 {
     const struct MpegEncContext *s = avctx->priv_data;
     struct dxva_context *ctx = avctx->hwaccel_context;
@@ -225,8 +225,8 @@ static int start_frame(AVCodecContext *avctx,
     return 0;
 }
 
-static int decode_slice(AVCodecContext *avctx,
-                        const uint8_t *buffer, uint32_t size)
+static int dxva2_mpeg2_decode_slice(AVCodecContext *avctx,
+                                    const uint8_t *buffer, uint32_t size)
 {
     const struct MpegEncContext *s = avctx->priv_data;
     struct dxva2_picture_context *ctx_pic =
@@ -246,18 +246,22 @@ static int decode_slice(AVCodecContext *avctx,
     return 0;
 }
 
-static int end_frame(AVCodecContext *avctx)
+static int dxva2_mpeg2_end_frame(AVCodecContext *avctx)
 {
     struct MpegEncContext *s = avctx->priv_data;
     struct dxva2_picture_context *ctx_pic =
         s->current_picture_ptr->hwaccel_picture_private;
+    int ret;
 
     if (ctx_pic->slice_count <= 0 || ctx_pic->bitstream_size <= 0)
         return -1;
-    return ff_dxva2_common_end_frame(avctx, s,
-                                     &ctx_pic->pp, sizeof(ctx_pic->pp),
-                                     &ctx_pic->qm, sizeof(ctx_pic->qm),
-                                     commit_bitstream_and_slice_buffer);
+    ret = ff_dxva2_common_end_frame(avctx, s->current_picture_ptr,
+                                    &ctx_pic->pp, sizeof(ctx_pic->pp),
+                                    &ctx_pic->qm, sizeof(ctx_pic->qm),
+                                    commit_bitstream_and_slice_buffer);
+    if (!ret)
+        ff_mpeg_draw_horiz_band(s, 0, avctx->height);
+    return ret;
 }
 
 AVHWAccel ff_mpeg2_dxva2_hwaccel = {
@@ -265,8 +269,8 @@ AVHWAccel ff_mpeg2_dxva2_hwaccel = {
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_MPEG2VIDEO,
     .pix_fmt        = AV_PIX_FMT_DXVA2_VLD,
-    .start_frame    = start_frame,
-    .decode_slice   = decode_slice,
-    .end_frame      = end_frame,
+    .start_frame    = dxva2_mpeg2_start_frame,
+    .decode_slice   = dxva2_mpeg2_decode_slice,
+    .end_frame      = dxva2_mpeg2_end_frame,
     .priv_data_size = sizeof(struct dxva2_picture_context),
 };

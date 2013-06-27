@@ -23,6 +23,7 @@
 
 #include "libavformat/avformat.h"
 #include "libavcodec/avcodec.h"
+#include "libavutil/avstring.h"
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/dict.h"
@@ -302,7 +303,7 @@ static void old_print_object_header(const char *name)
 
     str = p = av_strdup(name);
     while (*p) {
-        *p = toupper(*p);
+        *p = av_toupper(*p);
         p++;
     }
 
@@ -319,7 +320,7 @@ static void old_print_object_footer(const char *name)
 
     str = p = av_strdup(name);
     while (*p) {
-        *p = toupper(*p);
+        *p = av_toupper(*p);
         p++;
     }
 
@@ -523,20 +524,6 @@ static char *tag_string(char *buf, int buf_size, int tag)
 {
     snprintf(buf, buf_size, "0x%04x", tag);
     return buf;
-}
-
-
-
-static const char *media_type_string(enum AVMediaType media_type)
-{
-    switch (media_type) {
-    case AVMEDIA_TYPE_VIDEO:      return "video";
-    case AVMEDIA_TYPE_AUDIO:      return "audio";
-    case AVMEDIA_TYPE_DATA:       return "data";
-    case AVMEDIA_TYPE_SUBTITLE:   return "subtitle";
-    case AVMEDIA_TYPE_ATTACHMENT: return "attachment";
-    default:                      return "unknown";
-    }
 }
 
 static void show_packet(AVFormatContext *fmt_ctx, AVPacket *pkt)

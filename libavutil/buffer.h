@@ -32,16 +32,15 @@
  * @ingroup lavu_data
  *
  * @{
- * AVBuffer is an API for reference counted data buffers.
+ * AVBuffer is an API for reference-counted data buffers.
  *
  * There are two core objects in this API -- AVBuffer and AVBufferRef. AVBuffer
  * represents the data buffer itself; it is opaque and not meant to be accessed
- * by the caller directly, but only through AVBufferRef. However the caller may
+ * by the caller directly, but only through AVBufferRef. However, the caller may
  * e.g. compare two AVBuffer pointers to check whether two different references
- * are describing the same data buffer (note that the two references may point
- * to different parts of the buffer, so comparing the data pointers won't work).
- * AVBufferRef represents a single reference to an AVBuffer and it is the object
- * that may be manipulated by the caller directly.
+ * are describing the same data buffer. AVBufferRef represents a single
+ * reference to an AVBuffer and it is the object that may be manipulated by the
+ * caller directly.
  *
  * There are two functions provided for creating a new AVBuffer with a single
  * reference -- av_buffer_alloc() to just allocate a new buffer, and
@@ -53,15 +52,18 @@
  * The convention throughout this API and the rest of Libav is such that the
  * buffer is considered writable if there exists only one reference to it (and
  * it has not been marked as read-only). The av_buffer_is_writable() function is
- * provided to check whether this is true() and av_buffer_make_writable() will
+ * provided to check whether this is true and av_buffer_make_writable() will
  * automatically create a new writable buffer when necessary.
  * Of course nothing prevents the calling code from violating this convention,
  * however that is safe only when all the existing references are under its
  * control.
  *
- * Note that referencing and unreferencing the buffers is thread safe and thus
+ * @note Referencing and unreferencing the buffers is thread-safe and thus
  * may be done from multiple threads simultaneously without any need for
  * additional locking.
+ *
+ * @note Two different references to the same buffer can point to different
+ * parts of the buffer (i.e. their AVBufferRef.data will not be equal).
  */
 
 /**
@@ -81,7 +83,7 @@ typedef struct AVBufferRef {
 
     /**
      * The data buffer. It is considered writable if and only if
-     * this is the only reference to buffer, in which case
+     * this is the only reference to the buffer, in which case
      * av_buffer_is_writable() returns 1.
      */
     uint8_t *data;
@@ -113,15 +115,15 @@ AVBufferRef *av_buffer_allocz(int size);
 /**
  * Create an AVBuffer from an existing array.
  *
- * @param data data array.
  * If this function is successful, data is owned by the AVBuffer. The caller may
  * only access data through the returned AVBufferRef and references derived from
  * it.
  * If this function fails, data is left untouched.
- * @param size size of data in bytes
- * @param free a callback for freeing data
+ * @param data   data array
+ * @param size   size of data in bytes
+ * @param free   a callback for freeing this buffer's data
  * @param opaque parameter to be passed to free
- * @param flags a combination of AV_BUFFER_FLAG_*
+ * @param flags  a combination of AV_BUFFER_FLAG_*
  *
  * @return an AVBufferRef referring to data on success, NULL on failure.
  */
@@ -165,8 +167,8 @@ int av_buffer_is_writable(const AVBufferRef *buf);
  * if possible.
  *
  * @param buf buffer reference to make writable. On success, buf is either left
- * untouched, or it is unreferenced and a new writable AVBufferRef is written in
- * its place. On failure, buf is left untouched.
+ *            untouched, or it is unreferenced and a new writable AVBufferRef is
+ *            written in its place. On failure, buf is left untouched.
  * @return 0 on success, a negative AVERROR on failure.
  */
 int av_buffer_make_writable(AVBufferRef **buf);
@@ -174,10 +176,10 @@ int av_buffer_make_writable(AVBufferRef **buf);
 /**
  * Reallocate a given buffer.
  *
- * @param buf a buffer reference to reallocate. On success, buf will be
- * unreferenced and a new reference with the required size will be written in
- * its place. On failure buf will be left untouched.
- * *buf may be NULL, then a new buffer is allocated.
+ * @param buf  a buffer reference to reallocate. On success, buf will be
+ *             unreferenced and a new reference with the required size will be
+ *             written in its place. On failure buf will be left untouched. *buf
+ *             may be NULL, then a new buffer is allocated.
  * @param size required new buffer size.
  * @return 0 on success, a negative AVERROR on failure.
  *
@@ -199,23 +201,22 @@ int av_buffer_realloc(AVBufferRef **buf, int size);
  * @{
  * AVBufferPool is an API for a lock-free thread-safe pool of AVBuffers.
  *
- * Frequently allocating and freeing large buffers may be slow. This API is
+ * Frequently allocating and freeing large buffers may be slow. AVBufferPool is
  * meant to solve this in cases when the caller needs a set of buffers of the
  * same size (the most obvious use case being buffers for raw video or audio
  * frames).
  *
  * At the beginning, the user must call av_buffer_pool_init() to create the
- * buffer pool. Then whenever a buffer is needed, call av_buffer_alloc_pool() to
+ * buffer pool. Then whenever a buffer is needed, call av_buffer_pool_get() to
  * get a reference to a new buffer, similar to av_buffer_alloc(). This new
  * reference works in all aspects the same way as the one created by
- * av_buffer_alloc(). However when the last reference to this buffer is
+ * av_buffer_alloc(). However, when the last reference to this buffer is
  * unreferenced, it is returned to the pool instead of being freed and will be
- * reused for subsequent av_buffer_alloc_pool() calls.
+ * reused for subsequent av_buffer_pool_get() calls.
  *
- * After all the buffers were returned to the pool (av_buffer_pool_can_uninit()
- * can check whether this is true), the pool must be freed with
- * av_buffer_pool_uninit(). At this point all the buffers stored in the pool
- * will be freed.
+ * When the caller is done with the pool and no longer needs to allocate any new
+ * buffers, av_buffer_pool_uninit() must be called to mark the pool as freeable.
+ * Once all the buffers are released, it will automatically be freed.
  *
  * Allocating and releasing buffers with this API is thread-safe as long as
  * either the default alloc callback is used, or the user-supplied one is
@@ -241,8 +242,10 @@ typedef struct AVBufferPool AVBufferPool;
 AVBufferPool *av_buffer_pool_init(int size, AVBufferRef* (*alloc)(int size));
 
 /**
- * Free all the buffers in the pool, then free the pool itself. This function
- * may only be called once all allocated buffers were return to the pool.
+ * Mark the pool as being available for freeing. It will actually be freed only
+ * once all the allocated buffers associated with the pool are released. Thus it
+ * is safe to call this function while some of the allocated buffers are still
+ * in use.
  *
  * @param pool pointer to the pool to be freed. It will be set to NULL.
  * @see av_buffer_pool_can_uninit()
@@ -250,23 +253,12 @@ AVBufferPool *av_buffer_pool_init(int size, AVBufferRef* (*alloc)(int size));
 void av_buffer_pool_uninit(AVBufferPool **pool);
 
 /**
- * @return 1 if all the allocated buffers were returned to the pool, so it can
- * be freed. Return 0 otherwise.
- */
-int av_buffer_pool_can_uninit(AVBufferPool *pool);
-
-/**
  * Allocate a new AVBuffer, reusing an old buffer from the pool when available.
+ * This function may be called simultaneously from multiple threads.
  *
  * @return a reference to the new buffer on success, NULL on error.
  */
-AVBufferRef *av_buffer_alloc_pool(AVBufferPool *pool);
-
-/**
- * Same as av_buffer_allocz_pool(), except the data in the returned buffer will
- * be initialized to zero.
- */
-AVBufferRef *av_buffer_allocz_pool(AVBufferPool *pool);
+AVBufferRef *av_buffer_pool_get(AVBufferPool *pool);
 
 /**
  * @}

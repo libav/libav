@@ -44,7 +44,7 @@ static void roqvideo_decode_frame(RoqContext *ri)
     roq_qcell *qcell;
     int64_t chunk_start;
 
-    while (bytestream2_get_bytes_left(&ri->gb) > 0) {
+    while (bytestream2_get_bytes_left(&ri->gb) >= 8) {
         chunk_id   = bytestream2_get_le16(&ri->gb);
         chunk_size = bytestream2_get_le32(&ri->gb);
         chunk_arg  = bytestream2_get_le16(&ri->gb);
@@ -160,6 +160,13 @@ static av_cold int roq_decode_init(AVCodecContext *avctx)
     RoqContext *s = avctx->priv_data;
 
     s->avctx = avctx;
+
+    if (avctx->width % 16 || avctx->height % 16) {
+        av_log(avctx, AV_LOG_ERROR,
+               "Dimensions must be a multiple of 16\n");
+        return AVERROR_PATCHWELCOME;
+    }
+
     s->width = avctx->width;
     s->height = avctx->height;
 

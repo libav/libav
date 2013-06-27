@@ -43,13 +43,13 @@ static int rso_read_header(AVFormatContext *s)
     codec = ff_codec_get_id(ff_codec_rso_tags, id);
 
     if (codec == AV_CODEC_ID_ADPCM_IMA_WAV) {
-        av_log(s, AV_LOG_ERROR, "ADPCM in RSO not implemented\n");
+        avpriv_report_missing_feature(s, "ADPCM in RSO");
         return AVERROR_PATCHWELCOME;
     }
 
     bps = av_get_bits_per_sample(codec);
     if (!bps) {
-        av_log_ask_for_sample(s, "could not determine bits per sample\n");
+        avpriv_request_sample(s, "Unknown bits per sample");
         return AVERROR_PATCHWELCOME;
     }
 

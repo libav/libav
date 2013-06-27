@@ -28,7 +28,7 @@ CFLAGS     += $(ECFLAGS)
 CCFLAGS     = $(CPPFLAGS) $(CFLAGS)
 ASFLAGS    := $(CPPFLAGS) $(ASFLAGS)
 YASMFLAGS  += $(IFLAGS:%=%/) -Pconfig.asm
-HOSTCCFLAGS = $(IFLAGS) $(HOSTCFLAGS)
+HOSTCCFLAGS = $(IFLAGS) $(HOSTCPPFLAGS) $(HOSTCFLAGS)
 LDFLAGS    := $(ALLFFLIBS:%=$(LD_PATH)lib%) $(LDFLAGS)
 
 define COMPILE
@@ -84,7 +84,7 @@ FFLIBS := avutil
 
 DATA_FILES := $(wildcard $(SRC_PATH)/presets/*.avpreset)
 
-SKIPHEADERS = cmdutils_common_opts.h
+SKIPHEADERS = cmdutils_common_opts.h compat/w32pthreads.h
 
 include $(SRC_PATH)/common.mak
 
@@ -188,10 +188,11 @@ clean::
 	$(RM) $(ALLPROGS)
 	$(RM) $(CLEANSUFFIXES)
 	$(RM) $(CLEANSUFFIXES:%=tools/%)
+	$(RM) -rf coverage.info lcov
 
 distclean::
 	$(RM) $(DISTCLEANSUFFIXES)
-	$(RM) config.* .version version.h libavutil/avconfig.h
+	$(RM) config.* .config libavutil/avconfig.h .version version.h
 
 config:
 	$(SRC_PATH)/configure $(value LIBAV_CONFIGURATION)

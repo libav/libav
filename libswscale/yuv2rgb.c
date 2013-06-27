@@ -264,28 +264,28 @@ YUV2RGBFUNC(yuva2rgba_c, uint32_t, 1)
     PUTRGBA(dst_2, py_2, pa_2, 0, 24);
 
     LOADCHROMA(1);
-    PUTRGBA(dst_2, py_2, pa_1, 1, 24);
-    PUTRGBA(dst_1, py_1, pa_2, 1, 24);
+    PUTRGBA(dst_2, py_2, pa_2, 1, 24);
+    PUTRGBA(dst_1, py_1, pa_1, 1, 24);
 
     LOADCHROMA(2);
     PUTRGBA(dst_1, py_1, pa_1, 2, 24);
     PUTRGBA(dst_2, py_2, pa_2, 2, 24);
 
     LOADCHROMA(3);
-    PUTRGBA(dst_2, py_2, pa_1, 3, 24);
-    PUTRGBA(dst_1, py_1, pa_2, 3, 24);
-    pa_1 += 8; \
-    pa_2 += 8; \
+    PUTRGBA(dst_2, py_2, pa_2, 3, 24);
+    PUTRGBA(dst_1, py_1, pa_1, 3, 24);
+    pa_1 += 8;
+    pa_2 += 8;
 ENDYUV2RGBLINE(8, 0)
     LOADCHROMA(0);
     PUTRGBA(dst_1, py_1, pa_1, 0, 24);
     PUTRGBA(dst_2, py_2, pa_2, 0, 24);
 
     LOADCHROMA(1);
-    PUTRGBA(dst_2, py_2, pa_1, 1, 24);
-    PUTRGBA(dst_1, py_1, pa_2, 1, 24);
-    pa_1 += 4; \
-    pa_2 += 4; \
+    PUTRGBA(dst_2, py_2, pa_2, 1, 24);
+    PUTRGBA(dst_1, py_1, pa_1, 1, 24);
+    pa_1 += 4;
+    pa_2 += 4;
 ENDYUV2RGBLINE(8, 1)
     LOADCHROMA(0);
     PUTRGBA(dst_1, py_1, pa_1, 0, 24);
@@ -308,8 +308,8 @@ YUV2RGBFUNC(yuva2argb_c, uint32_t, 1)
     LOADCHROMA(3);
     PUTRGBA(dst_2, py_2, pa_2, 3, 0);
     PUTRGBA(dst_1, py_1, pa_1, 3, 0);
-    pa_1 += 8; \
-    pa_2 += 8; \
+    pa_1 += 8;
+    pa_2 += 8;
 ENDYUV2RGBLINE(8, 0)
     LOADCHROMA(0);
     PUTRGBA(dst_1, py_1, pa_1, 0, 0);
@@ -318,8 +318,8 @@ ENDYUV2RGBLINE(8, 0)
     LOADCHROMA(1);
     PUTRGBA(dst_2, py_2, pa_2, 1, 0);
     PUTRGBA(dst_1, py_1, pa_1, 1, 0);
-    pa_1 += 4; \
-    pa_2 += 4; \
+    pa_1 += 4;
+    pa_2 += 4;
 ENDYUV2RGBLINE(8, 1)
     LOADCHROMA(0);
     PUTRGBA(dst_1, py_1, pa_1, 0, 0);
@@ -882,7 +882,8 @@ av_cold int ff_yuv2rgb_c_init_tables(SwsContext *c, const int inv_table[4],
         break;
     default:
         c->yuvTable = NULL;
-        av_log(c, AV_LOG_ERROR, "%ibpp not supported by yuv2rgb\n", bpp);
+        if(!isPlanar(c->dstFormat) || bpp <= 24)
+            av_log(c, AV_LOG_ERROR, "%ibpp not supported by yuv2rgb\n", bpp);
         return -1;
     }
     return 0;

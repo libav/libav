@@ -25,6 +25,7 @@
  */
 
 #include "avfilter.h"
+#include "thread.h"
 
 #if !FF_API_AVFILTERPAD_PUBLIC
 /**
@@ -117,6 +118,17 @@ struct AVFilterPad {
 };
 #endif
 
+struct AVFilterGraphInternal {
+    void *thread;
+    int (*thread_execute)(AVFilterContext *ctx, action_func *func, void *arg,
+                          int *ret, int nb_jobs);
+};
+
+struct AVFilterInternal {
+    int (*execute)(AVFilterContext *ctx, action_func *func, void *arg,
+                   int *ret, int nb_jobs);
+};
+
 /** default handler for freeing audio/video buffer when there are no references left */
 void ff_avfilter_default_free_buffer(AVFilterBuffer *buf);
 
@@ -195,5 +207,20 @@ int ff_request_frame(AVFilterLink *link);
  * is responsible for unreferencing frame in case of error.
  */
 int ff_filter_frame(AVFilterLink *link, AVFrame *frame);
+
+/**
+ * Allocate a new filter context and return it.
+ *
+ * @param filter what filter to create an instance of
+ * @param inst_name name to give to the new filter context
+ *
+ * @return newly created filter context or NULL on failure
+ */
+AVFilterContext *ff_filter_alloc(const AVFilter *filter, const char *inst_name);
+
+/**
+ * Remove a filter from a graph;
+ */
+void ff_filter_graph_remove_filter(AVFilterGraph *graph, AVFilterContext *filter);
 
 #endif /* AVFILTER_INTERNAL_H */

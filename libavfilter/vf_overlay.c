@@ -34,6 +34,7 @@
 #include "libavutil/pixdesc.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/mathematics.h"
+#include "libavutil/opt.h"
 #include "internal.h"
 #include "video.h"
 
@@ -63,29 +64,17 @@ enum var_name {
 #define OVERLAY 1
 
 typedef struct {
+    const AVClass *class;
     int x, y;                   ///< position of overlayed picture
 
     int max_plane_step[4];      ///< steps per pixel for each plane
     int hsub, vsub;             ///< chroma subsampling values
 
-    char x_expr[256], y_expr[256];
+    char *x_expr, *y_expr;
 
     AVFrame *main;
     AVFrame *over_prev, *over_next;
 } OverlayContext;
-
-static av_cold int init(AVFilterContext *ctx, const char *args)
-{
-    OverlayContext *over = ctx->priv;
-
-    av_strlcpy(over->x_expr, "0", sizeof(over->x_expr));
-    av_strlcpy(over->y_expr, "0", sizeof(over->y_expr));
-
-    if (args)
-        sscanf(args, "%255[^:]:%255[^:]", over->x_expr, over->y_expr);
-
-    return 0;
-}
 
 static av_cold void uninit(AVFilterContext *ctx)
 {
@@ -112,12 +101,12 @@ static int query_formats(AVFilterContext *ctx)
 
 static int config_input_main(AVFilterLink *inlink)
 {
-    OverlayContext *over = inlink->dst->priv;
+    OverlayContext *s = inlink->dst->priv;
     const AVPixFmtDescriptor *pix_desc = av_pix_fmt_desc_get(inlink->format);
 
-    av_image_fill_max_pixsteps(over->max_plane_step, NULL, pix_desc);
-    over->hsub = pix_desc->log2_chroma_w;
-    over->vsub = pix_desc->log2_chroma_h;
+    av_image_fill_max_pixsteps(s->max_plane_step, NULL, pix_desc);
+    s->hsub = pix_desc->log2_chroma_w;
+    s->vsub = pix_desc->log2_chroma_h;
 
     return 0;
 }
@@ -125,7 +114,7 @@ static int config_input_main(AVFilterLink *inlink)
 static int config_input_overlay(AVFilterLink *inlink)
 {
     AVFilterContext *ctx  = inlink->dst;
-    OverlayContext  *over = inlink->dst->priv;
+    OverlayContext  *s = inlink->dst->priv;
     char *expr;
     double var_values[VAR_VARS_NB], res;
     int ret;
@@ -141,36 +130,36 @@ static int config_input_overlay(AVFilterLink *inlink)
     var_values[VAR_OVERLAY_W] = var_values[VAR_OW] = ctx->inputs[OVERLAY]->w;
     var_values[VAR_OVERLAY_H] = var_values[VAR_OH] = ctx->inputs[OVERLAY]->h;
 
-    if ((ret = av_expr_parse_and_eval(&res, (expr = over->x_expr), var_names, var_values,
+    if ((ret = av_expr_parse_and_eval(&res, (expr = s->x_expr), var_names, var_values,
                                       NULL, NULL, NULL, NULL, NULL, 0, ctx)) < 0)
         goto fail;
-    over->x = res;
-    if ((ret = av_expr_parse_and_eval(&res, (expr = over->y_expr), var_names, var_values,
+    s->x = res;
+    if ((ret = av_expr_parse_and_eval(&res, (expr = s->y_expr), var_names, var_values,
                                       NULL, NULL, NULL, NULL, NULL, 0, ctx)))
         goto fail;
-    over->y = res;
+    s->y = res;
     /* x may depend on y */
-    if ((ret = av_expr_parse_and_eval(&res, (expr = over->x_expr), var_names, var_values,
+    if ((ret = av_expr_parse_and_eval(&res, (expr = s->x_expr), var_names, var_values,
                                       NULL, NULL, NULL, NULL, NULL, 0, ctx)) < 0)
         goto fail;
-    over->x = res;
+    s->x = res;
 
     av_log(ctx, AV_LOG_VERBOSE,
            "main w:%d h:%d fmt:%s overlay x:%d y:%d w:%d h:%d fmt:%s\n",
            ctx->inputs[MAIN]->w, ctx->inputs[MAIN]->h,
            av_get_pix_fmt_name(ctx->inputs[MAIN]->format),
-           over->x, over->y,
+           s->x, s->y,
            ctx->inputs[OVERLAY]->w, ctx->inputs[OVERLAY]->h,
            av_get_pix_fmt_name(ctx->inputs[OVERLAY]->format));
 
-    if (over->x < 0 || over->y < 0 ||
-        over->x + var_values[VAR_OVERLAY_W] > var_values[VAR_MAIN_W] ||
-        over->y + var_values[VAR_OVERLAY_H] > var_values[VAR_MAIN_H]) {
+    if (s->x < 0 || s->y < 0 ||
+        s->x + var_values[VAR_OVERLAY_W] > var_values[VAR_MAIN_W] ||
+        s->y + var_values[VAR_OVERLAY_H] > var_values[VAR_MAIN_H]) {
         av_log(ctx, AV_LOG_ERROR,
                "Overlay area (%d,%d)<->(%d,%d) not within the main area (0,0)<->(%d,%d) or zero-sized\n",
-               over->x, over->y,
-               (int)(over->x + var_values[VAR_OVERLAY_W]),
-               (int)(over->y + var_values[VAR_OVERLAY_H]),
+               s->x, s->y,
+               (int)(s->x + var_values[VAR_OVERLAY_W]),
+               (int)(s->y + var_values[VAR_OVERLAY_H]),
                (int)var_values[VAR_MAIN_W], (int)var_values[VAR_MAIN_H]);
         return AVERROR(EINVAL);
     }
@@ -197,7 +186,7 @@ static void blend_frame(AVFilterContext *ctx,
                         AVFrame *dst, AVFrame *src,
                         int x, int y)
 {
-    OverlayContext *over = ctx->priv;
+    OverlayContext *s = ctx->priv;
     int i, j, k;
     int width, height;
     int overlay_end_y = y + src->height;
@@ -229,8 +218,8 @@ static void blend_frame(AVFilterContext *ctx,
         }
     } else {
         for (i = 0; i < 3; i++) {
-            int hsub = i ? over->hsub : 0;
-            int vsub = i ? over->vsub : 0;
+            int hsub = i ? s->hsub : 0;
+            int vsub = i ? s->vsub : 0;
             uint8_t *dp = dst->data[i] + (x >> hsub) +
                 (start_y >> vsub) * dst->linesize[i];
             uint8_t *sp = src->data[i];
@@ -358,6 +347,23 @@ static int request_frame(AVFilterLink *outlink)
     return output_frame(ctx);
 }
 
+#define OFFSET(x) offsetof(OverlayContext, x)
+#define FLAGS AV_OPT_FLAG_VIDEO_PARAM
+static const AVOption options[] = {
+    { "x", "Horizontal position of the left edge of the overlaid video on the "
+        "main video.",          OFFSET(x_expr), AV_OPT_TYPE_STRING, { .str = "0" }, .flags = FLAGS },
+    { "y", "Vertical position of the top edge of the overlaid video on the "
+        "main video.",          OFFSET(y_expr), AV_OPT_TYPE_STRING, { .str = "0" }, .flags = FLAGS },
+    { NULL },
+};
+
+static const AVClass overlay_class = {
+    .class_name = "overlay",
+    .item_name  = av_default_item_name,
+    .option     = options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
+
 static const AVFilterPad avfilter_vf_overlay_inputs[] = {
     {
         .name         = "main",
@@ -391,10 +397,10 @@ AVFilter avfilter_vf_overlay = {
     .name      = "overlay",
     .description = NULL_IF_CONFIG_SMALL("Overlay a video source on top of the input."),
 
-    .init      = init,
     .uninit    = uninit,
 
     .priv_size = sizeof(OverlayContext),
+    .priv_class = &overlay_class,
 
     .query_formats = query_formats,
 

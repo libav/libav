@@ -31,7 +31,6 @@
 #include <assert.h>
 #include "config.h"
 #include "libavutil/common.h"
-#include "dsputil.h"
 
 /**
  * fill a rectangle.
@@ -47,7 +46,6 @@ static av_always_inline void fill_rectangle(void *vp, int w, int h, int stride, 
     w      *= size;
     stride *= size;
 
-    assert((((long)vp)&(FFMIN(w, STRIDE_ALIGN)-1)) == 0);
     assert((stride&(w-1))==0);
     if(w==2){
         const uint16_t v= size==4 ? val : val*0x0101;

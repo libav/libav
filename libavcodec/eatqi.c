@@ -28,7 +28,6 @@
 
 #include "avcodec.h"
 #include "get_bits.h"
-#include "dsputil.h"
 #include "aandcttab.h"
 #include "eaidct.h"
 #include "internal.h"
@@ -39,7 +38,7 @@ typedef struct TqiContext {
     MpegEncContext s;
     void *bitstream_buf;
     unsigned int bitstream_buf_size;
-    DECLARE_ALIGNED(16, DCTELEM, block)[6][64];
+    DECLARE_ALIGNED(16, int16_t, block)[6][64];
 } TqiContext;
 
 static av_cold int tqi_decode_init(AVCodecContext *avctx)
@@ -57,7 +56,7 @@ static av_cold int tqi_decode_init(AVCodecContext *avctx)
     return 0;
 }
 
-static int tqi_decode_mb(MpegEncContext *s, DCTELEM (*block)[64])
+static int tqi_decode_mb(MpegEncContext *s, int16_t (*block)[64])
 {
     int n;
     s->dsp.clear_blocks(block[0]);
@@ -68,7 +67,7 @@ static int tqi_decode_mb(MpegEncContext *s, DCTELEM (*block)[64])
     return 0;
 }
 
-static inline void tqi_idct_put(TqiContext *t, AVFrame *frame, DCTELEM (*block)[64])
+static inline void tqi_idct_put(TqiContext *t, AVFrame *frame, int16_t (*block)[64])
 {
     MpegEncContext *s = &t->s;
     int linesize = frame->linesize[0];

@@ -26,7 +26,7 @@
 #include "avcodec.h"
 #include "bytestream.h"
 #include "internal.h"
-
+#include "h264chroma.h"
 #include "vp56.h"
 #include "vp56data.h"
 
@@ -263,7 +263,7 @@ static VP56mb vp56_decode_mv(VP56Context *s, int row, int col)
 
 static void vp56_add_predictors_dc(VP56Context *s, VP56Frame ref_frame)
 {
-    int idx = s->scantable.permutated[0];
+    int idx = s->idct_scantable[0];
     int b;
 
     for (b=0; b<6; b++) {
@@ -349,9 +349,9 @@ static void vp56_mc(VP56Context *s, int b, int plane, uint8_t *src,
     } else if (deblock_filtering) {
         /* only need a 12x12 block, but there is no such dsp function, */
         /* so copy a 16x12 block */
-        s->dsp.put_pixels_tab[0][0](s->edge_emu_buffer,
-                                    src + s->block_offset[b] + (dy-2)*stride + (dx-2),
-                                    stride, 12);
+        s->hdsp.put_pixels_tab[0][0](s->edge_emu_buffer,
+                                     src + s->block_offset[b] + (dy-2)*stride + (dx-2),
+                                     stride, 12);
         src_block = s->edge_emu_buffer;
         src_offset = 2 + 2*stride;
     } else {
@@ -372,11 +372,11 @@ static void vp56_mc(VP56Context *s, int b, int plane, uint8_t *src,
             s->filter(s, dst, src_block, src_offset, src_offset+overlap_offset,
                       stride, s->mv[b], mask, s->filter_selection, b<4);
         else
-            s->dsp.put_no_rnd_pixels_l2[1](dst, src_block+src_offset,
+            s->vp3dsp.put_no_rnd_pixels_l2(dst, src_block+src_offset,
                                            src_block+src_offset+overlap_offset,
                                            stride, 8);
     } else {
-        s->dsp.put_pixels_tab[1][0](dst, src_block+src_offset, stride, 8);
+        s->hdsp.put_pixels_tab[1][0](dst, src_block+src_offset, stride, 8);
     }
 }
 
@@ -392,8 +392,6 @@ static void vp56_decode_mb(VP56Context *s, int row, int col, int is_alpha)
     else
         mb_type = vp56_decode_mv(s, row, col);
     ref_frame = vp56_reference_frame[mb_type];
-
-    s->dsp.clear_blocks(*s->block_coeff);
 
     s->parse_coeff(s);
 
@@ -421,9 +419,9 @@ static void vp56_decode_mb(VP56Context *s, int row, int col, int is_alpha)
             for (b=0; b<b_max; b++) {
                 plane = ff_vp56_b2p[b+ab];
                 off = s->block_offset[b];
-                s->dsp.put_pixels_tab[1][0](frame_current->data[plane] + off,
-                                            frame_ref->data[plane] + off,
-                                            s->stride[plane], 8);
+                s->hdsp.put_pixels_tab[1][0](frame_current->data[plane] + off,
+                                             frame_ref->data[plane] + off,
+                                             s->stride[plane], 8);
                 s->vp3dsp.idct_add(frame_current->data[plane] + off,
                                 s->stride[plane], s->block_coeff[b]);
             }
@@ -446,6 +444,11 @@ static void vp56_decode_mb(VP56Context *s, int row, int col, int is_alpha)
                                 s->stride[plane], s->block_coeff[b]);
             }
             break;
+    }
+
+    if (is_alpha) {
+        s->block_coeff[4][0] = 0;
+        s->block_coeff[5][0] = 0;
     }
 }
 
@@ -653,12 +656,16 @@ av_cold int ff_vp56_init(AVCodecContext *avctx, int flip, int has_alpha)
     s->avctx = avctx;
     avctx->pix_fmt = has_alpha ? AV_PIX_FMT_YUVA420P : AV_PIX_FMT_YUV420P;
 
-    ff_dsputil_init(&s->dsp, avctx);
+    ff_h264chroma_init(&s->h264chroma, 8);
+    ff_hpeldsp_init(&s->hdsp, avctx->flags);
     ff_videodsp_init(&s->vdsp, 8);
     ff_vp3dsp_init(&s->vp3dsp, avctx->flags);
     ff_vp56dsp_init(&s->vp56dsp, avctx->codec->id);
-    ff_init_scantable_permutation(s->dsp.idct_permutation, s->vp3dsp.idct_perm);
-    ff_init_scantable(s->dsp.idct_permutation, &s->scantable,ff_zigzag_direct);
+    for (i = 0; i < 64; i++) {
+#define T(x) (x >> 3) | ((x & 7) << 3)
+        s->idct_scantable[i] = T(ff_zigzag_direct[i]);
+#undef T
+    }
 
     for (i = 0; i < FF_ARRAY_ELEMS(s->frames); i++) {
         s->frames[i] = av_frame_alloc();

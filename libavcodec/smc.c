@@ -402,7 +402,7 @@ static void smc_decode_stream(SmcContext *s)
             break;
 
         case 0xF0:
-            av_log_missing_feature(s->avctx, "0xF0 opcode", 1);
+            avpriv_request_sample(s->avctx, "0xF0 opcode");
             break;
         }
     }
@@ -417,7 +417,7 @@ static av_cold int smc_decode_init(AVCodecContext *avctx)
     s->avctx = avctx;
     avctx->pix_fmt = AV_PIX_FMT_PAL8;
 
-    s->frame.data[0] = NULL;
+    avcodec_get_frame_defaults(&s->frame);
 
     return 0;
 }

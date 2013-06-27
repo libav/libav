@@ -106,6 +106,8 @@ static av_cold int zerocodec_decode_close(AVCodecContext *avctx)
 {
     ZeroCodecContext *zc = avctx->priv_data;
 
+    av_frame_unref(&zc->previous_frame);
+
     inflateEnd(&zc->zstream);
 
     return 0;

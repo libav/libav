@@ -248,7 +248,7 @@ void av_register_all(void)
     REGISTER_DEMUXER (WSAUD,            wsaud);
     REGISTER_DEMUXER (WSVQA,            wsvqa);
     REGISTER_DEMUXER (WTV,              wtv);
-    REGISTER_DEMUXER (WV,               wv);
+    REGISTER_MUXDEMUX(WV,               wv);
     REGISTER_DEMUXER (XA,               xa);
     REGISTER_DEMUXER (XMV,              xmv);
     REGISTER_DEMUXER (XWMA,             xwma);
@@ -256,9 +256,6 @@ void av_register_all(void)
     REGISTER_MUXDEMUX(YUV4MPEGPIPE,     yuv4mpegpipe);
 
     /* protocols */
-#if FF_API_APPLEHTTP_PROTO
-    REGISTER_PROTOCOL(APPLEHTTP,        applehttp);
-#endif
     REGISTER_PROTOCOL(CONCAT,           concat);
     REGISTER_PROTOCOL(CRYPTO,           crypto);
     REGISTER_PROTOCOL(FFRTMPCRYPT,      ffrtmpcrypt);

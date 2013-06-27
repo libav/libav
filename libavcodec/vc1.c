@@ -27,8 +27,8 @@
  *
  */
 
+#include "libavutil/attributes.h"
 #include "internal.h"
-#include "dsputil.h"
 #include "avcodec.h"
 #include "mpegvideo.h"
 #include "vc1.h"
@@ -570,6 +570,52 @@ int ff_vc1_decode_entry_point(AVCodecContext *avctx, VC1Context *v, GetBitContex
     return 0;
 }
 
+/* fill lookup tables for intensity compensation */
+#define INIT_LUT(lumscale, lumshift, luty, lutuv, chain) do {                 \
+        int scale, shift, i;                                                  \
+        if (!lumscale) {                                                      \
+            scale = -64;                                                      \
+            shift = (255 - lumshift * 2) << 6;                                \
+            if (lumshift > 31)                                                \
+                shift += 128 << 6;                                            \
+        } else {                                                              \
+            scale = lumscale + 32;                                            \
+            if (lumshift > 31)                                                \
+                shift = (lumshift - 64) << 6;                                 \
+            else                                                              \
+                shift = lumshift << 6;                                        \
+        }                                                                     \
+        for (i = 0; i < 256; i++) {                                           \
+            int iy = chain ? luty[i]  : i;                                    \
+            int iu = chain ? lutuv[i] : i;                                    \
+            luty[i]  = av_clip_uint8((scale * iy + shift + 32) >> 6);         \
+            lutuv[i] = av_clip_uint8((scale * (iu - 128) + 128*64 + 32) >> 6);\
+        }                                                                     \
+    } while(0)
+
+static void rotate_luts(VC1Context *v)
+{
+#define ROTATE(DEF, L, N, C, A) do {                          \
+        if (v->s.pict_type == AV_PICTURE_TYPE_BI || v->s.pict_type == AV_PICTURE_TYPE_B) { \
+            C = A;                                            \
+        } else {                                              \
+            DEF;                                              \
+            memcpy(&tmp, &L  , sizeof(tmp));                  \
+            memcpy(&L  , &N  , sizeof(tmp));                  \
+            memcpy(&N  , &tmp, sizeof(tmp));                  \
+            C = N;                                            \
+        }                                                     \
+    } while(0)
+
+    ROTATE(int tmp,             v->last_use_ic, v->next_use_ic, v->curr_use_ic, v->aux_use_ic);
+    ROTATE(uint8_t tmp[2][256], v->last_luty,   v->next_luty,   v->curr_luty,   v->aux_luty);
+    ROTATE(uint8_t tmp[2][256], v->last_lutuv,  v->next_lutuv,  v->curr_lutuv,  v->aux_lutuv);
+
+    INIT_LUT(32, 0, v->curr_luty[0], v->curr_lutuv[0], 0);
+    INIT_LUT(32, 0, v->curr_luty[1], v->curr_lutuv[1], 0);
+    v->curr_use_ic = 0;
+}
+
 int ff_vc1_parse_frame_header(VC1Context *v, GetBitContext* gb)
 {
     int pqindex, lowquant, status;
@@ -656,8 +702,8 @@ int ff_vc1_parse_frame_header(VC1Context *v, GetBitContext* gb)
             (v->s.pict_type == AV_PICTURE_TYPE_P) ? 'P' : ((v->s.pict_type == AV_PICTURE_TYPE_I) ? 'I' : 'B'),
             pqindex, v->pq, v->halfpq, v->rangeredfrm);
 
-    if (v->s.pict_type == AV_PICTURE_TYPE_I || v->s.pict_type == AV_PICTURE_TYPE_P)
-        v->use_ic = 0;
+    if (v->first_pic_header_flag)
+        rotate_luts(v);
 
     switch (v->s.pict_type) {
     case AV_PICTURE_TYPE_P:
@@ -668,28 +714,13 @@ int ff_vc1_parse_frame_header(VC1Context *v, GetBitContext* gb)
         lowquant = (v->pq > 12) ? 0 : 1;
         v->mv_mode = ff_vc1_mv_pmode_table[lowquant][get_unary(gb, 1, 4)];
         if (v->mv_mode == MV_PMODE_INTENSITY_COMP) {
-            int scale, shift, i;
             v->mv_mode2 = ff_vc1_mv_pmode_table2[lowquant][get_unary(gb, 1, 3)];
             v->lumscale = get_bits(gb, 6);
             v->lumshift = get_bits(gb, 6);
-            v->use_ic   = 1;
+            v->last_use_ic = 1;
             /* fill lookup tables for intensity compensation */
-            if (!v->lumscale) {
-                scale = -64;
-                shift = (255 - v->lumshift * 2) << 6;
-                if (v->lumshift > 31)
-                    shift += 128 << 6;
-            } else {
-                scale = v->lumscale + 32;
-                if (v->lumshift > 31)
-                    shift = (v->lumshift - 64) << 6;
-                else
-                    shift = v->lumshift << 6;
-            }
-            for (i = 0; i < 256; i++) {
-                v->luty[i]  = av_clip_uint8((scale * i + shift + 32) >> 6);
-                v->lutuv[i] = av_clip_uint8((scale * (i - 128) + 128*64 + 32) >> 6);
-            }
+            INIT_LUT(v->lumscale, v->lumshift, v->last_luty[0], v->last_lutuv[0], 1);
+            INIT_LUT(v->lumscale, v->lumshift, v->last_luty[1], v->last_lutuv[1], 1);
         }
         v->qs_last = v->s.quarter_sample;
         if (v->mv_mode == MV_PMODE_1MV_HPEL || v->mv_mode == MV_PMODE_1MV_HPEL_BILIN)
@@ -800,31 +831,12 @@ int ff_vc1_parse_frame_header(VC1Context *v, GetBitContext* gb)
     return 0;
 }
 
-/* fill lookup tables for intensity compensation */
-#define INIT_LUT(lumscale, lumshift, luty, lutuv)   \
-    if (!lumscale) {                                \
-        scale = -64;                                \
-        shift = (255 - lumshift * 2) << 6;          \
-        if (lumshift > 31)                          \
-            shift += 128 << 6;                      \
-    } else {                                        \
-        scale = lumscale + 32;                      \
-        if (lumshift > 31)                          \
-            shift = (lumshift - 64) << 6;           \
-        else                                        \
-            shift = lumshift << 6;                  \
-    }                                               \
-    for (i = 0; i < 256; i++) {                     \
-        luty[i]  = av_clip_uint8((scale * i + shift + 32) >> 6);           \
-        lutuv[i] = av_clip_uint8((scale * (i - 128) + 128*64 + 32) >> 6);  \
-    }
-
 int ff_vc1_parse_frame_header_adv(VC1Context *v, GetBitContext* gb)
 {
     int pqindex, lowquant;
     int status;
     int mbmodetab, imvtab, icbptab, twomvbptab, fourmvbptab; /* useful only for debugging */
-    int scale, shift, i; /* for initializing LUT for intensity compensation */
+    int field_mode, fcm;
 
     v->p_frame_skipped = 0;
     if (v->second_field) {
@@ -836,19 +848,20 @@ int ff_vc1_parse_frame_header_adv(VC1Context *v, GetBitContext* gb)
             goto parse_common_info;
     }
 
-    v->field_mode = 0;
+    field_mode = 0;
     if (v->interlace) {
-        v->fcm = decode012(gb);
-        if (v->fcm) {
-            if (v->fcm == ILACE_FIELD)
-                v->field_mode = 1;
-            if (!v->warn_interlaced++)
-                av_log(v->s.avctx, AV_LOG_ERROR,
-                       "Interlaced frames/fields support is incomplete\n");
+        fcm = decode012(gb);
+        if (fcm) {
+            if (fcm == ILACE_FIELD)
+                field_mode = 1;
         }
     } else {
-        v->fcm = PROGRESSIVE;
+        fcm = PROGRESSIVE;
     }
+    if (!v->first_pic_header_flag && v->field_mode != field_mode)
+        return AVERROR_INVALIDDATA;
+    v->field_mode = field_mode;
+    v->fcm = fcm;
 
     if (v->field_mode) {
         v->fptype = get_bits(gb, 3);
@@ -886,7 +899,7 @@ int ff_vc1_parse_frame_header_adv(VC1Context *v, GetBitContext* gb)
         }
     }
     if (v->panscanflag) {
-        av_log_missing_feature(v->s.avctx, "Pan-scan", 0);
+        avpriv_report_missing_feature(v->s.avctx, "Pan-scan");
         //...
     }
     if (v->p_frame_skipped) {
@@ -952,11 +965,11 @@ int ff_vc1_parse_frame_header_adv(VC1Context *v, GetBitContext* gb)
     if (v->postprocflag)
         v->postproc = get_bits(gb, 2);
 
-    if (v->s.pict_type == AV_PICTURE_TYPE_I || v->s.pict_type == AV_PICTURE_TYPE_P)
-        v->use_ic = 0;
-
     if (v->parse_only)
         return 0;
+
+    if (v->first_pic_header_flag)
+        rotate_luts(v);
 
     switch (v->s.pict_type) {
     case AV_PICTURE_TYPE_I:
@@ -1008,7 +1021,9 @@ int ff_vc1_parse_frame_header_adv(VC1Context *v, GetBitContext* gb)
                 if (v->intcomp) {
                     v->lumscale = get_bits(gb, 6);
                     v->lumshift = get_bits(gb, 6);
-                    INIT_LUT(v->lumscale, v->lumshift, v->luty, v->lutuv);
+                    INIT_LUT(v->lumscale, v->lumshift, v->last_luty[0], v->last_lutuv[0], 1);
+                    INIT_LUT(v->lumscale, v->lumshift, v->last_luty[1], v->last_lutuv[1], 1);
+                    v->last_use_ic = 1;
                 }
                 status = bitplane_decoding(v->s.mbskip_table, &v->skip_is_raw, v);
                 av_log(v->s.avctx, AV_LOG_DEBUG, "SKIPMB plane encoding: "
@@ -1051,17 +1066,38 @@ int ff_vc1_parse_frame_header_adv(VC1Context *v, GetBitContext* gb)
                 int mvmode2;
                 mvmode2 = get_unary(gb, 1, 3);
                 v->mv_mode2 = ff_vc1_mv_pmode_table2[lowquant][mvmode2];
-                if (v->field_mode)
-                    v->intcompfield = decode210(gb);
-                v->lumscale = get_bits(gb, 6);
-                v->lumshift = get_bits(gb, 6);
-                INIT_LUT(v->lumscale, v->lumshift, v->luty, v->lutuv);
-                if ((v->field_mode) && !v->intcompfield) {
+                if (v->field_mode) {
+                    v->intcompfield = decode210(gb) ^ 3;
+                } else
+                    v->intcompfield = 3;
+
+                v->lumscale2 = v->lumscale = 32;
+                v->lumshift2 = v->lumshift =  0;
+                if (v->intcompfield & 1) {
+                    v->lumscale = get_bits(gb, 6);
+                    v->lumshift = get_bits(gb, 6);
+                }
+                if ((v->intcompfield & 2) && v->field_mode) {
                     v->lumscale2 = get_bits(gb, 6);
                     v->lumshift2 = get_bits(gb, 6);
-                    INIT_LUT(v->lumscale2, v->lumshift2, v->luty2, v->lutuv2);
+                } else if(!v->field_mode) {
+                    v->lumscale2 = v->lumscale;
+                    v->lumshift2 = v->lumshift;
                 }
-                v->use_ic = 1;
+                if (v->field_mode && v->second_field) {
+                    if (v->cur_field_type) {
+                        INIT_LUT(v->lumscale , v->lumshift , v->curr_luty[v->cur_field_type^1], v->curr_lutuv[v->cur_field_type^1], 0);
+                        INIT_LUT(v->lumscale2, v->lumshift2, v->last_luty[v->cur_field_type  ], v->last_lutuv[v->cur_field_type  ], 1);
+                    } else {
+                        INIT_LUT(v->lumscale2, v->lumshift2, v->curr_luty[v->cur_field_type^1], v->curr_lutuv[v->cur_field_type^1], 0);
+                        INIT_LUT(v->lumscale , v->lumshift , v->last_luty[v->cur_field_type  ], v->last_lutuv[v->cur_field_type  ], 1);
+                    }
+                    v->next_use_ic = v->curr_use_ic = 1;
+                } else {
+                    INIT_LUT(v->lumscale , v->lumshift , v->last_luty[0], v->last_lutuv[0], 1);
+                    INIT_LUT(v->lumscale2, v->lumshift2, v->last_luty[1], v->last_lutuv[1], 1);
+                }
+                v->last_use_ic = 1;
             }
             v->qs_last = v->s.quarter_sample;
             if (v->mv_mode == MV_PMODE_1MV_HPEL || v->mv_mode == MV_PMODE_1MV_HPEL_BILIN)
@@ -1138,9 +1174,14 @@ int ff_vc1_parse_frame_header_adv(VC1Context *v, GetBitContext* gb)
         }
         break;
     case AV_PICTURE_TYPE_B:
-        // TODO: implement interlaced frame B picture decoding
-        if (v->fcm == ILACE_FRAME)
-            return -1;
+        if (v->fcm == ILACE_FRAME) {
+            v->bfraction_lut_index = get_vlc2(gb, ff_vc1_bfraction_vlc.table, VC1_BFRACTION_VLC_BITS, 1);
+            v->bfraction           = ff_vc1_bfraction_lut[v->bfraction_lut_index];
+            if (v->bfraction == 0) {
+                return -1;
+            }
+            return -1; // This codepath is still incomplete thus it is disabled
+        }
         if (v->extended_mv)
             v->mvrange = get_unary(gb, 0, 3);
         else
@@ -1186,6 +1227,38 @@ int ff_vc1_parse_frame_header_adv(VC1Context *v, GetBitContext* gb)
                 v->fourmvbp_vlc = &ff_vc1_4mv_block_pattern_vlc[fourmvbptab];
             }
             v->numref = 1; // interlaced field B pictures are always 2-ref
+        } else if (v->fcm == ILACE_FRAME) {
+            if (v->extended_dmv)
+                v->dmvrange = get_unary(gb, 0, 3);
+            if (get_bits1(gb)) /* intcomp - present but shall always be 0 */
+                av_log(v->s.avctx, AV_LOG_WARNING, "Intensity compensation set for B picture\n");
+            v->intcomp          = 0;
+            v->mv_mode          = MV_PMODE_1MV;
+            v->fourmvswitch     = 0;
+            v->qs_last          = v->s.quarter_sample;
+            v->s.quarter_sample = 1;
+            v->s.mspel          = 1;
+            status              = bitplane_decoding(v->direct_mb_plane, &v->dmb_is_raw, v);
+            if (status < 0)
+                return -1;
+            av_log(v->s.avctx, AV_LOG_DEBUG, "MB Direct Type plane encoding: "
+                   "Imode: %i, Invert: %i\n", status>>1, status&1);
+            status = bitplane_decoding(v->s.mbskip_table, &v->skip_is_raw, v);
+            if (status < 0)
+                return -1;
+            av_log(v->s.avctx, AV_LOG_DEBUG, "MB Skip plane encoding: "
+                   "Imode: %i, Invert: %i\n", status>>1, status&1);
+            mbmodetab       = get_bits(gb, 2);
+            v->mbmode_vlc   = &ff_vc1_intfr_non4mv_mbmode_vlc[mbmodetab];
+            imvtab          = get_bits(gb, 2);
+            v->imv_vlc      = &ff_vc1_1ref_mvdata_vlc[imvtab];
+            // interlaced p/b-picture cbpcy range is [1, 63]
+            icbptab         = get_bits(gb, 3);
+            v->cbpcy_vlc    = &ff_vc1_icbpcy_vlc[icbptab];
+            twomvbptab      = get_bits(gb, 2);
+            v->twomvbp_vlc  = &ff_vc1_2mv_block_pattern_vlc[twomvbptab];
+            fourmvbptab     = get_bits(gb, 2);
+            v->fourmvbp_vlc = &ff_vc1_4mv_block_pattern_vlc[fourmvbptab];
         } else {
             v->mv_mode          = get_bits1(gb) ? MV_PMODE_1MV : MV_PMODE_1MV_HPEL_BILIN;
             v->qs_last          = v->s.quarter_sample;
@@ -1485,7 +1558,7 @@ static const uint16_t vlc_offs[] = {
  * @param v The VC1Context to initialize
  * @return Status
  */
-int ff_vc1_init_common(VC1Context *v)
+av_cold int ff_vc1_init_common(VC1Context *v)
 {
     static int done = 0;
     int i = 0;

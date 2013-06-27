@@ -17,15 +17,16 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "audioconvert.h"
+#include "channel_layout.h"
 #include "buffer.h"
 #include "common.h"
+#include "dict.h"
 #include "frame.h"
 #include "imgutils.h"
 #include "mem.h"
 #include "samplefmt.h"
 
-void av_get_frame_defaults(AVFrame *frame)
+static void get_frame_defaults(AVFrame *frame)
 {
     if (frame->extended_data != frame->data)
         av_freep(&frame->extended_data);
@@ -46,7 +47,7 @@ AVFrame *av_frame_alloc(void)
     if (!frame)
         return NULL;
 
-    av_get_frame_defaults(frame);
+    get_frame_defaults(frame);
 
     return frame;
 }
@@ -87,16 +88,25 @@ static int get_video_buffer(AVFrame *frame, int align)
             h = -((-h) >> desc->log2_chroma_h);
 
         frame->buf[i] = av_buffer_alloc(frame->linesize[i] * h);
-        if (!frame->buf[i]) {
-            av_frame_unref(frame);
-            return AVERROR(ENOMEM);
-        }
+        if (!frame->buf[i])
+            goto fail;
 
         frame->data[i] = frame->buf[i]->data;
     }
+    if (desc->flags & AV_PIX_FMT_FLAG_PAL || desc->flags & AV_PIX_FMT_FLAG_PSEUDOPAL) {
+        av_buffer_unref(&frame->buf[1]);
+        frame->buf[1] = av_buffer_alloc(1024);
+        if (!frame->buf[1])
+            goto fail;
+        frame->data[1] = frame->buf[1]->data;
+    }
+
     frame->extended_data = frame->data;
 
     return 0;
+fail:
+    av_frame_unref(frame);
+    return AVERROR(ENOMEM);
 }
 
 static int get_audio_buffer(AVFrame *frame, int align)
@@ -234,7 +244,9 @@ int av_frame_ref(AVFrame *dst, AVFrame *src)
             goto fail;
         }
         memcpy(dst->extended_data, src->extended_data, sizeof(*src->extended_data) * ch);
-    }
+    } else
+        dst->extended_data = dst->data;
+
     memcpy(dst->data,     src->data,     sizeof(src->data));
     memcpy(dst->linesize, src->linesize, sizeof(src->linesize));
 
@@ -264,6 +276,7 @@ void av_frame_unref(AVFrame *frame)
 
     for (i = 0; i < frame->nb_side_data; i++) {
         av_freep(&frame->side_data[i]->data);
+        av_dict_free(&frame->side_data[i]->metadata);
         av_freep(&frame->side_data[i]);
     }
     av_freep(&frame->side_data);
@@ -273,7 +286,7 @@ void av_frame_unref(AVFrame *frame)
     for (i = 0; i < frame->nb_extended_buf; i++)
         av_buffer_unref(&frame->extended_buf[i]);
     av_freep(&frame->extended_buf);
-    av_get_frame_defaults(frame);
+    get_frame_defaults(frame);
 }
 
 void av_frame_move_ref(AVFrame *dst, AVFrame *src)
@@ -282,7 +295,7 @@ void av_frame_move_ref(AVFrame *dst, AVFrame *src)
     if (src->extended_data == src->data)
         dst->extended_data = dst->data;
     memset(src, 0, sizeof(*src));
-    av_get_frame_defaults(src);
+    get_frame_defaults(src);
 }
 
 int av_frame_is_writable(AVFrame *frame)
@@ -354,15 +367,20 @@ int av_frame_copy_props(AVFrame *dst, const AVFrame *src)
     dst->pict_type           = src->pict_type;
     dst->sample_aspect_ratio = src->sample_aspect_ratio;
     dst->pts                 = src->pts;
+    dst->repeat_pict         = src->repeat_pict;
     dst->interlaced_frame    = src->interlaced_frame;
     dst->top_field_first     = src->top_field_first;
+    dst->palette_has_changed = src->palette_has_changed;
     dst->sample_rate         = src->sample_rate;
     dst->opaque              = src->opaque;
     dst->pkt_pts             = src->pkt_pts;
     dst->pkt_dts             = src->pkt_dts;
+    dst->reordered_opaque    = src->reordered_opaque;
     dst->quality             = src->quality;
     dst->coded_picture_number = src->coded_picture_number;
     dst->display_picture_number = src->display_picture_number;
+
+    memcpy(dst->error, src->error, sizeof(dst->error));
 
     for (i = 0; i < src->nb_side_data; i++) {
         const AVFrameSideData *sd_src = src->side_data[i];
@@ -372,11 +390,13 @@ int av_frame_copy_props(AVFrame *dst, const AVFrame *src)
             for (i = 0; i < dst->nb_side_data; i++) {
                 av_freep(&dst->side_data[i]->data);
                 av_freep(&dst->side_data[i]);
+                av_dict_free(&dst->side_data[i]->metadata);
             }
             av_freep(&dst->side_data);
             return AVERROR(ENOMEM);
         }
         memcpy(sd_dst->data, sd_src->data, sd_src->size);
+        av_dict_copy(&sd_dst->metadata, sd_src->metadata, 0);
     }
 
     return 0;

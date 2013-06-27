@@ -20,6 +20,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "error_resilience.h"
 #include "internal.h"
 #include "mpegvideo.h"
 #include "mpeg4video.h"
@@ -51,7 +52,7 @@ static const int mb_type_b_map[4]= {
  * @param n block index (0-3 are luma, 4-5 are chroma)
  * @param dir the ac prediction direction
  */
-void ff_mpeg4_pred_ac(MpegEncContext * s, DCTELEM *block, int n,
+void ff_mpeg4_pred_ac(MpegEncContext * s, int16_t *block, int n,
                       int dir)
 {
     int i;
@@ -378,10 +379,8 @@ int ff_mpeg4_decode_video_packet_header(MpegEncContext *s)
         int mb_x = 0, mb_y = 0;
 
         while (s->next_picture.mbskip_table[s->mb_index2xy[mb_num]]) {
-            if (!mb_x) {
-                s->next_picture_ptr->tf.f = &s->next_picture_ptr->f;
+            if (!mb_x)
                 ff_thread_await_progress(&s->next_picture_ptr->tf, mb_y++, 0);
-            }
             mb_num++;
             if (++mb_x == s->mb_width) mb_x = 0;
         }
@@ -799,13 +798,13 @@ int ff_mpeg4_decode_partitions(MpegEncContext *s)
 
     mb_num= mpeg4_decode_partition_a(s);
     if(mb_num<0){
-        ff_er_add_slice(s, s->resync_mb_x, s->resync_mb_y, s->mb_x, s->mb_y, part_a_error);
+        ff_er_add_slice(&s->er, s->resync_mb_x, s->resync_mb_y, s->mb_x, s->mb_y, part_a_error);
         return -1;
     }
 
     if(s->resync_mb_x + s->resync_mb_y*s->mb_width + mb_num > s->mb_num){
         av_log(s->avctx, AV_LOG_ERROR, "slice below monitor ...\n");
-        ff_er_add_slice(s, s->resync_mb_x, s->resync_mb_y, s->mb_x, s->mb_y, part_a_error);
+        ff_er_add_slice(&s->er, s->resync_mb_x, s->resync_mb_y, s->mb_x, s->mb_y, part_a_error);
         return -1;
     }
 
@@ -826,15 +825,15 @@ int ff_mpeg4_decode_partitions(MpegEncContext *s)
             return -1;
         }
     }
-    ff_er_add_slice(s, s->resync_mb_x, s->resync_mb_y, s->mb_x-1, s->mb_y, part_a_end);
+    ff_er_add_slice(&s->er, s->resync_mb_x, s->resync_mb_y, s->mb_x-1, s->mb_y, part_a_end);
 
     if( mpeg4_decode_partition_b(s, mb_num) < 0){
         if(s->pict_type==AV_PICTURE_TYPE_P)
-            ff_er_add_slice(s, s->resync_mb_x, s->resync_mb_y, s->mb_x, s->mb_y, ER_DC_ERROR);
+            ff_er_add_slice(&s->er, s->resync_mb_x, s->resync_mb_y, s->mb_x, s->mb_y, ER_DC_ERROR);
         return -1;
     }else{
         if(s->pict_type==AV_PICTURE_TYPE_P)
-            ff_er_add_slice(s, s->resync_mb_x, s->resync_mb_y, s->mb_x-1, s->mb_y, ER_DC_END);
+            ff_er_add_slice(&s->er, s->resync_mb_x, s->resync_mb_y, s->mb_x-1, s->mb_y, ER_DC_END);
     }
 
     return 0;
@@ -844,7 +843,7 @@ int ff_mpeg4_decode_partitions(MpegEncContext *s)
  * Decode a block.
  * @return <0 if an error occurred
  */
-static inline int mpeg4_decode_block(MpegEncContext * s, DCTELEM * block,
+static inline int mpeg4_decode_block(MpegEncContext * s, int16_t * block,
                               int n, int coded, int intra, int rvlc)
 {
     int level, i, last, run;
@@ -1068,7 +1067,7 @@ static inline int mpeg4_decode_block(MpegEncContext * s, DCTELEM * block,
  * decode partition C of one MB.
  * @return <0 if an error occurred
  */
-static int mpeg4_decode_partitioned_mb(MpegEncContext *s, DCTELEM block[6][64])
+static int mpeg4_decode_partitioned_mb(MpegEncContext *s, int16_t block[6][64])
 {
     int cbp, mb_type;
     const int xy= s->mb_x + s->mb_y*s->mb_stride;
@@ -1151,7 +1150,7 @@ static int mpeg4_decode_partitioned_mb(MpegEncContext *s, DCTELEM block[6][64])
 }
 
 static int mpeg4_decode_mb(MpegEncContext *s,
-                      DCTELEM block[6][64])
+                      int16_t block[6][64])
 {
     int cbpc, cbpy, i, cbp, pred_x, pred_y, mx, my, dquant;
     int16_t *mot_val;
@@ -1292,7 +1291,6 @@ static int mpeg4_decode_mb(MpegEncContext *s,
                 s->last_mv[i][1][1]= 0;
             }
 
-            s->next_picture_ptr->tf.f = &s->next_picture_ptr->f;
             ff_thread_await_progress(&s->next_picture_ptr->tf, s->mb_y, 0);
         }
 
@@ -1475,7 +1473,6 @@ end:
             const int delta= s->mb_x + 1 == s->mb_width ? 2 : 1;
 
             if (s->pict_type == AV_PICTURE_TYPE_B && s->next_picture.mbskip_table[xy + delta]) {
-                s->next_picture_ptr->tf.f = &s->next_picture_ptr->f;
                 ff_thread_await_progress(&s->next_picture_ptr->tf,
                                         (s->mb_x + delta >= s->mb_width) ? FFMIN(s->mb_y+1, s->mb_height-1) : s->mb_y, 0);
             }
@@ -2245,12 +2242,6 @@ static av_cold int decode_init(AVCodecContext *avctx)
     return 0;
 }
 
-static av_cold int init_thread_copy(AVCodecContext *avctx)
-{
-    avctx->internal->allocate_progress = 1;
-    return 0;
-}
-
 static const AVProfile mpeg4_video_profiles[] = {
     { FF_PROFILE_MPEG4_SIMPLE,                    "Simple Profile" },
     { FF_PROFILE_MPEG4_SIMPLE_SCALABLE,           "Simple Scalable Profile" },
@@ -2283,10 +2274,9 @@ AVCodec ff_mpeg4_decoder = {
                              CODEC_CAP_FRAME_THREADS,
     .flush                 = ff_mpeg_flush,
     .long_name             = NULL_IF_CONFIG_SMALL("MPEG-4 part 2"),
-    .pix_fmts              = ff_hwaccel_pixfmt_list_420,
+    .pix_fmts              = ff_h263_hwaccel_pixfmt_list_420,
     .profiles              = NULL_IF_CONFIG_SMALL(mpeg4_video_profiles),
     .update_thread_context = ONLY_IF_THREADS_ENABLED(ff_mpeg_update_thread_context),
-    .init_thread_copy      = ONLY_IF_THREADS_ENABLED(init_thread_copy),
 };
 
 

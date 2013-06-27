@@ -23,13 +23,14 @@
 
 /**
  * @file
+ * @ingroup lavfi
  * Libavfilter version macros
  */
 
 #include "libavutil/avutil.h"
 
 #define LIBAVFILTER_VERSION_MAJOR  3
-#define LIBAVFILTER_VERSION_MINOR  3
+#define LIBAVFILTER_VERSION_MINOR  10
 #define LIBAVFILTER_VERSION_MICRO  0
 
 #define LIBAVFILTER_VERSION_INT AV_VERSION_INT(LIBAVFILTER_VERSION_MAJOR, \
@@ -54,6 +55,18 @@
 #endif
 #ifndef FF_API_AVFILTERBUFFER
 #define FF_API_AVFILTERBUFFER               (LIBAVFILTER_VERSION_MAJOR < 4)
+#endif
+#ifndef FF_API_OLD_FILTER_OPTS
+#define FF_API_OLD_FILTER_OPTS              (LIBAVFILTER_VERSION_MAJOR < 4)
+#endif
+#ifndef FF_API_AVFILTER_OPEN
+#define FF_API_AVFILTER_OPEN                (LIBAVFILTER_VERSION_MAJOR < 4)
+#endif
+#ifndef FF_API_AVFILTER_INIT_FILTER
+#define FF_API_AVFILTER_INIT_FILTER         (LIBAVFILTER_VERSION_MAJOR < 4)
+#endif
+#ifndef FF_API_OLD_FILTER_REGISTER
+#define FF_API_OLD_FILTER_REGISTER          (LIBAVFILTER_VERSION_MAJOR < 4)
 #endif
 
 #endif /* AVFILTER_VERSION_H */

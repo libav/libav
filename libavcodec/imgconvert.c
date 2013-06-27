@@ -32,6 +32,7 @@
 
 #include "avcodec.h"
 #include "dsputil.h"
+#include "imgconvert.h"
 #include "internal.h"
 #include "libavutil/colorspace.h"
 #include "libavutil/common.h"
@@ -39,7 +40,7 @@
 #include "libavutil/imgutils.h"
 
 #if HAVE_MMX_EXTERNAL
-#include "x86/dsputil_mmx.h"
+#include "x86/dsputil_x86.h"
 #endif
 
 #if HAVE_MMX_EXTERNAL
@@ -59,7 +60,7 @@ void avcodec_get_chroma_sub_sample(enum AVPixelFormat pix_fmt, int *h_shift, int
 
 static int is_gray(const AVPixFmtDescriptor *desc)
 {
-    return desc->nb_components - (desc->flags & PIX_FMT_ALPHA) == 1;
+    return desc->nb_components - (desc->flags & AV_PIX_FMT_FLAG_ALPHA) == 1;
 }
 
 int avcodec_get_pix_fmt_loss(enum AVPixelFormat dst_pix_fmt,
@@ -85,11 +86,11 @@ int avcodec_get_pix_fmt_loss(enum AVPixelFormat dst_pix_fmt,
         dst_desc->log2_chroma_h > src_desc->log2_chroma_h)
         loss |= FF_LOSS_RESOLUTION;
 
-    if ((src_desc->flags & PIX_FMT_RGB) != (dst_desc->flags & PIX_FMT_RGB))
+    if ((src_desc->flags & AV_PIX_FMT_FLAG_RGB) != (dst_desc->flags & AV_PIX_FMT_FLAG_RGB))
         loss |= FF_LOSS_COLORSPACE;
 
-    if (has_alpha && !(dst_desc->flags & PIX_FMT_ALPHA) &&
-         (dst_desc->flags & PIX_FMT_ALPHA))
+    if (has_alpha && !(dst_desc->flags & AV_PIX_FMT_FLAG_ALPHA) &&
+         (dst_desc->flags & AV_PIX_FMT_FLAG_ALPHA))
         loss |= FF_LOSS_ALPHA;
 
     if (dst_pix_fmt == AV_PIX_FMT_PAL8 && !is_gray(src_desc))
@@ -135,24 +136,6 @@ static enum AVPixelFormat avcodec_find_best_pix_fmt1(enum AVPixelFormat *pix_fmt
     }
     return dst_pix_fmt;
 }
-
-#if FF_API_FIND_BEST_PIX_FMT
-enum AVPixelFormat avcodec_find_best_pix_fmt(int64_t pix_fmt_mask, enum AVPixelFormat src_pix_fmt,
-                              int has_alpha, int *loss_ptr)
-{
-    enum AVPixelFormat list[64];
-    int i, j = 0;
-
-    // test only the first 64 pixel formats to avoid undefined behaviour
-    for (i = 0; i < 64; i++) {
-        if (pix_fmt_mask & (1ULL << i))
-            list[j++] = i;
-    }
-    list[j] = AV_PIX_FMT_NONE;
-
-    return avcodec_find_best_pix_fmt2(list, src_pix_fmt, has_alpha, loss_ptr);
-}
-#endif /* FF_API_FIND_BEST_PIX_FMT */
 
 enum AVPixelFormat avcodec_find_best_pix_fmt2(enum AVPixelFormat *pix_fmt_list,
                                             enum AVPixelFormat src_pix_fmt,
@@ -277,8 +260,8 @@ void ff_shrink88(uint8_t *dst, int dst_wrap,
 /* return true if yuv planar */
 static inline int is_yuv_planar(const AVPixFmtDescriptor *desc)
 {
-    return (!(desc->flags & PIX_FMT_RGB) &&
-             (desc->flags & PIX_FMT_PLANAR));
+    return (!(desc->flags & AV_PIX_FMT_FLAG_RGB) &&
+             (desc->flags & AV_PIX_FMT_FLAG_PLANAR));
 }
 
 int av_picture_crop(AVPicture *dst, const AVPicture *src,
@@ -365,6 +348,8 @@ int av_picture_pad(AVPicture *dst, const AVPicture *src, int height, int width,
     return 0;
 }
 
+#if FF_API_DEINTERLACE
+
 #if !HAVE_MMX_EXTERNAL
 /* filter parameters: [-1 4 2 4 -1] // 8 */
 static void deinterlace_line_c(uint8_t *dst,
@@ -373,7 +358,7 @@ static void deinterlace_line_c(uint8_t *dst,
                              const uint8_t *lum,
                              int size)
 {
-    uint8_t *cm = ff_cropTbl + MAX_NEG_CROP;
+    const uint8_t *cm = ff_cropTbl + MAX_NEG_CROP;
     int sum;
 
     for(;size > 0;size--) {
@@ -396,7 +381,7 @@ static void deinterlace_line_inplace_c(uint8_t *lum_m4, uint8_t *lum_m3,
                                        uint8_t *lum_m2, uint8_t *lum_m1,
                                        uint8_t *lum, int size)
 {
-    uint8_t *cm = ff_cropTbl + MAX_NEG_CROP;
+    const uint8_t *cm = ff_cropTbl + MAX_NEG_CROP;
     int sum;
 
     for(;size > 0;size--) {
@@ -523,3 +508,5 @@ int avpicture_deinterlace(AVPicture *dst, const AVPicture *src,
     emms_c();
     return 0;
 }
+
+#endif /* FF_API_DEINTERLACE */

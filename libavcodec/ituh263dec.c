@@ -27,11 +27,11 @@
  * h263 decoder.
  */
 
-//#define DEBUG
 #include <limits.h>
 
+#include "libavutil/attributes.h"
+#include "libavutil/internal.h"
 #include "libavutil/mathematics.h"
-#include "dsputil.h"
 #include "avcodec.h"
 #include "mpegvideo.h"
 #include "h263.h"
@@ -39,9 +39,6 @@
 #include "unary.h"
 #include "flv.h"
 #include "mpeg4video.h"
-
-//#undef NDEBUG
-//#include <assert.h>
 
 // The defines below define the number of bits that are read at once for
 // reading vlc values. Changing these may improve speed and data cache needs
@@ -101,7 +98,7 @@ static VLC cbpc_b_vlc;
 /* init vlcs */
 
 /* XXX: find a better solution to handle static init */
-void ff_h263_decode_init_vlc(MpegEncContext *s)
+av_cold void ff_h263_decode_init_vlc(void)
 {
     static int done = 0;
 
@@ -438,7 +435,7 @@ static void h263_decode_dquant(MpegEncContext *s){
     ff_set_qscale(s, s->qscale);
 }
 
-static int h263_decode_block(MpegEncContext * s, DCTELEM * block,
+static int h263_decode_block(MpegEncContext * s, int16_t * block,
                              int n, int coded)
 {
     int code, level, i, j, last, run;
@@ -563,7 +560,7 @@ not_coded:
 
 static int h263_skip_b_part(MpegEncContext *s, int cbp)
 {
-    LOCAL_ALIGNED_16(DCTELEM, dblock, [64]);
+    LOCAL_ALIGNED_16(int16_t, dblock, [64]);
     int i, mbi;
 
     /* we have to set s->mb_intra to zero to decode B-part of PB-frame correctly
@@ -599,7 +596,7 @@ static int h263_get_modb(GetBitContext *gb, int pb_frame, int *cbpb)
 }
 
 int ff_h263_decode_mb(MpegEncContext *s,
-                      DCTELEM block[6][64])
+                      int16_t block[6][64])
 {
     int cbpc, cbpy, i, cbp, pred_x, pred_y, mx, my, dquant;
     int16_t *mot_val;

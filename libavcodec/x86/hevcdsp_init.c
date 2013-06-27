@@ -23,7 +23,6 @@
 #include "libavutil/x86/cpu.h"
 #include "libavcodec/get_bits.h" /* required for hevcdsp.h GetBitContext */
 #include "libavcodec/hevcdsp.h"
-#include "dsputil_mmx.h"
 
 
 /***********************************/

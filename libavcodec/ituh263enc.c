@@ -27,10 +27,9 @@
  * h263 bitstream encoder.
  */
 
-//#define DEBUG
 #include <limits.h>
 
-#include "dsputil.h"
+#include "libavutil/attributes.h"
 #include "avcodec.h"
 #include "mpegvideo.h"
 #include "h263.h"
@@ -39,9 +38,6 @@
 #include "flv.h"
 #include "mpeg4video.h"
 #include "internal.h"
-
-//#undef NDEBUG
-//#include <assert.h>
 
 /**
  * Table of number of bits a motion vector component needs.
@@ -306,7 +302,7 @@ static const int dquant_code[5]= {1,0,9,2,3};
  * @param block the 8x8 block
  * @param n block index (0-3 are luma, 4-5 are chroma)
  */
-static void h263_encode_block(MpegEncContext * s, DCTELEM * block, int n)
+static void h263_encode_block(MpegEncContext * s, int16_t * block, int n)
 {
     int level, run, last, i, j, last_index, last_non_zero, sign, slevel, code;
     RLTable *rl;
@@ -455,7 +451,7 @@ static void h263p_encode_umotion(MpegEncContext * s, int val)
 }
 
 void ff_h263_encode_mb(MpegEncContext * s,
-                       DCTELEM block[6][64],
+                       int16_t block[6][64],
                        int motion_x, int motion_y)
 {
     int cbpc, cbpy, i, cbp, pred_x, pred_y;
@@ -683,7 +679,7 @@ void ff_h263_encode_motion(MpegEncContext * s, int val, int f_code)
     }
 }
 
-static void init_mv_penalty_and_fcode(MpegEncContext *s)
+static av_cold void init_mv_penalty_and_fcode(MpegEncContext *s)
 {
     int f_code;
     int mv;
@@ -725,7 +721,9 @@ static void init_mv_penalty_and_fcode(MpegEncContext *s)
     }
 }
 
-static void init_uni_h263_rl_tab(RLTable *rl, uint32_t *bits_tab, uint8_t *len_tab){
+static av_cold void init_uni_h263_rl_tab(RLTable *rl, uint32_t *bits_tab,
+                                         uint8_t *len_tab)
+{
     int slevel, run, last;
 
     assert(MAX_LEVEL >= 64);
@@ -768,7 +766,7 @@ static void init_uni_h263_rl_tab(RLTable *rl, uint32_t *bits_tab, uint8_t *len_t
     }
 }
 
-void ff_h263_encode_init(MpegEncContext *s)
+av_cold void ff_h263_encode_init(MpegEncContext *s)
 {
     static int done = 0;
 

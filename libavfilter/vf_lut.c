@@ -24,6 +24,7 @@
  * value, and apply it to input video.
  */
 
+#include "libavutil/attributes.h"
 #include "libavutil/common.h"
 #include "libavutil/eval.h"
 #include "libavutil/mathematics.h"
@@ -84,62 +85,46 @@ typedef struct {
 #define A 3
 
 #define OFFSET(x) offsetof(LutContext, x)
+#define FLAGS AV_OPT_FLAG_VIDEO_PARAM
 
 static const AVOption lut_options[] = {
-    {"c0", "set component #0 expression", OFFSET(comp_expr_str[0]),  AV_OPT_TYPE_STRING, {.str="val"}, CHAR_MIN, CHAR_MAX},
-    {"c1", "set component #1 expression", OFFSET(comp_expr_str[1]),  AV_OPT_TYPE_STRING, {.str="val"}, CHAR_MIN, CHAR_MAX},
-    {"c2", "set component #2 expression", OFFSET(comp_expr_str[2]),  AV_OPT_TYPE_STRING, {.str="val"}, CHAR_MIN, CHAR_MAX},
-    {"c3", "set component #3 expression", OFFSET(comp_expr_str[3]),  AV_OPT_TYPE_STRING, {.str="val"}, CHAR_MIN, CHAR_MAX},
-    {"y",  "set Y expression", OFFSET(comp_expr_str[Y]),  AV_OPT_TYPE_STRING, {.str="val"}, CHAR_MIN, CHAR_MAX},
-    {"u",  "set U expression", OFFSET(comp_expr_str[U]),  AV_OPT_TYPE_STRING, {.str="val"}, CHAR_MIN, CHAR_MAX},
-    {"v",  "set V expression", OFFSET(comp_expr_str[V]),  AV_OPT_TYPE_STRING, {.str="val"}, CHAR_MIN, CHAR_MAX},
-    {"r",  "set R expression", OFFSET(comp_expr_str[R]),  AV_OPT_TYPE_STRING, {.str="val"}, CHAR_MIN, CHAR_MAX},
-    {"g",  "set G expression", OFFSET(comp_expr_str[G]),  AV_OPT_TYPE_STRING, {.str="val"}, CHAR_MIN, CHAR_MAX},
-    {"b",  "set B expression", OFFSET(comp_expr_str[B]),  AV_OPT_TYPE_STRING, {.str="val"}, CHAR_MIN, CHAR_MAX},
-    {"a",  "set A expression", OFFSET(comp_expr_str[A]),  AV_OPT_TYPE_STRING, {.str="val"}, CHAR_MIN, CHAR_MAX},
-    {NULL},
+    { "c0", "set component #0 expression", OFFSET(comp_expr_str[0]),  AV_OPT_TYPE_STRING, { .str = "val" }, .flags = FLAGS },
+    { "c1", "set component #1 expression", OFFSET(comp_expr_str[1]),  AV_OPT_TYPE_STRING, { .str = "val" }, .flags = FLAGS },
+    { "c2", "set component #2 expression", OFFSET(comp_expr_str[2]),  AV_OPT_TYPE_STRING, { .str = "val" }, .flags = FLAGS },
+    { "c3", "set component #3 expression", OFFSET(comp_expr_str[3]),  AV_OPT_TYPE_STRING, { .str = "val" }, .flags = FLAGS },
+    { "y",  "set Y expression",            OFFSET(comp_expr_str[Y]),  AV_OPT_TYPE_STRING, { .str = "val" }, .flags = FLAGS },
+    { "u",  "set U expression",            OFFSET(comp_expr_str[U]),  AV_OPT_TYPE_STRING, { .str = "val" }, .flags = FLAGS },
+    { "v",  "set V expression",            OFFSET(comp_expr_str[V]),  AV_OPT_TYPE_STRING, { .str = "val" }, .flags = FLAGS },
+    { "r",  "set R expression",            OFFSET(comp_expr_str[R]),  AV_OPT_TYPE_STRING, { .str = "val" }, .flags = FLAGS },
+    { "g",  "set G expression",            OFFSET(comp_expr_str[G]),  AV_OPT_TYPE_STRING, { .str = "val" }, .flags = FLAGS },
+    { "b",  "set B expression",            OFFSET(comp_expr_str[B]),  AV_OPT_TYPE_STRING, { .str = "val" }, .flags = FLAGS },
+    { "a",  "set A expression",            OFFSET(comp_expr_str[A]),  AV_OPT_TYPE_STRING, { .str = "val" }, .flags = FLAGS },
+    { NULL },
 };
 
-static const char *lut_get_name(void *ctx)
+static av_cold int init(AVFilterContext *ctx)
 {
-    return "lut";
-}
+    LutContext *s = ctx->priv;
 
-static const AVClass lut_class = {
-    "LutContext",
-    lut_get_name,
-    lut_options
-};
+    s->var_values[VAR_PHI] = M_PHI;
+    s->var_values[VAR_PI]  = M_PI;
+    s->var_values[VAR_E ]  = M_E;
 
-static int init(AVFilterContext *ctx, const char *args)
-{
-    LutContext *lut = ctx->priv;
-    int ret;
-
-    lut->class = &lut_class;
-    av_opt_set_defaults(lut);
-
-    lut->var_values[VAR_PHI] = M_PHI;
-    lut->var_values[VAR_PI]  = M_PI;
-    lut->var_values[VAR_E ]  = M_E;
-
-    lut->is_rgb = !strcmp(ctx->filter->name, "lutrgb");
-    lut->is_yuv = !strcmp(ctx->filter->name, "lutyuv");
-    if (args && (ret = av_set_options_string(lut, args, "=", ":")) < 0)
-        return ret;
+    s->is_rgb = !strcmp(ctx->filter->name, "lutrgb");
+    s->is_yuv = !strcmp(ctx->filter->name, "lutyuv");
 
     return 0;
 }
 
 static av_cold void uninit(AVFilterContext *ctx)
 {
-    LutContext *lut = ctx->priv;
+    LutContext *s = ctx->priv;
     int i;
 
     for (i = 0; i < 4; i++) {
-        av_expr_free(lut->comp_expr[i]);
-        lut->comp_expr[i] = NULL;
-        av_freep(&lut->comp_expr_str[i]);
+        av_expr_free(s->comp_expr[i]);
+        s->comp_expr[i] = NULL;
+        av_freep(&s->comp_expr_str[i]);
     }
 }
 
@@ -161,10 +146,10 @@ static enum AVPixelFormat all_pix_fmts[] = { RGB_FORMATS, YUV_FORMATS, AV_PIX_FM
 
 static int query_formats(AVFilterContext *ctx)
 {
-    LutContext *lut = ctx->priv;
+    LutContext *s = ctx->priv;
 
-    enum AVPixelFormat *pix_fmts = lut->is_rgb ? rgb_pix_fmts :
-                                 lut->is_yuv ? yuv_pix_fmts : all_pix_fmts;
+    enum AVPixelFormat *pix_fmts = s->is_rgb ? rgb_pix_fmts :
+                                 s->is_yuv ? yuv_pix_fmts : all_pix_fmts;
 
     ff_set_common_formats(ctx, ff_make_format_list(pix_fmts));
     return 0;
@@ -175,9 +160,9 @@ static int query_formats(AVFilterContext *ctx)
  */
 static double clip(void *opaque, double val)
 {
-    LutContext *lut = opaque;
-    double minval = lut->var_values[VAR_MINVAL];
-    double maxval = lut->var_values[VAR_MAXVAL];
+    LutContext *s = opaque;
+    double minval = s->var_values[VAR_MINVAL];
+    double maxval = s->var_values[VAR_MAXVAL];
 
     return av_clip(val, minval, maxval);
 }
@@ -188,10 +173,10 @@ static double clip(void *opaque, double val)
  */
 static double compute_gammaval(void *opaque, double gamma)
 {
-    LutContext *lut = opaque;
-    double val    = lut->var_values[VAR_CLIPVAL];
-    double minval = lut->var_values[VAR_MINVAL];
-    double maxval = lut->var_values[VAR_MAXVAL];
+    LutContext *s = opaque;
+    double val    = s->var_values[VAR_CLIPVAL];
+    double minval = s->var_values[VAR_MINVAL];
+    double maxval = s->var_values[VAR_MAXVAL];
 
     return pow((val-minval)/(maxval-minval), gamma) * (maxval-minval)+minval;
 }
@@ -211,16 +196,16 @@ static const char * const funcs1_names[] = {
 static int config_props(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
-    LutContext *lut = ctx->priv;
+    LutContext *s = ctx->priv;
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(inlink->format);
     int min[4], max[4];
     int val, comp, ret;
 
-    lut->hsub = desc->log2_chroma_w;
-    lut->vsub = desc->log2_chroma_h;
+    s->hsub = desc->log2_chroma_w;
+    s->vsub = desc->log2_chroma_h;
 
-    lut->var_values[VAR_W] = inlink->w;
-    lut->var_values[VAR_H] = inlink->h;
+    s->var_values[VAR_W] = inlink->w;
+    s->var_values[VAR_H] = inlink->h;
 
     switch (inlink->format) {
     case AV_PIX_FMT_YUV410P:
@@ -240,55 +225,57 @@ static int config_props(AVFilterLink *inlink)
         max[0] = max[1] = max[2] = max[3] = 255;
     }
 
-    lut->is_yuv = lut->is_rgb = 0;
-    if      (ff_fmt_is_in(inlink->format, yuv_pix_fmts)) lut->is_yuv = 1;
-    else if (ff_fmt_is_in(inlink->format, rgb_pix_fmts)) lut->is_rgb = 1;
+    s->is_yuv = s->is_rgb = 0;
+    if      (ff_fmt_is_in(inlink->format, yuv_pix_fmts)) s->is_yuv = 1;
+    else if (ff_fmt_is_in(inlink->format, rgb_pix_fmts)) s->is_rgb = 1;
 
-    if (lut->is_rgb) {
+    if (s->is_rgb) {
         switch (inlink->format) {
-        case AV_PIX_FMT_ARGB:  lut->rgba_map[A] = 0; lut->rgba_map[R] = 1; lut->rgba_map[G] = 2; lut->rgba_map[B] = 3; break;
-        case AV_PIX_FMT_ABGR:  lut->rgba_map[A] = 0; lut->rgba_map[B] = 1; lut->rgba_map[G] = 2; lut->rgba_map[R] = 3; break;
+        case AV_PIX_FMT_ARGB:  s->rgba_map[A] = 0; s->rgba_map[R] = 1; s->rgba_map[G] = 2; s->rgba_map[B] = 3; break;
+        case AV_PIX_FMT_ABGR:  s->rgba_map[A] = 0; s->rgba_map[B] = 1; s->rgba_map[G] = 2; s->rgba_map[R] = 3; break;
         case AV_PIX_FMT_RGBA:
-        case AV_PIX_FMT_RGB24: lut->rgba_map[R] = 0; lut->rgba_map[G] = 1; lut->rgba_map[B] = 2; lut->rgba_map[A] = 3; break;
+        case AV_PIX_FMT_RGB24: s->rgba_map[R] = 0; s->rgba_map[G] = 1; s->rgba_map[B] = 2; s->rgba_map[A] = 3; break;
         case AV_PIX_FMT_BGRA:
-        case AV_PIX_FMT_BGR24: lut->rgba_map[B] = 0; lut->rgba_map[G] = 1; lut->rgba_map[R] = 2; lut->rgba_map[A] = 3; break;
+        case AV_PIX_FMT_BGR24: s->rgba_map[B] = 0; s->rgba_map[G] = 1; s->rgba_map[R] = 2; s->rgba_map[A] = 3; break;
         }
-        lut->step = av_get_bits_per_pixel(desc) >> 3;
+        s->step = av_get_bits_per_pixel(desc) >> 3;
     }
 
     for (comp = 0; comp < desc->nb_components; comp++) {
         double res;
 
         /* create the parsed expression */
-        ret = av_expr_parse(&lut->comp_expr[comp], lut->comp_expr_str[comp],
+        av_expr_free(s->comp_expr[comp]);
+        s->comp_expr[comp] = NULL;
+        ret = av_expr_parse(&s->comp_expr[comp], s->comp_expr_str[comp],
                             var_names, funcs1_names, funcs1, NULL, NULL, 0, ctx);
         if (ret < 0) {
             av_log(ctx, AV_LOG_ERROR,
                    "Error when parsing the expression '%s' for the component %d.\n",
-                   lut->comp_expr_str[comp], comp);
+                   s->comp_expr_str[comp], comp);
             return AVERROR(EINVAL);
         }
 
-        /* compute the lut */
-        lut->var_values[VAR_MAXVAL] = max[comp];
-        lut->var_values[VAR_MINVAL] = min[comp];
+        /* compute the s */
+        s->var_values[VAR_MAXVAL] = max[comp];
+        s->var_values[VAR_MINVAL] = min[comp];
 
         for (val = 0; val < 256; val++) {
-            lut->var_values[VAR_VAL] = val;
-            lut->var_values[VAR_CLIPVAL] = av_clip(val, min[comp], max[comp]);
-            lut->var_values[VAR_NEGVAL] =
-                av_clip(min[comp] + max[comp] - lut->var_values[VAR_VAL],
+            s->var_values[VAR_VAL] = val;
+            s->var_values[VAR_CLIPVAL] = av_clip(val, min[comp], max[comp]);
+            s->var_values[VAR_NEGVAL] =
+                av_clip(min[comp] + max[comp] - s->var_values[VAR_VAL],
                         min[comp], max[comp]);
 
-            res = av_expr_eval(lut->comp_expr[comp], lut->var_values, lut);
+            res = av_expr_eval(s->comp_expr[comp], s->var_values, s);
             if (isnan(res)) {
                 av_log(ctx, AV_LOG_ERROR,
                        "Error when evaluating the expression '%s' for the value %d for the component #%d.\n",
-                       lut->comp_expr_str[comp], val, comp);
+                       s->comp_expr_str[comp], val, comp);
                 return AVERROR(EINVAL);
             }
-            lut->lut[comp][val] = av_clip((int)res, min[comp], max[comp]);
-            av_log(ctx, AV_LOG_DEBUG, "val[%d][%d] = %d\n", comp, val, lut->lut[comp][val]);
+            s->lut[comp][val] = av_clip((int)res, min[comp], max[comp]);
+            av_log(ctx, AV_LOG_DEBUG, "val[%d][%d] = %d\n", comp, val, s->lut[comp][val]);
         }
     }
 
@@ -298,7 +285,7 @@ static int config_props(AVFilterLink *inlink)
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
-    LutContext *lut = ctx->priv;
+    LutContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
     AVFrame *out;
     uint8_t *inrow, *outrow, *inrow0, *outrow0;
@@ -311,7 +298,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     }
     av_frame_copy_props(out, in);
 
-    if (lut->is_rgb) {
+    if (s->is_rgb) {
         /* packed */
         inrow0  = in ->data[0];
         outrow0 = out->data[0];
@@ -320,10 +307,10 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             inrow  = inrow0;
             outrow = outrow0;
             for (j = 0; j < inlink->w; j++) {
-                for (k = 0; k < lut->step; k++)
-                    outrow[k] = lut->lut[lut->rgba_map[k]][inrow[k]];
-                outrow += lut->step;
-                inrow  += lut->step;
+                for (k = 0; k < s->step; k++)
+                    outrow[k] = s->lut[s->rgba_map[k]][inrow[k]];
+                outrow += s->step;
+                inrow  += s->step;
             }
             inrow0  += in ->linesize[0];
             outrow0 += out->linesize[0];
@@ -331,15 +318,15 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     } else {
         /* planar */
         for (plane = 0; plane < 4 && in->data[plane]; plane++) {
-            int vsub = plane == 1 || plane == 2 ? lut->vsub : 0;
-            int hsub = plane == 1 || plane == 2 ? lut->hsub : 0;
+            int vsub = plane == 1 || plane == 2 ? s->vsub : 0;
+            int hsub = plane == 1 || plane == 2 ? s->hsub : 0;
 
             inrow  = in ->data[plane];
             outrow = out->data[plane];
 
             for (i = 0; i < in->height >> vsub; i ++) {
                 for (j = 0; j < inlink->w>>hsub; j++)
-                    outrow[j] = lut->lut[plane][inrow[j]];
+                    outrow[j] = s->lut[plane][inrow[j]];
                 inrow  += in ->linesize[plane];
                 outrow += out->linesize[plane];
             }
@@ -363,11 +350,18 @@ static const AVFilterPad outputs[] = {
       .type            = AVMEDIA_TYPE_VIDEO, },
     { .name = NULL}
 };
-#define DEFINE_LUT_FILTER(name_, description_, init_)                   \
+#define DEFINE_LUT_FILTER(name_, description_, init_, options)          \
+    static const AVClass name_ ## _class = {                            \
+        .class_name = #name_,                                           \
+        .item_name  = av_default_item_name,                             \
+        .option     = options,                                          \
+        .version    = LIBAVUTIL_VERSION_INT,                            \
+    };                                                                  \
     AVFilter avfilter_vf_##name_ = {                                    \
         .name          = #name_,                                        \
         .description   = NULL_IF_CONFIG_SMALL(description_),            \
         .priv_size     = sizeof(LutContext),                            \
+        .priv_class    = &name_ ## _class,                              \
                                                                         \
         .init          = init_,                                         \
         .uninit        = uninit,                                        \
@@ -378,33 +372,41 @@ static const AVFilterPad outputs[] = {
     }
 
 #if CONFIG_LUT_FILTER
-DEFINE_LUT_FILTER(lut,    "Compute and apply a lookup table to the RGB/YUV input video.", init);
+DEFINE_LUT_FILTER(lut,    "Compute and apply a lookup table to the RGB/YUV input video.", init, lut_options);
 #endif
 #if CONFIG_LUTYUV_FILTER
-DEFINE_LUT_FILTER(lutyuv, "Compute and apply a lookup table to the YUV input video.",     init);
+DEFINE_LUT_FILTER(lutyuv, "Compute and apply a lookup table to the YUV input video.",     init, lut_options);
 #endif
 #if CONFIG_LUTRGB_FILTER
-DEFINE_LUT_FILTER(lutrgb, "Compute and apply a lookup table to the RGB input video.",     init);
+DEFINE_LUT_FILTER(lutrgb, "Compute and apply a lookup table to the RGB input video.",     init, lut_options);
 #endif
 
 #if CONFIG_NEGATE_FILTER
 
-static int negate_init(AVFilterContext *ctx, const char *args)
+static const AVOption negate_options[] = {
+    { "negate_alpha", NULL, OFFSET(negate_alpha), AV_OPT_TYPE_INT, { .i64 = 0 }, .flags = FLAGS },
+    { NULL },
+};
+
+static av_cold int negate_init(AVFilterContext *ctx)
 {
-    LutContext *lut = ctx->priv;
-    char lut_params[64];
+    LutContext *s = ctx->priv;
+    int i;
 
-    if (args)
-        sscanf(args, "%d", &lut->negate_alpha);
+    av_log(ctx, AV_LOG_DEBUG, "negate_alpha:%d\n", s->negate_alpha);
 
-    av_log(ctx, AV_LOG_DEBUG, "negate_alpha:%d\n", lut->negate_alpha);
+    for (i = 0; i < 4; i++) {
+        s->comp_expr_str[i] = av_strdup((i == 3 && s->negate_alpha) ?
+                                          "val" : "negval");
+        if (!s->comp_expr_str[i]) {
+            uninit(ctx);
+            return AVERROR(ENOMEM);
+        }
+    }
 
-    snprintf(lut_params, sizeof(lut_params), "c0=negval:c1=negval:c2=negval:a=%s",
-             lut->negate_alpha ? "negval" : "val");
-
-    return init(ctx, lut_params);
+    return init(ctx);
 }
 
-DEFINE_LUT_FILTER(negate, "Negate input video.", negate_init);
+DEFINE_LUT_FILTER(negate, "Negate input video.", negate_init, negate_options);
 
 #endif

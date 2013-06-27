@@ -19,8 +19,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-//#define DEBUG
-
 #include "libavutil/intreadwrite.h"
 #include "libavutil/dict.h"
 #include "libavutil/mathematics.h"
@@ -88,9 +86,6 @@ static int r3d_read_red1(AVFormatContext *s)
     framerate.num = avio_rb16(s->pb);
     framerate.den = avio_rb16(s->pb);
     if (framerate.num && framerate.den) {
-#if FF_API_R_FRAME_RATE
-        st->r_frame_rate =
-#endif
         st->avg_frame_rate = framerate;
     }
 

@@ -30,6 +30,7 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "libavutil/attributes.h"
 #include "libavutil/avutil.h"
 #include "libavutil/mem.h"
 #include "mpegvideo.h"
@@ -45,7 +46,7 @@
 static uint8_t rl_length[NB_RL_TABLES][MAX_LEVEL+1][MAX_RUN+1][2];
 
 /* build the table which associate a (x,y) motion vector to a vlc */
-static void init_mv_table(MVTable *tab)
+static av_cold void init_mv_table(MVTable *tab)
 {
     int i, x, y;
 
@@ -368,7 +369,7 @@ static void msmpeg4v2_encode_motion(MpegEncContext * s, int val)
 }
 
 void ff_msmpeg4_encode_mb(MpegEncContext * s,
-                          DCTELEM block[6][64],
+                          int16_t block[6][64],
                           int motion_x, int motion_y)
 {
     int cbp, coded_cbp, i;
@@ -569,7 +570,7 @@ static void msmpeg4_encode_dc(MpegEncContext * s, int level, int n, int *dir_ptr
 /* Encoding of a block. Very similar to MPEG4 except for a different
    escape coding (same as H263) and more vlc tables.
  */
-void ff_msmpeg4_encode_block(MpegEncContext * s, DCTELEM * block, int n)
+void ff_msmpeg4_encode_block(MpegEncContext * s, int16_t * block, int n)
 {
     int level, run, last, i, j, last_index;
     int last_non_zero, sign, slevel;

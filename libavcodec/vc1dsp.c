@@ -25,8 +25,9 @@
  *
  */
 
-#include "vc1dsp.h"
 #include "libavutil/common.h"
+#include "h264chroma.h"
+#include "vc1dsp.h"
 
 
 /** Apply overlap transform to horizontal edge
@@ -79,7 +80,7 @@ static void vc1_h_overlap_c(uint8_t* src, int stride)
     }
 }
 
-static void vc1_v_s_overlap_c(DCTELEM *top,  DCTELEM *bottom)
+static void vc1_v_s_overlap_c(int16_t *top,  int16_t *bottom)
 {
     int i;
     int a, b, c, d;
@@ -105,7 +106,7 @@ static void vc1_v_s_overlap_c(DCTELEM *top,  DCTELEM *bottom)
     }
 }
 
-static void vc1_h_s_overlap_c(DCTELEM *left, DCTELEM *right)
+static void vc1_h_s_overlap_c(int16_t *left, int16_t *right)
 {
     int i;
     int a, b, c, d;
@@ -229,7 +230,7 @@ static void vc1_h_loop_filter16_c(uint8_t *src, int stride, int pq)
 
 /** Do inverse transform on 8x8 block
 */
-static void vc1_inv_trans_8x8_dc_c(uint8_t *dest, int linesize, DCTELEM *block)
+static void vc1_inv_trans_8x8_dc_c(uint8_t *dest, int linesize, int16_t *block)
 {
     int i;
     int dc = block[0];
@@ -248,11 +249,11 @@ static void vc1_inv_trans_8x8_dc_c(uint8_t *dest, int linesize, DCTELEM *block)
     }
 }
 
-static void vc1_inv_trans_8x8_c(DCTELEM block[64])
+static void vc1_inv_trans_8x8_c(int16_t block[64])
 {
     int i;
     register int t1,t2,t3,t4,t5,t6,t7,t8;
-    DCTELEM *src, *dst, temp[64];
+    int16_t *src, *dst, temp[64];
 
     src = block;
     dst = temp;
@@ -319,7 +320,7 @@ static void vc1_inv_trans_8x8_c(DCTELEM block[64])
 
 /** Do inverse transform on 8x4 part of block
 */
-static void vc1_inv_trans_8x4_dc_c(uint8_t *dest, int linesize, DCTELEM *block)
+static void vc1_inv_trans_8x4_dc_c(uint8_t *dest, int linesize, int16_t *block)
 {
     int i;
     int dc = block[0];
@@ -338,11 +339,11 @@ static void vc1_inv_trans_8x4_dc_c(uint8_t *dest, int linesize, DCTELEM *block)
     }
 }
 
-static void vc1_inv_trans_8x4_c(uint8_t *dest, int linesize, DCTELEM *block)
+static void vc1_inv_trans_8x4_c(uint8_t *dest, int linesize, int16_t *block)
 {
     int i;
     register int t1,t2,t3,t4,t5,t6,t7,t8;
-    DCTELEM *src, *dst;
+    int16_t *src, *dst;
 
     src = block;
     dst = block;
@@ -394,7 +395,7 @@ static void vc1_inv_trans_8x4_c(uint8_t *dest, int linesize, DCTELEM *block)
 
 /** Do inverse transform on 4x8 parts of block
 */
-static void vc1_inv_trans_4x8_dc_c(uint8_t *dest, int linesize, DCTELEM *block)
+static void vc1_inv_trans_4x8_dc_c(uint8_t *dest, int linesize, int16_t *block)
 {
     int i;
     int dc = block[0];
@@ -409,11 +410,11 @@ static void vc1_inv_trans_4x8_dc_c(uint8_t *dest, int linesize, DCTELEM *block)
     }
 }
 
-static void vc1_inv_trans_4x8_c(uint8_t *dest, int linesize, DCTELEM *block)
+static void vc1_inv_trans_4x8_c(uint8_t *dest, int linesize, int16_t *block)
 {
     int i;
     register int t1,t2,t3,t4,t5,t6,t7,t8;
-    DCTELEM *src, *dst;
+    int16_t *src, *dst;
 
     src = block;
     dst = block;
@@ -465,7 +466,7 @@ static void vc1_inv_trans_4x8_c(uint8_t *dest, int linesize, DCTELEM *block)
 
 /** Do inverse transform on 4x4 part of block
 */
-static void vc1_inv_trans_4x4_dc_c(uint8_t *dest, int linesize, DCTELEM *block)
+static void vc1_inv_trans_4x4_dc_c(uint8_t *dest, int linesize, int16_t *block)
 {
     int i;
     int dc = block[0];
@@ -480,11 +481,11 @@ static void vc1_inv_trans_4x4_dc_c(uint8_t *dest, int linesize, DCTELEM *block)
     }
 }
 
-static void vc1_inv_trans_4x4_c(uint8_t *dest, int linesize, DCTELEM *block)
+static void vc1_inv_trans_4x4_c(uint8_t *dest, int linesize, int16_t *block)
 {
     int i;
     register int t1,t2,t3,t4;
-    DCTELEM *src, *dst;
+    int16_t *src, *dst;
 
     src = block;
     dst = block;
@@ -626,11 +627,17 @@ VC1_MSPEL_MC(op_avg, avg_)
 /* pixel functions - really are entry points to vc1_mspel_mc */
 
 #define PUT_VC1_MSPEL(a, b)\
-static void put_vc1_mspel_mc ## a ## b ##_c(uint8_t *dst, const uint8_t *src, int stride, int rnd) { \
-     put_vc1_mspel_mc(dst, src, stride, a, b, rnd);                         \
-}\
-static void avg_vc1_mspel_mc ## a ## b ##_c(uint8_t *dst, const uint8_t *src, int stride, int rnd) { \
-     avg_vc1_mspel_mc(dst, src, stride, a, b, rnd);                         \
+static void put_vc1_mspel_mc ## a ## b ##_c(uint8_t *dst,               \
+                                            const uint8_t *src,         \
+                                            ptrdiff_t stride, int rnd)  \
+{                                                                       \
+    put_vc1_mspel_mc(dst, src, stride, a, b, rnd);                      \
+}                                                                       \
+static void avg_vc1_mspel_mc ## a ## b ##_c(uint8_t *dst,               \
+                                            const uint8_t *src,         \
+                                            ptrdiff_t stride, int rnd)  \
+{                                                                       \
+    avg_vc1_mspel_mc(dst, src, stride, a, b, rnd);                      \
 }
 
 PUT_VC1_MSPEL(1, 0)
@@ -847,8 +854,8 @@ av_cold void ff_vc1dsp_init(VC1DSPContext* dsp) {
     dsp->sprite_v_double_twoscale = sprite_v_double_twoscale_c;
 #endif
 
-    if (HAVE_ALTIVEC)
-        ff_vc1dsp_init_altivec(dsp);
     if (ARCH_X86)
         ff_vc1dsp_init_x86(dsp);
+    if (ARCH_PPC)
+        ff_vc1dsp_init_ppc(dsp);
 }

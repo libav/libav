@@ -23,50 +23,23 @@
  * video field order filter, heavily influenced by vf_pad.c
  */
 
-/* #define DEBUG */
-
 #include <stdio.h>
 #include <string.h>
 
 #include "libavutil/imgutils.h"
 #include "libavutil/internal.h"
+#include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "avfilter.h"
 #include "formats.h"
 #include "internal.h"
 #include "video.h"
 
-typedef struct
-{
-    unsigned int dst_tff;      ///< output bff/tff
+typedef struct {
+    const AVClass *class;
+    int dst_tff;               ///< output bff/tff
     int          line_size[4]; ///< bytes of pixel data per line for each plane
 } FieldOrderContext;
-
-static av_cold int init(AVFilterContext *ctx, const char *args)
-{
-    FieldOrderContext *fieldorder = ctx->priv;
-
-    const char *tff = "tff";
-    const char *bff = "bff";
-
-    if (!args) {
-        fieldorder->dst_tff = 1;
-    } else if (sscanf(args, "%u", &fieldorder->dst_tff) == 1) {
-        fieldorder->dst_tff = !!fieldorder->dst_tff;
-    } else if (!strcmp(tff, args)) {
-        fieldorder->dst_tff = 1;
-    } else if (!strcmp(bff, args)) {
-        fieldorder->dst_tff = 0;
-    } else {
-        av_log(ctx, AV_LOG_ERROR, "Invalid argument '%s'.\n", args);
-        return AVERROR(EINVAL);
-    }
-
-    av_log(ctx, AV_LOG_VERBOSE, "output field order: %s\n",
-            fieldorder->dst_tff ? tff : bff);
-
-    return 0;
-}
 
 static int query_formats(AVFilterContext *ctx)
 {
@@ -80,8 +53,8 @@ static int query_formats(AVFilterContext *ctx)
         formats = NULL;
         for (pix_fmt = 0; pix_fmt < AV_PIX_FMT_NB; pix_fmt++) {
             const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(pix_fmt);
-            if (!(desc->flags & PIX_FMT_HWACCEL ||
-                  desc->flags & PIX_FMT_BITSTREAM) &&
+            if (!(desc->flags & AV_PIX_FMT_FLAG_HWACCEL ||
+                  desc->flags & AV_PIX_FMT_FLAG_BITSTREAM) &&
                 desc->nb_components && !desc->log2_chroma_h &&
                 (ret = ff_add_format(&formats, pix_fmt)) < 0) {
                 ff_formats_unref(&formats);
@@ -97,17 +70,15 @@ static int query_formats(AVFilterContext *ctx)
 
 static int config_input(AVFilterLink *inlink)
 {
-    AVFilterContext   *ctx        = inlink->dst;
-    FieldOrderContext *fieldorder = ctx->priv;
+    AVFilterContext   *ctx = inlink->dst;
+    FieldOrderContext *s   = ctx->priv;
     int               plane;
 
     /** full an array with the number of bytes that the video
      *  data occupies per line for each plane of the input video */
     for (plane = 0; plane < 4; plane++) {
-        fieldorder->line_size[plane] = av_image_get_linesize(
-                inlink->format,
-                inlink->w,
-                plane);
+        s->line_size[plane] = av_image_get_linesize(inlink->format, inlink->w,
+                                                    plane);
     }
 
     return 0;
@@ -177,6 +148,22 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
     return ff_filter_frame(outlink, frame);
 }
 
+#define OFFSET(x) offsetof(FieldOrderContext, x)
+#define FLAGS AV_OPT_FLAG_VIDEO_PARAM
+static const AVOption options[] = {
+    { "order", "output field order", OFFSET(dst_tff), AV_OPT_TYPE_INT, { .i64 = 1 }, 0, 1, FLAGS, "order" },
+        { "bff", "bottom field first", 0, AV_OPT_TYPE_CONST, { .i64 = 0 }, .unit = "order" },
+        { "tff", "top field first",    0, AV_OPT_TYPE_CONST, { .i64 = 1 }, .unit = "order" },
+    { NULL },
+};
+
+static const AVClass fieldorder_class = {
+    .class_name = "fieldorder",
+    .item_name  = av_default_item_name,
+    .option     = options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
+
 static const AVFilterPad avfilter_vf_fieldorder_inputs[] = {
     {
         .name             = "default",
@@ -200,8 +187,8 @@ static const AVFilterPad avfilter_vf_fieldorder_outputs[] = {
 AVFilter avfilter_vf_fieldorder = {
     .name          = "fieldorder",
     .description   = NULL_IF_CONFIG_SMALL("Set the field order."),
-    .init          = init,
     .priv_size     = sizeof(FieldOrderContext),
+    .priv_class    = &fieldorder_class,
     .query_formats = query_formats,
     .inputs        = avfilter_vf_fieldorder_inputs,
     .outputs       = avfilter_vf_fieldorder_outputs,

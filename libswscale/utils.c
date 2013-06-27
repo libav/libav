@@ -70,7 +70,9 @@ const char *swscale_license(void)
 #define RET 0xC3 // near return opcode for x86
 
 typedef struct FormatEntry {
-    int is_supported_in, is_supported_out;
+    uint8_t is_supported_in         :1;
+    uint8_t is_supported_out        :1;
+    uint8_t is_supported_endianness :1;
 } FormatEntry;
 
 static const FormatEntry format_entries[AV_PIX_FMT_NB] = {
@@ -163,13 +165,15 @@ static const FormatEntry format_entries[AV_PIX_FMT_NB] = {
     [AV_PIX_FMT_YUV444P9LE]  = { 1, 1 },
     [AV_PIX_FMT_YUV444P10BE] = { 1, 1 },
     [AV_PIX_FMT_YUV444P10LE] = { 1, 1 },
-    [AV_PIX_FMT_GBRP]        = { 1, 0 },
-    [AV_PIX_FMT_GBRP9LE]     = { 1, 0 },
-    [AV_PIX_FMT_GBRP9BE]     = { 1, 0 },
-    [AV_PIX_FMT_GBRP10LE]    = { 1, 0 },
-    [AV_PIX_FMT_GBRP10BE]    = { 1, 0 },
+    [AV_PIX_FMT_GBRP]        = { 1, 1 },
+    [AV_PIX_FMT_GBRP9LE]     = { 1, 1 },
+    [AV_PIX_FMT_GBRP9BE]     = { 1, 1 },
+    [AV_PIX_FMT_GBRP10LE]    = { 1, 1 },
+    [AV_PIX_FMT_GBRP10BE]    = { 1, 1 },
     [AV_PIX_FMT_GBRP16LE]    = { 1, 0 },
     [AV_PIX_FMT_GBRP16BE]    = { 1, 0 },
+    [AV_PIX_FMT_XYZ12BE]     = { 0, 0, 1 },
+    [AV_PIX_FMT_XYZ12LE]     = { 0, 0, 1 },
 };
 
 int sws_isSupportedInput(enum AVPixelFormat pix_fmt)
@@ -182,6 +186,12 @@ int sws_isSupportedOutput(enum AVPixelFormat pix_fmt)
 {
     return (unsigned)pix_fmt < AV_PIX_FMT_NB ?
            format_entries[pix_fmt].is_supported_out : 0;
+}
+
+int sws_isSupportedEndiannessConversion(enum AVPixelFormat pix_fmt)
+{
+    return (unsigned)pix_fmt < AV_PIX_FMT_NB ?
+           format_entries[pix_fmt].is_supported_endianness : 0;
 }
 
 extern const int32_t ff_yuv2rgb_coeffs[8][4];
@@ -208,11 +218,12 @@ static double getSplineCoeff(double a, double b, double c, double d,
                               dist - 1.0);
 }
 
-static int initFilter(int16_t **outFilter, int32_t **filterPos,
-                      int *outFilterSize, int xInc, int srcW, int dstW,
-                      int filterAlign, int one, int flags, int cpu_flags,
-                      SwsVector *srcFilter, SwsVector *dstFilter,
-                      double param[2], int is_horizontal)
+static av_cold int initFilter(int16_t **outFilter, int32_t **filterPos,
+                              int *outFilterSize, int xInc, int srcW,
+                              int dstW, int filterAlign, int one,
+                              int flags, int cpu_flags,
+                              SwsVector *srcFilter, SwsVector *dstFilter,
+                              double param[2], int is_horizontal)
 {
     int i;
     int filterSize;
@@ -600,9 +611,9 @@ fail:
 }
 
 #if HAVE_MMXEXT_INLINE
-static int init_hscaler_mmxext(int dstW, int xInc, uint8_t *filterCode,
-                               int16_t *filter, int32_t *filterPos,
-                               int numSplits)
+static av_cold int init_hscaler_mmxext(int dstW, int xInc, uint8_t *filterCode,
+                                       int16_t *filter, int32_t *filterPos,
+                                       int numSplits)
 {
     uint8_t *fragmentA;
     x86_reg imm8OfPShufW1A;
@@ -879,6 +890,8 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
 
     unscaled = (srcW == dstW && srcH == dstH);
 
+    if (!(unscaled && sws_isSupportedEndiannessConversion(srcFormat) &&
+          av_pix_fmt_swap_endianness(srcFormat) == dstFormat)) {
     if (!sws_isSupportedInput(srcFormat)) {
         av_log(c, AV_LOG_ERROR, "%s is not supported as input pixel format\n",
                sws_format_name(srcFormat));
@@ -888,6 +901,7 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
         av_log(c, AV_LOG_ERROR, "%s is not supported as output pixel format\n",
                sws_format_name(dstFormat));
         return AVERROR(EINVAL);
+    }
     }
 
     i = flags & (SWS_POINT         |
@@ -938,10 +952,21 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
     getSubSampleFactors(&c->chrSrcHSubSample, &c->chrSrcVSubSample, srcFormat);
     getSubSampleFactors(&c->chrDstHSubSample, &c->chrDstVSubSample, dstFormat);
 
+    if (isPlanarRGB(dstFormat)) {
+        if (!(flags & SWS_FULL_CHR_H_INT)) {
+            av_log(c, AV_LOG_DEBUG,
+                   "%s output is not supported with half chroma resolution, switching to full\n",
+                   av_get_pix_fmt_name(dstFormat));
+            flags   |= SWS_FULL_CHR_H_INT;
+            c->flags = flags;
+        }
+    }
+
     /* reuse chroma for 2 pixels RGB/BGR unless user wants full
      * chroma interpolation */
     if (flags & SWS_FULL_CHR_H_INT &&
         isAnyRGB(dstFormat)        &&
+        !isPlanarRGB(dstFormat)    &&
         dstFormat != AV_PIX_FMT_RGBA  &&
         dstFormat != AV_PIX_FMT_ARGB  &&
         dstFormat != AV_PIX_FMT_BGRA  &&
@@ -968,6 +993,9 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
         srcFormat != AV_PIX_FMT_RGB8 && srcFormat != AV_PIX_FMT_BGR8 &&
         srcFormat != AV_PIX_FMT_RGB4 && srcFormat != AV_PIX_FMT_BGR4 &&
         srcFormat != AV_PIX_FMT_RGB4_BYTE && srcFormat != AV_PIX_FMT_BGR4_BYTE &&
+        srcFormat != AV_PIX_FMT_GBRP9BE   && srcFormat != AV_PIX_FMT_GBRP9LE  &&
+        srcFormat != AV_PIX_FMT_GBRP10BE  && srcFormat != AV_PIX_FMT_GBRP10LE &&
+        srcFormat != AV_PIX_FMT_GBRP16BE  && srcFormat != AV_PIX_FMT_GBRP16LE &&
         ((dstW >> c->chrDstHSubSample) <= (srcW >> 1) ||
          (flags & SWS_FAST_BILINEAR)))
         c->chrSrcHSubSample = 1;

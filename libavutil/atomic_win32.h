@@ -18,32 +18,38 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#ifndef AVUTIL_ATOMIC_WIN32_H
+#define AVUTIL_ATOMIC_WIN32_H
+
 #include <windows.h>
 
 #include "atomic.h"
 
-#define av_atomic_int_get av_atomic_int_get_win32
-static inline int av_atomic_int_get_win32(volatile int *ptr)
+#define avpriv_atomic_int_get atomic_int_get_win32
+static inline int atomic_int_get_win32(volatile int *ptr)
 {
     MemoryBarrier();
     return *ptr;
 }
 
-#define av_atomic_int_set av_atomic_int_set_win32
-static inline void av_atomic_int_set_win32(volatile int *ptr, int val)
+#define avpriv_atomic_int_set atomic_int_set_win32
+static inline void atomic_int_set_win32(volatile int *ptr, int val)
 {
     *ptr = val;
     MemoryBarrier();
 }
 
-#define av_atomic_int_add_and_fetch av_atomic_int_add_and_fetch_win32
-static inline int av_atomic_int_add_and_fetch_win32(volatile int *ptr, int inc)
+#define avpriv_atomic_int_add_and_fetch atomic_int_add_and_fetch_win32
+static inline int atomic_int_add_and_fetch_win32(volatile int *ptr, int inc)
 {
     return inc + InterlockedExchangeAdd(ptr, inc);
 }
 
-#define av_atomic_ptr_cas av_atomic_ptr_cas_win32
-static inline void *av_atomic_ptr_cas_win32(void * volatile *ptr, void *oldval, void *newval)
+#define avpriv_atomic_ptr_cas atomic_ptr_cas_win32
+static inline void *atomic_ptr_cas_win32(void * volatile *ptr,
+                                         void *oldval, void *newval)
 {
     return InterlockedCompareExchangePointer(ptr, newval, oldval);
 }
+
+#endif /* AVUTIL_ATOMIC_WIN32_H */

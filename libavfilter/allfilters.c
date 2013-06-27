@@ -47,9 +47,11 @@ void avfilter_register_all(void)
     REGISTER_FILTER(AFORMAT,        aformat,        af);
     REGISTER_FILTER(AMIX,           amix,           af);
     REGISTER_FILTER(ANULL,          anull,          af);
+    REGISTER_FILTER(ASETPTS,        asetpts,        af);
     REGISTER_FILTER(ASHOWINFO,      ashowinfo,      af);
     REGISTER_FILTER(ASPLIT,         asplit,         af);
     REGISTER_FILTER(ASYNCTS,        asyncts,        af);
+    REGISTER_FILTER(ATRIM,          atrim,          af);
     REGISTER_FILTER(CHANNELMAP,     channelmap,     af);
     REGISTER_FILTER(CHANNELSPLIT,   channelsplit,   af);
     REGISTER_FILTER(JOIN,           join,           af);
@@ -76,6 +78,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER(GRADFUN,        gradfun,        vf);
     REGISTER_FILTER(HFLIP,          hflip,          vf);
     REGISTER_FILTER(HQDN3D,         hqdn3d,         vf);
+    REGISTER_FILTER(INTERLACE,      interlace,      vf);
     REGISTER_FILTER(LUT,            lut,            vf);
     REGISTER_FILTER(LUTRGB,         lutrgb,         vf);
     REGISTER_FILTER(LUTYUV,         lutyuv,         vf);
@@ -95,6 +98,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER(SHOWINFO,       showinfo,       vf);
     REGISTER_FILTER(SPLIT,          split,          vf);
     REGISTER_FILTER(TRANSPOSE,      transpose,      vf);
+    REGISTER_FILTER(TRIM,           trim,           vf);
     REGISTER_FILTER(UNSHARP,        unsharp,        vf);
     REGISTER_FILTER(VFLIP,          vflip,          vf);
     REGISTER_FILTER(YADIF,          yadif,          vf);

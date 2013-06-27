@@ -25,6 +25,8 @@
  * @author Michael Niedermayer <michaelni@gmx.at>
  */
 
+#include "libavutil/attributes.h"
+#include "dsputil.h"
 #include "h264pred.h"
 
 #define BIT_DEPTH 8
@@ -267,12 +269,12 @@ static void pred4x4_horizontal_up_rv40_nodown_c(uint8_t *src,
 static void pred4x4_tm_vp8_c(uint8_t *src, const uint8_t *topright,
                              ptrdiff_t stride)
 {
-    uint8_t *cm = ff_cropTbl + MAX_NEG_CROP - src[-1-stride];
+    const uint8_t *cm = ff_cropTbl + MAX_NEG_CROP - src[-1-stride];
     uint8_t *top = src-stride;
     int y;
 
     for (y = 0; y < 4; y++) {
-        uint8_t *cm_in = cm + src[-1];
+        const uint8_t *cm_in = cm + src[-1];
         src[0] = cm_in[top[0]];
         src[1] = cm_in[top[1]];
         src[2] = cm_in[top[2]];
@@ -293,12 +295,12 @@ static void pred16x16_plane_rv40_c(uint8_t *src, ptrdiff_t stride)
 
 static void pred16x16_tm_vp8_c(uint8_t *src, ptrdiff_t stride)
 {
-    uint8_t *cm = ff_cropTbl + MAX_NEG_CROP - src[-1-stride];
+    const uint8_t *cm = ff_cropTbl + MAX_NEG_CROP - src[-1-stride];
     uint8_t *top = src-stride;
     int y;
 
     for (y = 0; y < 16; y++) {
-        uint8_t *cm_in = cm + src[-1];
+        const uint8_t *cm_in = cm + src[-1];
         src[0]  = cm_in[top[0]];
         src[1]  = cm_in[top[1]];
         src[2]  = cm_in[top[2]];
@@ -375,12 +377,12 @@ static void pred8x8_dc_rv40_c(uint8_t *src, ptrdiff_t stride)
 
 static void pred8x8_tm_vp8_c(uint8_t *src, ptrdiff_t stride)
 {
-    uint8_t *cm = ff_cropTbl + MAX_NEG_CROP - src[-1-stride];
+    const uint8_t *cm = ff_cropTbl + MAX_NEG_CROP - src[-1-stride];
     uint8_t *top = src-stride;
     int y;
 
     for (y = 0; y < 8; y++) {
-        uint8_t *cm_in = cm + src[-1];
+        const uint8_t *cm_in = cm + src[-1];
         src[0] = cm_in[top[0]];
         src[1] = cm_in[top[1]];
         src[2] = cm_in[top[2]];
@@ -396,11 +398,10 @@ static void pred8x8_tm_vp8_c(uint8_t *src, ptrdiff_t stride)
 /**
  * Set the intra prediction function pointers.
  */
-void ff_h264_pred_init(H264PredContext *h, int codec_id, const int bit_depth,
-                       const int chroma_format_idc)
+av_cold void ff_h264_pred_init(H264PredContext *h, int codec_id,
+                               const int bit_depth,
+                               const int chroma_format_idc)
 {
-//    MpegEncContext * const s = &h->s;
-
 #undef FUNC
 #undef FUNCC
 #define FUNC(a, depth) a ## _ ## depth

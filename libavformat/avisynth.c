@@ -122,9 +122,6 @@ static int avisynth_read_header(AVFormatContext *s)
                   st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
                   st->avg_frame_rate.num = stream->info.dwRate;
                   st->avg_frame_rate.den = stream->info.dwScale;
-#if FF_API_R_FRAME_RATE
-                  st->r_frame_rate = st->avg_frame_rate;
-#endif
 
                   st->codec->width = imgfmt.bmiHeader.biWidth;
                   st->codec->height = imgfmt.bmiHeader.biHeight;
@@ -219,7 +216,7 @@ static int avisynth_read_seek(AVFormatContext *s, int stream_index, int64_t pts,
 }
 
 AVInputFormat ff_avisynth_demuxer = {
-    .name           = "avs",
+    .name           = "avisynth",
     .long_name      = NULL_IF_CONFIG_SMALL("AVISynth"),
     .priv_data_size = sizeof(AVISynthContext),
     .read_header    = avisynth_read_header,

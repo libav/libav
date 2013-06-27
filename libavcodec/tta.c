@@ -28,7 +28,6 @@
  */
 
 #define BITSTREAM_READER_LE
-//#define DEBUG
 #include <limits.h>
 #include "avcodec.h"
 #include "get_bits.h"
@@ -58,7 +57,6 @@ typedef struct TTAChannel {
 
 typedef struct TTAContext {
     AVCodecContext *avctx;
-    AVFrame frame;
     GetBitContext gb;
     const AVCRC *crc_table;
 
@@ -223,7 +221,7 @@ static av_cold int tta_decode_init(AVCodecContext * avctx)
             return -1;
         }
         if (s->format == FORMAT_ENCRYPTED) {
-            av_log_missing_feature(s->avctx, "Encrypted TTA", 0);
+            avpriv_report_missing_feature(s->avctx, "Encrypted TTA");
             return AVERROR_PATCHWELCOME;
         }
         avctx->channels = s->channels = get_bits(&s->gb, 16);
@@ -303,15 +301,13 @@ static av_cold int tta_decode_init(AVCodecContext * avctx)
         return -1;
     }
 
-    avcodec_get_frame_defaults(&s->frame);
-    avctx->coded_frame = &s->frame;
-
     return 0;
 }
 
 static int tta_decode_frame(AVCodecContext *avctx, void *data,
                             int *got_frame_ptr, AVPacket *avpkt)
 {
+    AVFrame *frame     = data;
     const uint8_t *buf = avpkt->data;
     int buf_size = avpkt->size;
     TTAContext *s = avctx->priv_data;
@@ -327,15 +323,15 @@ static int tta_decode_frame(AVCodecContext *avctx, void *data,
     init_get_bits(&s->gb, buf, buf_size*8);
 
     /* get output buffer */
-    s->frame.nb_samples = framelen;
-    if ((ret = ff_get_buffer(avctx, &s->frame, 0)) < 0) {
+    frame->nb_samples = framelen;
+    if ((ret = ff_get_buffer(avctx, frame, 0)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }
 
     // decode directly to output buffer for 24-bit sample format
     if (s->bps == 3)
-        s->decode_buffer = (int32_t *)s->frame.data[0];
+        s->decode_buffer = (int32_t *)frame->data[0];
 
     // init per channel states
     for (i = 0; i < s->channels; i++) {
@@ -424,7 +420,7 @@ static int tta_decode_frame(AVCodecContext *avctx, void *data,
             i++;
             // check for last frame
             if (i == s->last_frame_length && get_bits_left(&s->gb) / 8 == 4) {
-                s->frame.nb_samples = framelen = s->last_frame_length;
+                frame->nb_samples = framelen = s->last_frame_length;
                 break;
             }
         }
@@ -439,20 +435,19 @@ static int tta_decode_frame(AVCodecContext *avctx, void *data,
 
     // convert to output buffer
     if (s->bps == 2) {
-        int16_t *samples = (int16_t *)s->frame.data[0];
+        int16_t *samples = (int16_t *)frame->data[0];
         for (p = s->decode_buffer; p < s->decode_buffer + (framelen * s->channels); p++)
             *samples++ = *p;
     } else {
         // shift samples for 24-bit sample format
-        int32_t *samples = (int32_t *)s->frame.data[0];
+        int32_t *samples = (int32_t *)frame->data[0];
         for (i = 0; i < framelen * s->channels; i++)
             *samples++ <<= 8;
         // reset decode buffer
         s->decode_buffer = NULL;
     }
 
-    *got_frame_ptr   = 1;
-    *(AVFrame *)data = s->frame;
+    *got_frame_ptr = 1;
 
     return buf_size;
 error:

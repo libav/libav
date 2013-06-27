@@ -91,8 +91,8 @@ static int spdif_get_offset_and_codec(AVFormatContext *s,
         break;
     default:
         if (s) { /* be silent during a probe */
-            av_log(s, AV_LOG_WARNING, "Data type 0x%04x", data_type);
-            av_log_missing_feature(s, " in IEC 61937", 1);
+            avpriv_request_sample(s, "Data type 0x%04x in IEC 61937",
+                                  data_type);
         }
         return AVERROR_PATCHWELCOME;
     }
@@ -149,10 +149,10 @@ static int spdif_probe(AVProbeData *p)
 
     if (sync_codes >= 6)
         /* good amount of sync codes but with unexpected offsets */
-        return AVPROBE_SCORE_MAX / 2;
+        return AVPROBE_SCORE_EXTENSION;
 
     /* some sync codes were found */
-    return AVPROBE_SCORE_MAX / 8;
+    return AVPROBE_SCORE_EXTENSION / 4;
 }
 
 static int spdif_read_header(AVFormatContext *s)
@@ -179,7 +179,7 @@ static int spdif_read_packet(AVFormatContext *s, AVPacket *pkt)
     pkt_size_bits = avio_rl16(pb);
 
     if (pkt_size_bits % 16)
-        av_log_ask_for_sample(s, "Packet does not end to a 16-bit boundary.");
+        avpriv_request_sample(s, "Packet not ending at a 16-bit boundary");
 
     ret = av_new_packet(pkt, FFALIGN(pkt_size_bits, 16) >> 3);
     if (ret)
@@ -213,7 +213,7 @@ static int spdif_read_packet(AVFormatContext *s, AVPacket *pkt)
         st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
         st->codec->codec_id = codec_id;
     } else if (codec_id != s->streams[0]->codec->codec_id) {
-        av_log_missing_feature(s, "Codec change in IEC 61937", 0);
+        avpriv_report_missing_feature(s, "Codec change in IEC 61937");
         return AVERROR_PATCHWELCOME;
     }
 

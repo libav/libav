@@ -33,6 +33,7 @@
 #include "fft.h"
 #include "aacps.h"
 #include "sbrdsp.h"
+#include "libavutil/internal.h"
 #include "libavutil/libm.h"
 
 #include <stdint.h>
@@ -919,14 +920,14 @@ static void read_sbr_extension(AACContext *ac, SpectralBandReplication *sbr,
 #if 1
             *num_bits_left -= ff_ps_read_data(ac->avctx, gb, &sbr->ps, *num_bits_left);
 #else
-            av_log_missing_feature(ac->avctx, "Parametric Stereo", 0);
+            avpriv_report_missing_feature(ac->avctx, "Parametric Stereo");
             skip_bits_long(gb, *num_bits_left); // bs_fill_bits
             *num_bits_left = 0;
 #endif
         }
         break;
     default:
-        av_log_missing_feature(ac->avctx, "Reserved SBR extensions", 1);
+        avpriv_request_sample(ac->avctx, "Reserved SBR extensions");
         skip_bits_long(gb, *num_bits_left); // bs_fill_bits
         *num_bits_left = 0;
         break;
@@ -1150,7 +1151,7 @@ static void sbr_dequant(SpectralBandReplication *sbr, int id_aac)
  * @param   x       pointer to the beginning of the first sample window
  * @param   W       array of complex-valued samples split into subbands
  */
-static void sbr_qmf_analysis(DSPContext *dsp, FFTContext *mdct,
+static void sbr_qmf_analysis(AVFloatDSPContext *dsp, FFTContext *mdct,
                              SBRDSPContext *sbrdsp, const float *in, float *x,
                              float z[320], float W[2][32][32][2], int buf_idx)
 {
@@ -1172,8 +1173,8 @@ static void sbr_qmf_analysis(DSPContext *dsp, FFTContext *mdct,
  * Synthesis QMF Bank (14496-3 sp04 p206) and Downsampled Synthesis QMF Bank
  * (14496-3 sp04 p206)
  */
-static void sbr_qmf_synthesis(DSPContext *dsp, FFTContext *mdct,
-                              SBRDSPContext *sbrdsp, AVFloatDSPContext *fdsp,
+static void sbr_qmf_synthesis(FFTContext *mdct,
+                              SBRDSPContext *sbrdsp, AVFloatDSPContext *dsp,
                               float *out, float X[2][38][64],
                               float mdct_buf[2][64],
                               float *v0, int *v_off, const unsigned int div)
@@ -1204,7 +1205,7 @@ static void sbr_qmf_synthesis(DSPContext *dsp, FFTContext *mdct,
             mdct->imdct_half(mdct, mdct_buf[1], X[1][i]);
             sbrdsp->qmf_deint_bfly(v, mdct_buf[1], mdct_buf[0]);
         }
-        fdsp->vector_fmul   (out, v                , sbr_qmf_window                       , 64 >> div);
+        dsp->vector_fmul    (out, v                , sbr_qmf_window                       , 64 >> div);
         dsp->vector_fmul_add(out, v + ( 192 >> div), sbr_qmf_window + ( 64 >> div), out   , 64 >> div);
         dsp->vector_fmul_add(out, v + ( 256 >> div), sbr_qmf_window + (128 >> div), out   , 64 >> div);
         dsp->vector_fmul_add(out, v + ( 448 >> div), sbr_qmf_window + (192 >> div), out   , 64 >> div);
@@ -1663,7 +1664,7 @@ void ff_sbr_apply(AACContext *ac, SpectralBandReplication *sbr, int id_aac,
     }
     for (ch = 0; ch < nch; ch++) {
         /* decode channel */
-        sbr_qmf_analysis(&ac->dsp, &sbr->mdct_ana, &sbr->dsp, ch ? R : L, sbr->data[ch].analysis_filterbank_samples,
+        sbr_qmf_analysis(&ac->fdsp, &sbr->mdct_ana, &sbr->dsp, ch ? R : L, sbr->data[ch].analysis_filterbank_samples,
                          (float*)sbr->qmf_filter_scratch,
                          sbr->data[ch].W, sbr->data[ch].Ypos);
         sbr_lf_gen(ac, sbr, sbr->X_low, sbr->data[ch].W, sbr->data[ch].Ypos);
@@ -1702,13 +1703,13 @@ void ff_sbr_apply(AACContext *ac, SpectralBandReplication *sbr, int id_aac,
         nch = 2;
     }
 
-    sbr_qmf_synthesis(&ac->dsp, &sbr->mdct, &sbr->dsp, &ac->fdsp,
+    sbr_qmf_synthesis(&sbr->mdct, &sbr->dsp, &ac->fdsp,
                       L, sbr->X[0], sbr->qmf_filter_scratch,
                       sbr->data[0].synthesis_filterbank_samples,
                       &sbr->data[0].synthesis_filterbank_samples_offset,
                       downsampled);
     if (nch == 2)
-        sbr_qmf_synthesis(&ac->dsp, &sbr->mdct, &sbr->dsp, &ac->fdsp,
+        sbr_qmf_synthesis(&sbr->mdct, &sbr->dsp, &ac->fdsp,
                           R, sbr->X[1], sbr->qmf_filter_scratch,
                           sbr->data[1].synthesis_filterbank_samples,
                           &sbr->data[1].synthesis_filterbank_samples_offset,

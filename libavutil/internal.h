@@ -39,6 +39,14 @@
 #include "timer.h"
 #include "dict.h"
 
+#if ARCH_X86
+#   include "x86/emms.h"
+#endif
+
+#ifndef emms_c
+#   define emms_c()
+#endif
+
 #ifndef attribute_align_arg
 #if ARCH_X86_32 && AV_GCC_VERSION_AT_LEAST(4,2)
 #    define attribute_align_arg __attribute__((force_align_arg_pointer))
@@ -55,6 +63,32 @@
 
 #ifndef INT_BIT
 #    define INT_BIT (CHAR_BIT * sizeof(int))
+#endif
+
+// Some broken preprocessors need a second expansion
+// to be forced to tokenize __VA_ARGS__
+#define E1(x) x
+
+#define LOCAL_ALIGNED_A(a, t, v, s, o, ...)             \
+    uint8_t la_##v[sizeof(t s o) + (a)];                \
+    t (*v) o = (void *)FFALIGN((uintptr_t)la_##v, a)
+
+#define LOCAL_ALIGNED_D(a, t, v, s, o, ...)             \
+    DECLARE_ALIGNED(a, t, la_##v) s o;                  \
+    t (*v) o = la_##v
+
+#define LOCAL_ALIGNED(a, t, v, ...) E1(LOCAL_ALIGNED_A(a, t, v, __VA_ARGS__,,))
+
+#if HAVE_LOCAL_ALIGNED_8
+#   define LOCAL_ALIGNED_8(t, v, ...) E1(LOCAL_ALIGNED_D(8, t, v, __VA_ARGS__,,))
+#else
+#   define LOCAL_ALIGNED_8(t, v, ...) LOCAL_ALIGNED(8, t, v, __VA_ARGS__)
+#endif
+
+#if HAVE_LOCAL_ALIGNED_16
+#   define LOCAL_ALIGNED_16(t, v, ...) E1(LOCAL_ALIGNED_D(16, t, v, __VA_ARGS__,,))
+#else
+#   define LOCAL_ALIGNED_16(t, v, ...) LOCAL_ALIGNED(16, t, v, __VA_ARGS__)
 #endif
 
 #define FF_ALLOC_OR_GOTO(ctx, p, size, label)\
@@ -76,6 +110,11 @@
 }
 
 #include "libm.h"
+
+#if defined(_MSC_VER) && !CONFIG_SHARED
+#pragma comment(linker, "/include:"EXTERN_PREFIX"avpriv_strtod")
+#pragma comment(linker, "/include:"EXTERN_PREFIX"avpriv_snprintf")
+#endif
 
 /**
  * Return NULL if CONFIG_SMALL is true, otherwise the argument
@@ -128,24 +167,25 @@
 #   define ONLY_IF_THREADS_ENABLED(x) NULL
 #endif
 
-#if HAVE_MMX_INLINE
 /**
- * Empty mmx state.
- * this must be called between any dsp function and float/double code.
- * for example sin(); dsp->idct_put(); emms_c(); cos()
+ * Log a generic warning message about a missing feature.
+ *
+ * @param[in] avc a pointer to an arbitrary struct of which the first
+ *                field is a pointer to an AVClass struct
+ * @param[in] msg string containing the name of the missing feature
  */
-static av_always_inline void emms_c(void)
-{
-    __asm__ volatile ("emms" ::: "memory");
-}
-#elif HAVE_MMX && HAVE_MM_EMPTY
-#   include <mmintrin.h>
-#   define emms_c _mm_empty
-#elif HAVE_MMX && HAVE_YASM
-#   include "libavutil/x86/emms.h"
-#   define emms_c avpriv_emms_yasm
-#else
-#   define emms_c()
-#endif /* HAVE_MMX_INLINE */
+void avpriv_report_missing_feature(void *avc,
+                                   const char *msg, ...) av_printf_format(2, 3);
+
+/**
+ * Log a generic warning message about a missing feature.
+ * Additionally request that a sample showcasing the feature be uploaded.
+ *
+ * @param[in] avc a pointer to an arbitrary struct of which the first field is
+ *                a pointer to an AVClass struct
+ * @param[in] msg string containing the name of the missing feature
+ */
+void avpriv_request_sample(void *avc,
+                           const char *msg, ...) av_printf_format(2, 3);
 
 #endif /* AVUTIL_INTERNAL_H */

@@ -96,6 +96,7 @@ void avcodec_register_all(void)
     REGISTER_ENCODER(A64MULTI,          a64multi);
     REGISTER_ENCODER(A64MULTI5,         a64multi5);
     REGISTER_DECODER(AASC,              aasc);
+    REGISTER_DECODER(AIC,               aic);
     REGISTER_DECODER(AMV,               amv);
     REGISTER_DECODER(ANM,               anm);
     REGISTER_DECODER(ANSI,              ansi);
@@ -135,6 +136,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER(EIGHTSVX_EXP,      eightsvx_exp);
     REGISTER_DECODER(EIGHTSVX_FIB,      eightsvx_fib);
     REGISTER_DECODER(ESCAPE124,         escape124);
+    REGISTER_DECODER(ESCAPE130,         escape130);
     REGISTER_ENCDEC (FFV1,              ffv1);
     REGISTER_ENCDEC (FFVHUFF,           ffvhuff);
     REGISTER_ENCDEC (FLASHSV,           flashsv);
@@ -144,6 +146,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER(FOURXM,            fourxm);
     REGISTER_DECODER(FRAPS,             fraps);
     REGISTER_DECODER(FRWU,              frwu);
+    REGISTER_DECODER(G2M,               g2m);
     REGISTER_ENCDEC (GIF,               gif);
     REGISTER_ENCDEC (H261,              h261);
     REGISTER_ENCDEC (H263,              h263);
@@ -161,6 +164,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER(INDEO4,            indeo4);
     REGISTER_DECODER(INDEO5,            indeo5);
     REGISTER_DECODER(INTERPLAY_VIDEO,   interplay_video);
+    REGISTER_DECODER(JPEG2000,          jpeg2000);
     REGISTER_ENCDEC (JPEGLS,            jpegls);
     REGISTER_DECODER(JV,                jv);
     REGISTER_DECODER(KGV1,              kgv1);
@@ -429,6 +433,7 @@ void avcodec_register_all(void)
     REGISTER_ENCODER(LIBVORBIS,         libvorbis);
     REGISTER_ENCDEC (LIBVPX_VP8,        libvpx_vp8);
     REGISTER_ENCDEC (LIBVPX_VP9,        libvpx_vp9);
+    REGISTER_ENCODER(LIBWAVPACK,        libwavpack);
     REGISTER_ENCODER(LIBX264,           libx264);
     REGISTER_ENCODER(LIBXAVS,           libxavs);
     REGISTER_ENCODER(LIBXVID,           libxvid);

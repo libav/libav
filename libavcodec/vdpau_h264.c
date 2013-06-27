@@ -52,10 +52,10 @@ static void vdpau_h264_set_rf(VdpReferenceFrameH264 *rf, Picture *pic,
     VdpVideoSurface surface = ff_vdpau_get_surface_id(pic);
 
     if (pic_structure == 0)
-        pic_structure = pic->f.reference;
+        pic_structure = pic->reference;
 
     rf->surface             = surface;
-    rf->is_long_term        = pic->f.reference && pic->long_ref;
+    rf->is_long_term        = pic->reference && pic->long_ref;
     rf->top_is_reference    = (pic_structure & PICT_TOP_FIELD)    != 0;
     rf->bottom_is_reference = (pic_structure & PICT_BOTTOM_FIELD) != 0;
     rf->field_order_cnt[0]  = h264_foc(pic->field_poc[0]);
@@ -83,7 +83,7 @@ static void vdpau_h264_set_reference_frames(AVCodecContext *avctx)
             VdpVideoSurface surface_ref;
             int pic_frame_idx;
 
-            if (!pic || !pic->f.reference)
+            if (!pic || !pic->reference)
                 continue;
             pic_frame_idx = pic->long_ref ? pic->pic_id : pic->frame_num;
             surface_ref = ff_vdpau_get_surface_id(pic);
@@ -97,15 +97,15 @@ static void vdpau_h264_set_reference_frames(AVCodecContext *avctx)
                 ++rf2;
             }
             if (rf2 != rf) {
-                rf2->top_is_reference    |= (pic->f.reference & PICT_TOP_FIELD)    ? VDP_TRUE : VDP_FALSE;
-                rf2->bottom_is_reference |= (pic->f.reference & PICT_BOTTOM_FIELD) ? VDP_TRUE : VDP_FALSE;
+                rf2->top_is_reference    |= (pic->reference & PICT_TOP_FIELD)    ? VDP_TRUE : VDP_FALSE;
+                rf2->bottom_is_reference |= (pic->reference & PICT_BOTTOM_FIELD) ? VDP_TRUE : VDP_FALSE;
                 continue;
             }
 
             if (rf >= &info->referenceFrames[H264_RF_COUNT])
                 continue;
 
-            vdpau_h264_set_rf(rf, pic, pic->f.reference);
+            vdpau_h264_set_rf(rf, pic, pic->reference);
             ++rf;
         }
     }
@@ -119,9 +119,8 @@ static int vdpau_h264_start_frame(AVCodecContext *avctx,
 {
     H264Context * const h = avctx->priv_data;
     AVVDPAUContext *hwctx = avctx->hwaccel_context;
-    MpegEncContext * const s = &h->s;
     VdpPictureInfoH264 *info = &hwctx->info.h264;
-    Picture *pic = s->current_picture_ptr;
+    Picture *pic = h->cur_pic_ptr;
 
     /* init VdpPictureInfoH264 */
     info->slice_count                            = 0;
@@ -129,8 +128,8 @@ static int vdpau_h264_start_frame(AVCodecContext *avctx,
     info->field_order_cnt[1]                     = h264_foc(pic->field_poc[1]);
     info->is_reference                           = h->nal_ref_idc != 0;
     info->frame_num                              = h->frame_num;
-    info->field_pic_flag                         = s->picture_structure != PICT_FRAME;
-    info->bottom_field_flag                      = s->picture_structure == PICT_BOTTOM_FIELD;
+    info->field_pic_flag                         = h->picture_structure != PICT_FRAME;
+    info->bottom_field_flag                      = h->picture_structure == PICT_BOTTOM_FIELD;
     info->num_ref_frames                         = h->sps.ref_frame_count;
     info->mb_adaptive_frame_field_flag           = h->sps.mb_aff && !info->field_pic_flag;
     info->constrained_intra_pred_flag            = h->pps.constrained_intra_pred;
@@ -185,12 +184,27 @@ static int vdpau_h264_decode_slice(AVCodecContext *avctx,
     return 0;
 }
 
+static int vdpau_h264_end_frame(AVCodecContext *avctx)
+{
+    AVVDPAUContext *hwctx = avctx->hwaccel_context;
+    H264Context *h = avctx->priv_data;
+    VdpVideoSurface surf = ff_vdpau_get_surface_id(h->cur_pic_ptr);
+
+    hwctx->render(hwctx->decoder, surf, (void *)&hwctx->info,
+                  hwctx->bitstream_buffers_used, hwctx->bitstream_buffers);
+
+    ff_h264_draw_horiz_band(h, 0, h->avctx->height);
+    hwctx->bitstream_buffers_used = 0;
+
+    return 0;
+}
+
 AVHWAccel ff_h264_vdpau_hwaccel = {
     .name           = "h264_vdpau",
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_H264,
     .pix_fmt        = AV_PIX_FMT_VDPAU,
     .start_frame    = vdpau_h264_start_frame,
-    .end_frame      = ff_vdpau_common_end_frame,
+    .end_frame      = vdpau_h264_end_frame,
     .decode_slice   = vdpau_h264_decode_slice,
 };

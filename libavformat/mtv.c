@@ -64,13 +64,13 @@ static int mtv_probe(AVProbeData *p)
     if(!AV_RL16(&p->buf[52]) || !AV_RL16(&p->buf[54]))
     {
         if(!!AV_RL16(&p->buf[56]))
-            return AVPROBE_SCORE_MAX/2;
+            return AVPROBE_SCORE_EXTENSION;
         else
             return 0;
     }
 
     if(p->buf[51] != 16)
-        return AVPROBE_SCORE_MAX/4; // But we are going to assume 16bpp anyway ..
+        return AVPROBE_SCORE_EXTENSION / 2; // But we are going to assume 16bpp anyway ..
 
     return AVPROBE_SCORE_MAX;
 }
@@ -108,7 +108,7 @@ static int mtv_read_header(AVFormatContext *s)
     audio_subsegments = avio_rl16(pb);
 
     if (audio_subsegments == 0) {
-        av_log_ask_for_sample(s, "MTV files without audio are not supported\n");
+        avpriv_request_sample(s, "MTV files without audio");
         return AVERROR_PATCHWELCOME;
     }
 

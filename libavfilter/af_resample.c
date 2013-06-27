@@ -25,6 +25,7 @@
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
 #include "libavutil/common.h"
+#include "libavutil/dict.h"
 #include "libavutil/mathematics.h"
 #include "libavutil/opt.h"
 
@@ -36,13 +37,42 @@
 #include "internal.h"
 
 typedef struct ResampleContext {
+    const AVClass *class;
     AVAudioResampleContext *avr;
+    AVDictionary *options;
 
     int64_t next_pts;
 
     /* set by filter_frame() to signal an output frame to request_frame() */
     int got_output;
 } ResampleContext;
+
+static av_cold int init(AVFilterContext *ctx, AVDictionary **opts)
+{
+    ResampleContext *s = ctx->priv;
+    const AVClass *avr_class = avresample_get_class();
+    AVDictionaryEntry *e = NULL;
+
+    while ((e = av_dict_get(*opts, "", e, AV_DICT_IGNORE_SUFFIX))) {
+        if (av_opt_find(&avr_class, e->key, NULL, 0,
+                        AV_OPT_SEARCH_FAKE_OBJ | AV_OPT_SEARCH_CHILDREN))
+            av_dict_set(&s->options, e->key, e->value, 0);
+    }
+
+    e = NULL;
+    while ((e = av_dict_get(s->options, "", e, AV_DICT_IGNORE_SUFFIX)))
+        av_dict_set(opts, e->key, NULL, 0);
+
+    /* do not allow the user to override basic format options */
+    av_dict_set(&s->options,  "in_channel_layout", NULL, 0);
+    av_dict_set(&s->options, "out_channel_layout", NULL, 0);
+    av_dict_set(&s->options,  "in_sample_fmt",     NULL, 0);
+    av_dict_set(&s->options, "out_sample_fmt",     NULL, 0);
+    av_dict_set(&s->options,  "in_sample_rate",    NULL, 0);
+    av_dict_set(&s->options, "out_sample_rate",    NULL, 0);
+
+    return 0;
+}
 
 static av_cold void uninit(AVFilterContext *ctx)
 {
@@ -52,6 +82,7 @@ static av_cold void uninit(AVFilterContext *ctx)
         avresample_close(s->avr);
         avresample_free(&s->avr);
     }
+    av_dict_free(&s->options);
 }
 
 static int query_formats(AVFilterContext *ctx)
@@ -102,6 +133,14 @@ static int config_output(AVFilterLink *outlink)
 
     if (!(s->avr = avresample_alloc_context()))
         return AVERROR(ENOMEM);
+
+    if (s->options) {
+        AVDictionaryEntry *e = NULL;
+        while ((e = av_dict_get(s->options, "", e, AV_DICT_IGNORE_SUFFIX)))
+            av_log(ctx, AV_LOG_VERBOSE, "lavr option: %s=%s\n", e->key, e->value);
+
+        av_opt_set_dict(s->avr, &s->options);
+    }
 
     av_opt_set_int(s->avr,  "in_channel_layout", inlink ->channel_layout, 0);
     av_opt_set_int(s->avr, "out_channel_layout", outlink->channel_layout, 0);
@@ -184,16 +223,15 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                                     outlink->sample_rate, inlink->sample_rate,
                                     AV_ROUND_UP);
 
-        out= ff_get_audio_buffer(outlink, nb_samples);
+        out = ff_get_audio_buffer(outlink, nb_samples);
         if (!out) {
             ret = AVERROR(ENOMEM);
             goto fail;
         }
 
-        ret     = avresample_convert(s->avr, out->extended_data,
-                                     out->linesize[0], nb_samples,
-                                     in->extended_data, in->linesize[0],
-                                     in->nb_samples);
+        ret = avresample_convert(s->avr, out->extended_data, out->linesize[0],
+                                 nb_samples, in->extended_data, in->linesize[0],
+                                 in->nb_samples);
         if (ret <= 0) {
             av_frame_free(&out);
             if (ret < 0)
@@ -239,6 +277,25 @@ fail:
     return ret;
 }
 
+static const AVClass *resample_child_class_next(const AVClass *prev)
+{
+    return prev ? NULL : avresample_get_class();
+}
+
+static void *resample_child_next(void *obj, void *prev)
+{
+    ResampleContext *s = obj;
+    return prev ? NULL : s->avr;
+}
+
+static const AVClass resample_class = {
+    .class_name       = "resample",
+    .item_name        = av_default_item_name,
+    .version          = LIBAVUTIL_VERSION_INT,
+    .child_class_next = resample_child_class_next,
+    .child_next       = resample_child_next,
+};
+
 static const AVFilterPad avfilter_af_resample_inputs[] = {
     {
         .name           = "default",
@@ -262,7 +319,9 @@ AVFilter avfilter_af_resample = {
     .name          = "resample",
     .description   = NULL_IF_CONFIG_SMALL("Audio resampling and conversion."),
     .priv_size     = sizeof(ResampleContext),
+    .priv_class    = &resample_class,
 
+    .init_dict      = init,
     .uninit         = uninit,
     .query_formats  = query_formats,
 

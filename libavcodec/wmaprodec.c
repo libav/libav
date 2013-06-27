@@ -94,7 +94,6 @@
 #include "get_bits.h"
 #include "put_bits.h"
 #include "wmaprodata.h"
-#include "dsputil.h"
 #include "sinewin.h"
 #include "wma.h"
 #include "wma_common.h"
@@ -169,8 +168,6 @@ typedef struct {
 typedef struct WMAProDecodeCtx {
     /* generic decoder variables */
     AVCodecContext*  avctx;                         ///< codec context for av_log
-    AVFrame          frame;                         ///< AVFrame for decoded output
-    DSPContext       dsp;                           ///< accelerated DSP functions
     AVFloatDSPContext fdsp;
     uint8_t          frame_data[MAX_FRAMESIZE +
                       FF_INPUT_BUFFER_PADDING_SIZE];///< compressed frame data
@@ -280,8 +277,12 @@ static av_cold int decode_init(AVCodecContext *avctx)
     int log2_max_num_subframes;
     int num_possible_block_sizes;
 
+    if (!avctx->block_align) {
+        av_log(avctx, AV_LOG_ERROR, "block_align is not set\n");
+        return AVERROR(EINVAL);
+    }
+
     s->avctx = avctx;
-    ff_dsputil_init(&s->dsp, avctx);
     avpriv_float_dsp_init(&s->fdsp, avctx->flags & CODEC_FLAG_BITEXACT);
 
     init_put_bits(&s->pb, s->frame_data, MAX_FRAMESIZE);
@@ -298,7 +299,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
         av_dlog(avctx, "\n");
 
     } else {
-        av_log_ask_for_sample(avctx, "Unknown extradata size\n");
+        avpriv_request_sample(avctx, "Unknown extradata size");
         return AVERROR_PATCHWELCOME;
     }
 
@@ -313,7 +314,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
     /** get frame len */
     bits = ff_wma_get_frame_len_bits(avctx->sample_rate, 3, s->decode_flags);
     if (bits > WMAPRO_BLOCK_MAX_BITS) {
-        av_log_missing_feature(avctx, "14-bits block sizes", 1);
+        avpriv_request_sample(avctx, "14-bit block sizes");
         return AVERROR_PATCHWELCOME;
     }
     s->samples_per_frame = 1 << bits;
@@ -345,7 +346,8 @@ static av_cold int decode_init(AVCodecContext *avctx)
                avctx->channels);
         return AVERROR_INVALIDDATA;
     } else if (avctx->channels > WMAPRO_MAX_CHANNELS) {
-        av_log_ask_for_sample(avctx, "unsupported number of channels\n");
+        avpriv_request_sample(avctx,
+                              "More than %d channels", WMAPRO_MAX_CHANNELS);
         return AVERROR_PATCHWELCOME;
     }
 
@@ -462,9 +464,6 @@ static av_cold int decode_init(AVCodecContext *avctx)
         dump_context(s);
 
     avctx->channel_layout = channel_mask;
-
-    avcodec_get_frame_defaults(&s->frame);
-    avctx->coded_frame = &s->frame;
 
     return 0;
 }
@@ -678,8 +677,8 @@ static int decode_channel_transform(WMAProDecodeCtx* s)
         int remaining_channels = s->channels_for_cur_subframe;
 
         if (get_bits1(&s->gb)) {
-            av_log_ask_for_sample(s->avctx,
-                                  "unsupported channel transform bit\n");
+            avpriv_request_sample(s->avctx,
+                                  "Channel transform bit");
             return AVERROR_PATCHWELCOME;
         }
 
@@ -715,8 +714,8 @@ static int decode_channel_transform(WMAProDecodeCtx* s)
             if (chgroup->num_channels == 2) {
                 if (get_bits1(&s->gb)) {
                     if (get_bits1(&s->gb)) {
-                        av_log_ask_for_sample(s->avctx,
-                                              "unsupported channel transform type\n");
+                        avpriv_request_sample(s->avctx,
+                                              "Unknown channel transform type");
                     }
                 } else {
                     chgroup->transform = 1;
@@ -741,8 +740,8 @@ static int decode_channel_transform(WMAProDecodeCtx* s)
                     } else {
                         /** FIXME: more than 6 coupled channels not supported */
                         if (chgroup->num_channels > 6) {
-                            av_log_ask_for_sample(s->avctx,
-                                                  "coupled channels > 6\n");
+                            avpriv_request_sample(s->avctx,
+                                                  "Coupled channels > 6");
                         } else {
                             memcpy(chgroup->decorrelation_matrix,
                                    default_decorrelation[chgroup->num_channels],
@@ -1149,7 +1148,7 @@ static int decode_subframe(WMAProDecodeCtx *s)
 
     /** no idea for what the following bit is used */
     if (get_bits1(&s->gb)) {
-        av_log_ask_for_sample(s->avctx, "reserved bit set\n");
+        avpriv_request_sample(s->avctx, "Reserved bit");
         return AVERROR_PATCHWELCOME;
     }
 
@@ -1295,7 +1294,7 @@ static int decode_subframe(WMAProDecodeCtx *s)
  *@return 0 if the trailer bit indicates that this is the last frame,
  *        1 if there are additional frames
  */
-static int decode_frame(WMAProDecodeCtx *s, int *got_frame_ptr)
+static int decode_frame(WMAProDecodeCtx *s, AVFrame *frame, int *got_frame_ptr)
 {
     AVCodecContext *avctx = s->avctx;
     GetBitContext* gb = &s->gb;
@@ -1368,8 +1367,8 @@ static int decode_frame(WMAProDecodeCtx *s, int *got_frame_ptr)
     }
 
     /* get output buffer */
-    s->frame.nb_samples = s->samples_per_frame;
-    if ((ret = ff_get_buffer(avctx, &s->frame, 0)) < 0) {
+    frame->nb_samples = s->samples_per_frame;
+    if ((ret = ff_get_buffer(avctx, frame, 0)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         s->packet_loss = 1;
         return 0;
@@ -1377,7 +1376,7 @@ static int decode_frame(WMAProDecodeCtx *s, int *got_frame_ptr)
 
     /** copy samples to the output buffer */
     for (i = 0; i < avctx->channels; i++)
-        memcpy(s->frame.extended_data[i], s->channel[i].out,
+        memcpy(frame->extended_data[i], s->channel[i].out,
                s->samples_per_frame * sizeof(*s->channel[i].out));
 
     for (i = 0; i < avctx->channels; i++) {
@@ -1390,6 +1389,7 @@ static int decode_frame(WMAProDecodeCtx *s, int *got_frame_ptr)
     if (s->skip_frame) {
         s->skip_frame = 0;
         *got_frame_ptr = 0;
+        av_frame_unref(frame);
     } else {
         *got_frame_ptr = 1;
     }
@@ -1454,7 +1454,7 @@ static void save_bits(WMAProDecodeCtx *s, GetBitContext* gb, int len,
     buflen = (s->num_saved_bits + len + 8) >> 3;
 
     if (len <= 0 || buflen > MAX_FRAMESIZE) {
-        av_log_ask_for_sample(s->avctx, "input buffer too small\n");
+        avpriv_request_sample(s->avctx, "Too small input buffer");
         s->packet_loss = 1;
         return;
     }
@@ -1504,8 +1504,11 @@ static int decode_packet(AVCodecContext *avctx, void *data,
         s->packet_done = 0;
 
         /** sanity check for the buffer length */
-        if (buf_size < avctx->block_align)
-            return 0;
+        if (buf_size < avctx->block_align) {
+            av_log(avctx, AV_LOG_ERROR, "Input packet too small (%d < %d)\n",
+                   buf_size, avctx->block_align);
+            return AVERROR_INVALIDDATA;
+        }
 
         s->next_packet_start = buf_size - avctx->block_align;
         buf_size = avctx->block_align;
@@ -1545,7 +1548,7 @@ static int decode_packet(AVCodecContext *avctx, void *data,
 
             /** decode the cross packet frame if it is valid */
             if (!s->packet_loss)
-                decode_frame(s, got_frame_ptr);
+                decode_frame(s, data, got_frame_ptr);
         } else if (s->num_saved_bits - s->frame_offset) {
             av_dlog(avctx, "ignoring %x previously saved bits\n",
                     s->num_saved_bits - s->frame_offset);
@@ -1568,7 +1571,7 @@ static int decode_packet(AVCodecContext *avctx, void *data,
             (frame_size = show_bits(gb, s->log2_frame_size)) &&
             frame_size <= remaining_bits(s, gb)) {
             save_bits(s, gb, frame_size, 0);
-            s->packet_done = !decode_frame(s, got_frame_ptr);
+            s->packet_done = !decode_frame(s, data, got_frame_ptr);
         } else if (!s->len_prefix
                    && s->num_saved_bits > get_bits_count(&s->gb)) {
             /** when the frames do not have a length prefix, we don't know
@@ -1578,7 +1581,7 @@ static int decode_packet(AVCodecContext *avctx, void *data,
                 therefore we save the incoming packet first, then we append
                 the "previous frame" data from the next packet so that
                 we get a buffer that only contains full frames */
-            s->packet_done = !decode_frame(s, got_frame_ptr);
+            s->packet_done = !decode_frame(s, data, got_frame_ptr);
         } else
             s->packet_done = 1;
     }
@@ -1593,9 +1596,6 @@ static int decode_packet(AVCodecContext *avctx, void *data,
     s->packet_offset = get_bits_count(gb) & 7;
     if (s->packet_loss)
         return AVERROR_INVALIDDATA;
-
-    if (*got_frame_ptr)
-        *(AVFrame *)data = s->frame;
 
     return get_bits_count(gb) >> 3;
 }

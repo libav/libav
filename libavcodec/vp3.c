@@ -38,6 +38,7 @@
 #include "internal.h"
 #include "dsputil.h"
 #include "get_bits.h"
+#include "hpeldsp.h"
 #include "videodsp.h"
 #include "vp3data.h"
 #include "vp3dsp.h"
@@ -135,9 +136,12 @@ typedef struct Vp3DecodeContext {
     ThreadFrame last_frame;
     ThreadFrame current_frame;
     int keyframe;
-    DSPContext dsp;
+    uint8_t idct_permutation[64];
+    uint8_t idct_scantable[64];
+    HpelDSPContext hdsp;
     VideoDSPContext vdsp;
     VP3DSPContext vp3dsp;
+    DECLARE_ALIGNED(16, int16_t, block)[64];
     int flipped_image;
     int last_slice_end;
     int skip_loop_filter;
@@ -170,8 +174,6 @@ typedef struct Vp3DecodeContext {
     int data_offset[3];
 
     int8_t (*motion_val[2])[2];
-
-    ScanTable scantable;
 
     /* tables */
     uint16_t coded_dc_scale_factor[64];
@@ -260,9 +262,12 @@ static void vp3_decode_flush(AVCodecContext *avctx)
 {
     Vp3DecodeContext *s = avctx->priv_data;
 
-    ff_thread_release_buffer(avctx, &s->golden_frame);
-    ff_thread_release_buffer(avctx, &s->last_frame);
-    ff_thread_release_buffer(avctx, &s->current_frame);
+    if (s->golden_frame.f)
+        ff_thread_release_buffer(avctx, &s->golden_frame);
+    if (s->last_frame.f)
+        ff_thread_release_buffer(avctx, &s->last_frame);
+    if (s->current_frame.f)
+        ff_thread_release_buffer(avctx, &s->current_frame);
 }
 
 static av_cold int vp3_decode_end(AVCodecContext *avctx)
@@ -370,7 +375,8 @@ static void init_dequantizer(Vp3DecodeContext *s, int qpi)
                 int qmin= 8<<(inter + !i);
                 int qscale= i ? ac_scale_factor : dc_scale_factor;
 
-                s->qmat[qpi][inter][plane][s->dsp.idct_permutation[i]]= av_clip((qscale * coeff)/100 * 4, qmin, 4096);
+                s->qmat[qpi][inter][plane][s->idct_permutation[i]] =
+                    av_clip((qscale * coeff) / 100 * 4, qmin, 4096);
             }
             // all DC coefficients use the same quant so as not to interfere with DC prediction
             s->qmat[qpi][inter][plane][0] = s->qmat[0][inter][plane][0];
@@ -912,7 +918,7 @@ static int unpack_vlcs(Vp3DecodeContext *s, GetBitContext *gb,
     int i, j = 0;
     int token;
     int zero_run = 0;
-    DCTELEM coeff = 0;
+    int16_t coeff = 0;
     int bits_to_get;
     int blocks_ended;
     int coeff_i = 0;
@@ -1342,10 +1348,10 @@ static void apply_loop_filter(Vp3DecodeContext *s, int plane, int ystart, int ye
  * for the next block in coding order
  */
 static inline int vp3_dequant(Vp3DecodeContext *s, Vp3Fragment *frag,
-                              int plane, int inter, DCTELEM block[64])
+                              int plane, int inter, int16_t block[64])
 {
     int16_t *dequantizer = s->qmat[frag->qpi][inter][plane];
-    uint8_t *perm = s->scantable.permutated;
+    uint8_t *perm = s->idct_scantable;
     int i = 0;
 
     do {
@@ -1451,7 +1457,7 @@ static void await_reference_row(Vp3DecodeContext *s, Vp3Fragment *fragment, int 
 static void render_slice(Vp3DecodeContext *s, int slice)
 {
     int x, y, i, j, fragment;
-    LOCAL_ALIGNED_16(DCTELEM, block, [64]);
+    int16_t *block = s->block;
     int motion_x = 0xdeadbeef, motion_y = 0xdeadbeef;
     int motion_halfpel_index;
     uint8_t *motion_source;
@@ -1551,20 +1557,18 @@ static void render_slice(Vp3DecodeContext *s, int slice)
                            VP3 source but this would be slower as
                            put_no_rnd_pixels_tab is better optimzed */
                         if(motion_halfpel_index != 3){
-                            s->dsp.put_no_rnd_pixels_tab[1][motion_halfpel_index](
+                            s->hdsp.put_no_rnd_pixels_tab[1][motion_halfpel_index](
                                 output_plane + first_pixel,
                                 motion_source, stride, 8);
                         }else{
                             int d= (motion_x ^ motion_y)>>31; // d is 0 if motion_x and _y have the same sign, else -1
-                            s->dsp.put_no_rnd_pixels_l2[1](
+                            s->vp3dsp.put_no_rnd_pixels_l2(
                                 output_plane + first_pixel,
                                 motion_source - d,
                                 motion_source + stride + 1 + d,
                                 stride, 8);
                         }
                     }
-
-                        s->dsp.clear_block(block);
 
                     /* invert DCT and place (or add) in final output */
 
@@ -1593,7 +1597,7 @@ static void render_slice(Vp3DecodeContext *s, int slice)
                 } else {
 
                     /* copy directly from the previous frame */
-                    s->dsp.put_pixels_tab[1][0](
+                    s->hdsp.put_pixels_tab[1][0](
                         output_plane + first_pixel,
                         last_plane + first_pixel,
                         stride, 8);
@@ -1692,12 +1696,16 @@ static av_cold int vp3_decode_init(AVCodecContext *avctx)
     if (avctx->pix_fmt == AV_PIX_FMT_NONE)
         avctx->pix_fmt = AV_PIX_FMT_YUV420P;
     avctx->chroma_sample_location = AVCHROMA_LOC_CENTER;
-    ff_dsputil_init(&s->dsp, avctx);
+    ff_hpeldsp_init(&s->hdsp, avctx->flags | CODEC_FLAG_BITEXACT);
     ff_videodsp_init(&s->vdsp, 8);
     ff_vp3dsp_init(&s->vp3dsp, avctx->flags);
 
-    ff_init_scantable_permutation(s->dsp.idct_permutation, s->vp3dsp.idct_perm);
-    ff_init_scantable(s->dsp.idct_permutation, &s->scantable, ff_zigzag_direct);
+    for (i = 0; i < 64; i++) {
+#define T(x) (x >> 3) | ((x & 7) << 3)
+        s->idct_permutation[i] = T(i);
+        s->idct_scantable[i] = T(ff_zigzag_direct[i]);
+#undef T
+    }
 
     /* initialize to an impossible value which will force a recalculation
      * in the first frame decode */
@@ -2144,8 +2152,6 @@ static int vp3_init_thread_copy(AVCodecContext *avctx)
     s->motion_val[0]          = NULL;
     s->motion_val[1]          = NULL;
     s->edge_emu_buffer        = NULL;
-
-    avctx->internal->allocate_progress = 1;
 
     return init_frames(s);
 }

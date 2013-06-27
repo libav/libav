@@ -32,7 +32,6 @@
 
 #include "libavutil/float_dsp.h"
 #include "avcodec.h"
-#include "dsputil.h"
 #include "fft.h"
 #include "mpeg4audio.h"
 #include "sbr.h"
@@ -262,7 +261,7 @@ typedef struct ChannelElement {
  */
 typedef struct AACContext {
     AVCodecContext *avctx;
-    AVFrame frame;
+    AVFrame *frame;
 
     int is_saved;                 ///< Set if elements have stored overlap from previous frame.
     DynamicRangeControl che_drc;
@@ -291,7 +290,6 @@ typedef struct AACContext {
     FFTContext mdct;
     FFTContext mdct_small;
     FFTContext mdct_ltp;
-    DSPContext dsp;
     FmtConvertContext fmt_conv;
     AVFloatDSPContext fdsp;
     int random_state;

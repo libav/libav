@@ -28,6 +28,7 @@
 #include "avcodec.h"
 #include "get_bits.h"
 #include "golomb.h"
+#include "h264chroma.h"
 #include "mathops.h"
 #include "cavs.h"
 
@@ -275,7 +276,7 @@ static void intra_pred_plane(uint8_t *d,uint8_t *top,uint8_t *left,int stride)
     int x, y, ia;
     int ih = 0;
     int iv = 0;
-    uint8_t *cm = ff_cropTbl + MAX_NEG_CROP;
+    const uint8_t *cm = ff_cropTbl + MAX_NEG_CROP;
 
     for (x = 0; x < 4; x++) {
         ih += (x + 1) * (top [5 + x] - top [3 - x]);
@@ -464,30 +465,35 @@ void ff_cavs_inter(AVSContext *h, enum cavs_mb mb_type) {
     if(ff_cavs_partition_flags[mb_type] == 0){ // 16x16
         mc_part_std(h, 8, 0, h->cy, h->cu, h->cv, 0, 0,
                 h->cdsp.put_cavs_qpel_pixels_tab[0],
-                h->dsp.put_h264_chroma_pixels_tab[0],
+                h->h264chroma.put_h264_chroma_pixels_tab[0],
                 h->cdsp.avg_cavs_qpel_pixels_tab[0],
-                h->dsp.avg_h264_chroma_pixels_tab[0],&h->mv[MV_FWD_X0]);
+                h->h264chroma.avg_h264_chroma_pixels_tab[0],
+                &h->mv[MV_FWD_X0]);
     }else{
         mc_part_std(h, 4, 0, h->cy, h->cu, h->cv, 0, 0,
                 h->cdsp.put_cavs_qpel_pixels_tab[1],
-                h->dsp.put_h264_chroma_pixels_tab[1],
+                h->h264chroma.put_h264_chroma_pixels_tab[1],
                 h->cdsp.avg_cavs_qpel_pixels_tab[1],
-                h->dsp.avg_h264_chroma_pixels_tab[1],&h->mv[MV_FWD_X0]);
+                h->h264chroma.avg_h264_chroma_pixels_tab[1],
+                &h->mv[MV_FWD_X0]);
         mc_part_std(h, 4, 0, h->cy, h->cu, h->cv, 4, 0,
                 h->cdsp.put_cavs_qpel_pixels_tab[1],
-                h->dsp.put_h264_chroma_pixels_tab[1],
+                h->h264chroma.put_h264_chroma_pixels_tab[1],
                 h->cdsp.avg_cavs_qpel_pixels_tab[1],
-                h->dsp.avg_h264_chroma_pixels_tab[1],&h->mv[MV_FWD_X1]);
+                h->h264chroma.avg_h264_chroma_pixels_tab[1],
+                &h->mv[MV_FWD_X1]);
         mc_part_std(h, 4, 0, h->cy, h->cu, h->cv, 0, 4,
                 h->cdsp.put_cavs_qpel_pixels_tab[1],
-                h->dsp.put_h264_chroma_pixels_tab[1],
+                h->h264chroma.put_h264_chroma_pixels_tab[1],
                 h->cdsp.avg_cavs_qpel_pixels_tab[1],
-                h->dsp.avg_h264_chroma_pixels_tab[1],&h->mv[MV_FWD_X2]);
+                h->h264chroma.avg_h264_chroma_pixels_tab[1],
+                &h->mv[MV_FWD_X2]);
         mc_part_std(h, 4, 0, h->cy, h->cu, h->cv, 4, 4,
                 h->cdsp.put_cavs_qpel_pixels_tab[1],
-                h->dsp.put_h264_chroma_pixels_tab[1],
+                h->h264chroma.put_h264_chroma_pixels_tab[1],
                 h->cdsp.avg_cavs_qpel_pixels_tab[1],
-                h->dsp.avg_h264_chroma_pixels_tab[1],&h->mv[MV_FWD_X3]);
+                h->h264chroma.avg_h264_chroma_pixels_tab[1],
+                &h->mv[MV_FWD_X3]);
     }
 }
 
@@ -702,24 +708,25 @@ void ff_cavs_init_pic(AVSContext *h) {
  */
 void ff_cavs_init_top_lines(AVSContext *h) {
     /* alloc top line of predictors */
-    h->top_qp       = av_malloc( h->mb_width);
-    h->top_mv[0]    = av_malloc((h->mb_width*2+1)*sizeof(cavs_vector));
-    h->top_mv[1]    = av_malloc((h->mb_width*2+1)*sizeof(cavs_vector));
-    h->top_pred_Y   = av_malloc( h->mb_width*2*sizeof(*h->top_pred_Y));
-    h->top_border_y = av_malloc((h->mb_width+1)*16);
-    h->top_border_u = av_malloc( h->mb_width * 10);
-    h->top_border_v = av_malloc( h->mb_width * 10);
+    h->top_qp       = av_mallocz( h->mb_width);
+    h->top_mv[0]    = av_mallocz((h->mb_width*2+1)*sizeof(cavs_vector));
+    h->top_mv[1]    = av_mallocz((h->mb_width*2+1)*sizeof(cavs_vector));
+    h->top_pred_Y   = av_mallocz( h->mb_width*2*sizeof(*h->top_pred_Y));
+    h->top_border_y = av_mallocz((h->mb_width+1)*16);
+    h->top_border_u = av_mallocz( h->mb_width * 10);
+    h->top_border_v = av_mallocz( h->mb_width * 10);
 
     /* alloc space for co-located MVs and types */
-    h->col_mv       = av_malloc( h->mb_width*h->mb_height*4*sizeof(cavs_vector));
-    h->col_type_base = av_malloc(h->mb_width*h->mb_height);
-    h->block        = av_mallocz(64*sizeof(DCTELEM));
+    h->col_mv       = av_mallocz( h->mb_width*h->mb_height*4*sizeof(cavs_vector));
+    h->col_type_base = av_mallocz(h->mb_width*h->mb_height);
+    h->block        = av_mallocz(64*sizeof(int16_t));
 }
 
 av_cold int ff_cavs_init(AVCodecContext *avctx) {
     AVSContext *h = avctx->priv_data;
 
     ff_dsputil_init(&h->dsp, avctx);
+    ff_h264chroma_init(&h->h264chroma, 8);
     ff_videodsp_init(&h->vdsp, 8);
     ff_cavsdsp_init(&h->cdsp, avctx);
     ff_init_scantable_permutation(h->dsp.idct_permutation,

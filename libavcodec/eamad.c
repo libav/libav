@@ -30,7 +30,6 @@
 
 #include "avcodec.h"
 #include "get_bits.h"
-#include "dsputil.h"
 #include "aandcttab.h"
 #include "eaidct.h"
 #include "internal.h"
@@ -50,7 +49,7 @@ typedef struct MadContext {
     GetBitContext gb;
     void *bitstream_buf;
     unsigned int bitstream_buf_size;
-    DECLARE_ALIGNED(16, DCTELEM, block)[64];
+    DECLARE_ALIGNED(16, int16_t, block)[64];
     ScanTable scantable;
     uint16_t quant_matrix[64];
     int mb_x;
@@ -96,7 +95,7 @@ static inline void comp_block(MadContext *t, AVFrame *frame,
     }
 }
 
-static inline void idct_put(MadContext *t, AVFrame *frame, DCTELEM *block,
+static inline void idct_put(MadContext *t, AVFrame *frame, int16_t *block,
                             int mb_x, int mb_y, int j)
 {
     if (j < 4) {
@@ -111,7 +110,7 @@ static inline void idct_put(MadContext *t, AVFrame *frame, DCTELEM *block,
     }
 }
 
-static inline void decode_block_intra(MadContext *s, DCTELEM * block)
+static inline void decode_block_intra(MadContext *s, int16_t * block)
 {
     int level, i, j, run;
     RLTable *rl = &ff_rl_mpeg1;
@@ -260,6 +259,19 @@ static int decode_frame(AVCodecContext *avctx,
     if ((ret = ff_get_buffer(avctx, frame, AV_GET_BUFFER_FLAG_REF)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
+    }
+
+    if (inter && !s->last_frame.data[0]) {
+        av_log(avctx, AV_LOG_WARNING, "Missing reference frame.\n");
+        ret = ff_get_buffer(avctx, &s->last_frame, AV_GET_BUFFER_FLAG_REF);
+        if (ret < 0)
+            return ret;
+        memset(s->last_frame.data[0], 0, s->last_frame.height *
+               s->last_frame.linesize[0]);
+        memset(s->last_frame.data[1], 0x80, s->last_frame.height / 2 *
+               s->last_frame.linesize[1]);
+        memset(s->last_frame.data[2], 0x80, s->last_frame.height / 2 *
+               s->last_frame.linesize[2]);
     }
 
     av_fast_padded_malloc(&s->bitstream_buf, &s->bitstream_buf_size,

@@ -25,7 +25,6 @@
 #include "libavutil/float_dsp.h"
 #include "get_bits.h"
 #include "put_bits.h"
-#include "dsputil.h"
 #include "fft.h"
 #include "fmtconvert.h"
 
@@ -66,7 +65,6 @@ typedef struct CoefVLCTable {
 
 typedef struct WMACodecContext {
     AVCodecContext* avctx;
-    AVFrame frame;
     GetBitContext gb;
     PutBitContext pb;
     int version;                            ///< 1 = 0x160 (WMAV1), 2 = 0x161 (WMAV2)
@@ -132,7 +130,6 @@ typedef struct WMACodecContext {
     float lsp_pow_e_table[256];
     float lsp_pow_m_table1[(1 << LSP_POW_BITS)];
     float lsp_pow_m_table2[(1 << LSP_POW_BITS)];
-    DSPContext dsp;
     FmtConvertContext fmt_conv;
     AVFloatDSPContext fdsp;
 

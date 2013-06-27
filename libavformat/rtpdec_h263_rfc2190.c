@@ -27,6 +27,7 @@
 
 #include "avformat.h"
 #include "rtpdec_formats.h"
+#include "libavutil/attributes.h"
 #include "libavutil/intreadwrite.h"
 #include "libavcodec/get_bits.h"
 
@@ -53,6 +54,14 @@ static void h263_free_context(PayloadContext *data)
         av_free(p);
     }
     av_free(data);
+}
+
+static av_cold int h263_init(AVFormatContext *ctx, int st_index, PayloadContext *data)
+{
+    if (st_index < 0)
+        return 0;
+    ctx->streams[st_index]->need_parsing = AVSTREAM_PARSE_FULL;
+    return 0;
 }
 
 static int h263_handle_packet(AVFormatContext *ctx, PayloadContext *data,
@@ -198,6 +207,7 @@ static int h263_handle_packet(AVFormatContext *ctx, PayloadContext *data,
 RTPDynamicProtocolHandler ff_h263_rfc2190_dynamic_handler = {
     .codec_type        = AVMEDIA_TYPE_VIDEO,
     .codec_id          = AV_CODEC_ID_H263,
+    .init              = h263_init,
     .parse_packet      = h263_handle_packet,
     .alloc             = h263_new_context,
     .free              = h263_free_context,

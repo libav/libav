@@ -33,8 +33,8 @@
  */
 
 #include "avcodec.h"
-#include "dsputil.h"
 #include "get_bits.h"
+#include "hpeldsp.h"
 #include "internal.h"
 #include "mathops.h"
 #include "svq1.h"
@@ -58,7 +58,7 @@ typedef struct svq1_pmv_s {
 } svq1_pmv;
 
 typedef struct SVQ1Context {
-    DSPContext dsp;
+    HpelDSPContext hdsp;
     GetBitContext gb;
     AVFrame *prev;
     int width;
@@ -320,9 +320,10 @@ static void svq1_skip_block(uint8_t *current, uint8_t *previous,
     }
 }
 
-static int svq1_motion_inter_block(DSPContext *dsp, GetBitContext *bitbuf,
+static int svq1_motion_inter_block(HpelDSPContext *hdsp, GetBitContext *bitbuf,
                                    uint8_t *current, uint8_t *previous,
-                                   int pitch, svq1_pmv *motion, int x, int y)
+                                   int pitch, svq1_pmv *motion, int x, int y,
+                                   int width, int height)
 {
     uint8_t *src;
     uint8_t *dst;
@@ -352,22 +353,21 @@ static int svq1_motion_inter_block(DSPContext *dsp, GetBitContext *bitbuf,
     motion[x / 8 + 2].y =
     motion[x / 8 + 3].y = mv.y;
 
-    if (y + (mv.y >> 1) < 0)
-        mv.y = 0;
-    if (x + (mv.x >> 1) < 0)
-        mv.x = 0;
+    mv.x = av_clip(mv.x, -2 * x, 2 * (width  - x - 16));
+    mv.y = av_clip(mv.y, -2 * y, 2 * (height - y - 16));
 
     src = &previous[(x + (mv.x >> 1)) + (y + (mv.y >> 1)) * pitch];
     dst = current;
 
-    dsp->put_pixels_tab[0][(mv.y & 1) << 1 | (mv.x & 1)](dst, src, pitch, 16);
+    hdsp->put_pixels_tab[0][(mv.y & 1) << 1 | (mv.x & 1)](dst, src, pitch, 16);
 
     return 0;
 }
 
-static int svq1_motion_inter_4v_block(DSPContext *dsp, GetBitContext *bitbuf,
+static int svq1_motion_inter_4v_block(HpelDSPContext *hdsp, GetBitContext *bitbuf,
                                       uint8_t *current, uint8_t *previous,
-                                      int pitch, svq1_pmv *motion, int x, int y)
+                                      int pitch, svq1_pmv *motion, int x, int y,
+                                      int width, int height)
 {
     uint8_t *src;
     uint8_t *dst;
@@ -427,15 +427,13 @@ static int svq1_motion_inter_4v_block(DSPContext *dsp, GetBitContext *bitbuf,
         int mvy = pmv[i]->y + (i >> 1) * 16;
 
         // FIXME: clipping or padding?
-        if (y + (mvy >> 1) < 0)
-            mvy = 0;
-        if (x + (mvx >> 1) < 0)
-            mvx = 0;
+        mvx = av_clip(mvx, -2 * x, 2 * (width  - x - 8));
+        mvy = av_clip(mvy, -2 * y, 2 * (height - y - 8));
 
         src = &previous[(x + (mvx >> 1)) + (y + (mvy >> 1)) * pitch];
         dst = current;
 
-        dsp->put_pixels_tab[1][((mvy & 1) << 1) | (mvx & 1)](dst, src, pitch, 8);
+        hdsp->put_pixels_tab[1][((mvy & 1) << 1) | (mvx & 1)](dst, src, pitch, 8);
 
         /* select next block */
         if (i & 1)
@@ -447,10 +445,11 @@ static int svq1_motion_inter_4v_block(DSPContext *dsp, GetBitContext *bitbuf,
     return 0;
 }
 
-static int svq1_decode_delta_block(AVCodecContext *avctx, DSPContext *dsp,
+static int svq1_decode_delta_block(AVCodecContext *avctx, HpelDSPContext *hdsp,
                                    GetBitContext *bitbuf,
                                    uint8_t *current, uint8_t *previous,
-                                   int pitch, svq1_pmv *motion, int x, int y)
+                                   int pitch, svq1_pmv *motion, int x, int y,
+                                   int width, int height)
 {
     uint32_t block_type;
     int result = 0;
@@ -474,8 +473,8 @@ static int svq1_decode_delta_block(AVCodecContext *avctx, DSPContext *dsp,
         break;
 
     case SVQ1_BLOCK_INTER:
-        result = svq1_motion_inter_block(dsp, bitbuf, current, previous,
-                                         pitch, motion, x, y);
+        result = svq1_motion_inter_block(hdsp, bitbuf, current, previous,
+                                         pitch, motion, x, y, width, height);
 
         if (result != 0) {
             av_dlog(avctx, "Error in svq1_motion_inter_block %i\n", result);
@@ -485,8 +484,8 @@ static int svq1_decode_delta_block(AVCodecContext *avctx, DSPContext *dsp,
         break;
 
     case SVQ1_BLOCK_INTER_4V:
-        result = svq1_motion_inter_4v_block(dsp, bitbuf, current, previous,
-                                            pitch, motion, x, y);
+        result = svq1_motion_inter_4v_block(hdsp, bitbuf, current, previous,
+                                            pitch, motion, x, y, width, height);
 
         if (result != 0) {
             av_dlog(avctx, "Error in svq1_motion_inter_4v_block %i\n", result);
@@ -579,8 +578,8 @@ static int svq1_decode_frame_header(AVCodecContext *avctx, AVFrame *frame)
                 return AVERROR_INVALIDDATA;
         } else {
             /* get width, height from table */
-            s->width  = ff_svq1_frame_size_table[frame_size_code].width;
-            s->height = ff_svq1_frame_size_table[frame_size_code].height;
+            s->width  = ff_svq1_frame_size_table[frame_size_code][0];
+            s->height = ff_svq1_frame_size_table[frame_size_code][1];
         }
     }
 
@@ -689,7 +688,8 @@ static int svq1_decode_frame(AVCodecContext *avctx, void *data,
         } else {
             /* delta frame */
             uint8_t *previous = s->prev->data[i];
-            if (!previous) {
+            if (!previous ||
+                s->prev->width != s->width || s->prev->height != s->height) {
                 av_log(avctx, AV_LOG_ERROR, "Missing reference frame.\n");
                 result = AVERROR_INVALIDDATA;
                 goto err;
@@ -699,10 +699,10 @@ static int svq1_decode_frame(AVCodecContext *avctx, void *data,
 
             for (y = 0; y < height; y += 16) {
                 for (x = 0; x < width; x += 16) {
-                    result = svq1_decode_delta_block(avctx, &s->dsp,
+                    result = svq1_decode_delta_block(avctx, &s->hdsp,
                                                      &s->gb, &current[x],
                                                      previous, linesize,
-                                                     pmv, x, y);
+                                                     pmv, x, y, width, height);
                     if (result != 0) {
                         av_dlog(avctx,
                                 "Error in svq1_decode_delta_block %i\n",
@@ -748,7 +748,7 @@ static av_cold int svq1_decode_init(AVCodecContext *avctx)
     s->height           = avctx->height + 3 & ~3;
     avctx->pix_fmt      = AV_PIX_FMT_YUV410P;
 
-    ff_dsputil_init(&s->dsp, avctx);
+    ff_hpeldsp_init(&s->hdsp, avctx->flags);
 
     INIT_VLC_STATIC(&svq1_block_type, 2, 4,
                     &ff_svq1_block_type_vlc[0][1], 2, 1,
@@ -793,7 +793,7 @@ static av_cold int svq1_decode_end(AVCodecContext *avctx)
 {
     SVQ1Context *s = avctx->priv_data;
 
-    avcodec_free_frame(&s->prev);
+    av_frame_free(&s->prev);
 
     return 0;
 }

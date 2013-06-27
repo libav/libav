@@ -40,6 +40,10 @@ static void free_buffers(VP8Context *s)
     int i;
     if (s->thread_data)
         for (i = 0; i < MAX_THREADS; i++) {
+#if HAVE_THREADS
+            pthread_cond_destroy(&s->thread_data[i].cond);
+            pthread_mutex_destroy(&s->thread_data[i].lock);
+#endif
             av_freep(&s->thread_data[i].filter_strength);
             av_freep(&s->thread_data[i].edge_emu_buffer);
         }
@@ -58,12 +62,10 @@ static int vp8_alloc_frame(VP8Context *s, VP8Frame *f, int ref)
     if ((ret = ff_thread_get_buffer(s->avctx, &f->tf,
                                     ref ? AV_GET_BUFFER_FLAG_REF : 0)) < 0)
         return ret;
-    if (!(f->seg_map = av_buffer_alloc(s->mb_width * s->mb_height))) {
+    if (!(f->seg_map = av_buffer_allocz(s->mb_width * s->mb_height))) {
         ff_thread_release_buffer(s->avctx, &f->tf);
         return AVERROR(ENOMEM);
     }
-    memset(f->seg_map->data, 0, f->seg_map->size);
-
     return 0;
 }
 
@@ -339,7 +341,7 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
         buf_size -= 7;
 
         if (hscale || vscale)
-            av_log_missing_feature(s->avctx, "Upscaling", 1);
+            avpriv_request_sample(s->avctx, "Upscaling");
 
         s->update_golden = s->update_altref = VP56_FRAME_CURRENT;
         for (i = 0; i < 4; i++)
@@ -757,7 +759,7 @@ void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
  * @return 0 if no coeffs were decoded
  *         otherwise, the index of the last coeff decoded plus one
  */
-static int decode_block_coeffs_internal(VP56RangeCoder *r, DCTELEM block[16],
+static int decode_block_coeffs_internal(VP56RangeCoder *r, int16_t block[16],
                                         uint8_t probs[16][3][NUM_DCT_TOKENS-1],
                                         int i, uint8_t *token_prob, int16_t qmul[2])
 {
@@ -825,7 +827,7 @@ skip_eob:
  *         otherwise, the index of the last coeff decoded plus one
  */
 static av_always_inline
-int decode_block_coeffs(VP56RangeCoder *c, DCTELEM block[16],
+int decode_block_coeffs(VP56RangeCoder *c, int16_t block[16],
                         uint8_t probs[16][3][NUM_DCT_TOKENS-1],
                         int i, int zero_nhood, int16_t qmul[2])
 {
@@ -2052,7 +2054,6 @@ static av_cold int vp8_decode_init_thread_copy(AVCodecContext *avctx)
     int ret;
 
     s->avctx = avctx;
-    avctx->internal->allocate_progress = 1;
 
     if ((ret = vp8_init_frames(s)) < 0) {
         vp8_decode_free(avctx);

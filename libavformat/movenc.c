@@ -305,8 +305,7 @@ static int mov_write_esds_tag(AVIOContext *pb, MOVTrack *track) // Basic
     else
         avio_w8(pb, 0x11); // flags (= Visualstream)
 
-    avio_w8(pb,  track->enc->rc_buffer_size>>(3+16));      // Buffersize DB (24 bits)
-    avio_wb16(pb, (track->enc->rc_buffer_size>>3)&0xFFFF); // Buffersize DB
+    avio_wb24(pb, track->enc->rc_buffer_size >> 3); // Buffersize DB
 
     avio_wb32(pb, FFMAX(track->enc->bit_rate, track->enc->rc_max_rate)); // maxbitrate (FIXME should be max rate in any 1 sec window)
     if(track->enc->rc_max_rate != track->enc->rc_min_rate || track->enc->rc_min_rate==0)
@@ -2190,9 +2189,11 @@ static int mov_write_tfhd_tag(AVIOContext *pb, MOVTrack *track,
 
     /* Don't set a default sample size, the silverlight player refuses
      * to play files with that set. Don't set a default sample duration,
-     * WMP freaks out if it is set. */
+     * WMP freaks out if it is set. Don't set a base data offset, PIFF
+     * file format says it MUST NOT be set. */
     if (track->mode == MODE_ISM)
-        flags &= ~(MOV_TFHD_DEFAULT_SIZE | MOV_TFHD_DEFAULT_DURATION);
+        flags &= ~(MOV_TFHD_DEFAULT_SIZE | MOV_TFHD_DEFAULT_DURATION |
+                   MOV_TFHD_BASE_DATA_OFFSET);
 
     avio_wb32(pb, 0); /* size placeholder */
     ffio_wfourcc(pb, "tfhd");
@@ -2756,9 +2757,14 @@ static int mov_flush_fragment(AVFormatContext *s)
             MOVFragmentInfo *info;
             avio_flush(s->pb);
             track->nb_frag_info++;
-            track->frag_info = av_realloc(track->frag_info,
-                                          sizeof(*track->frag_info) *
-                                          track->nb_frag_info);
+            if (track->nb_frag_info >= track->frag_info_capacity) {
+                unsigned new_capacity = track->nb_frag_info + MOV_FRAG_INFO_ALLOC_INCREMENT;
+                if (av_reallocp_array(&track->frag_info,
+                                      new_capacity,
+                                      sizeof(*track->frag_info)))
+                    return AVERROR(ENOMEM);
+                track->frag_info_capacity = new_capacity;
+            }
             info = &track->frag_info[track->nb_frag_info - 1];
             info->offset   = avio_tell(s->pb);
             info->time     = mov->tracks[i].frag_start;
@@ -2868,10 +2874,12 @@ int ff_mov_write_packet(AVFormatContext *s, AVPacket *pkt)
         memcpy(trk->vos_data, pkt->data, size);
     }
 
-    if (!(trk->entry % MOV_INDEX_CLUSTER_SIZE)) {
-        trk->cluster = av_realloc(trk->cluster, (trk->entry + MOV_INDEX_CLUSTER_SIZE) * sizeof(*trk->cluster));
-        if (!trk->cluster)
-            return -1;
+    if (trk->entry >= trk->cluster_capacity) {
+        unsigned new_capacity = 2*(trk->entry + MOV_INDEX_CLUSTER_SIZE);
+        if (av_reallocp_array(&trk->cluster, new_capacity,
+                              sizeof(*trk->cluster)))
+            return AVERROR(ENOMEM);
+        trk->cluster_capacity = new_capacity;
     }
 
     trk->cluster[trk->entry].pos = avio_tell(pb) - size;

@@ -201,7 +201,7 @@ static int flv_same_video_codec(AVCodecContext *vcodec, int flags)
     return 0;
 }
 
-static int flv_set_video_codec(AVFormatContext *s, AVStream *vstream, int flv_codecid) {
+static int flv_set_video_codec(AVFormatContext *s, AVStream *vstream, int flv_codecid, int read) {
     AVCodecContext *vcodec = vstream->codec;
     switch(flv_codecid) {
         case FLV_CODECID_H263  : vcodec->codec_id = AV_CODEC_ID_FLV1   ; break;
@@ -211,11 +211,17 @@ static int flv_set_video_codec(AVFormatContext *s, AVStream *vstream, int flv_co
         case FLV_CODECID_VP6A  :
             if(flv_codecid == FLV_CODECID_VP6A)
                 vcodec->codec_id = AV_CODEC_ID_VP6A;
-            if(vcodec->extradata_size != 1) {
-                vcodec->extradata_size = 1;
-                vcodec->extradata = av_malloc(1);
+            if (read) {
+                if (vcodec->extradata_size != 1) {
+                    vcodec->extradata = av_malloc(1);
+                    if (vcodec->extradata)
+                        vcodec->extradata_size = 1;
+                }
+                if (vcodec->extradata)
+                    vcodec->extradata[0] = avio_r8(s->pb);
+                else
+                    avio_skip(s->pb, 1);
             }
-            vcodec->extradata[0] = avio_r8(s->pb);
             return 1; // 1 byte body size adjustment for flv_read_packet()
         case FLV_CODECID_H264:
             vcodec->codec_id = AV_CODEC_ID_H264;
@@ -394,7 +400,7 @@ static int amf_parse_object(AVFormatContext *s, AVStream *astream, AVStream *vst
         acodec = astream ? astream->codec : NULL;
         vcodec = vstream ? vstream->codec : NULL;
 
-        if (amf_type == AMF_DATA_TYPE_NUMBER) {
+        if (amf_type == AMF_DATA_TYPE_NUMBER || amf_type == AMF_DATA_TYPE_BOOL) {
             if (!strcmp(key, "duration"))
                 s->duration = num_val * AV_TIME_BASE;
             else if (!strcmp(key, "videodatarate") && vcodec && 0 <= (int)(num_val * 1024.0))
@@ -408,13 +414,21 @@ static int amf_parse_object(AVFormatContext *s, AVStream *astream, AVStream *vst
                 st->codec->codec_id = AV_CODEC_ID_TEXT;
             } else if (flv->trust_metadata) {
                 if (!strcmp(key, "videocodecid") && vcodec) {
-                    flv_set_video_codec(s, vstream, num_val);
+                    flv_set_video_codec(s, vstream, num_val, 0);
                 } else
                 if (!strcmp(key, "audiocodecid") && acodec) {
-                    flv_set_audio_codec(s, astream, acodec, num_val);
+                    int id = ((int)num_val) << FLV_AUDIO_CODECID_OFFSET;
+                    flv_set_audio_codec(s, astream, acodec, id);
                 } else
                 if (!strcmp(key, "audiosamplerate") && acodec) {
                     acodec->sample_rate = num_val;
+                } else if (!strcmp(key, "audiosamplesize") && acodec) {
+                    acodec->bits_per_coded_sample = num_val;
+                } else if (!strcmp(key, "stereo") && acodec) {
+                    acodec->channels = num_val + 1;
+                    acodec->channel_layout = acodec->channels == 2 ?
+                                             AV_CH_LAYOUT_STEREO :
+                                             AV_CH_LAYOUT_MONO;
                 } else
                 if (!strcmp(key, "width") && vcodec) {
                     vcodec->width = num_val;
@@ -766,7 +780,7 @@ static int flv_read_packet(AVFormatContext *s, AVPacket *pkt)
             sample_rate = ctx.sample_rate;
         }
     }else{
-        size -= flv_set_video_codec(s, st, flags & FLV_VIDEO_CODECID_MASK);
+        size -= flv_set_video_codec(s, st, flags & FLV_VIDEO_CODECID_MASK, 1);
     }
 
     if (st->codec->codec_id == AV_CODEC_ID_AAC ||

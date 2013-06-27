@@ -29,15 +29,15 @@
 #define AVCODEC_H264_H
 
 #include "libavutil/intreadwrite.h"
-#include "dsputil.h"
 #include "cabac.h"
+#include "error_resilience.h"
+#include "get_bits.h"
 #include "mpegvideo.h"
+#include "h264chroma.h"
 #include "h264dsp.h"
 #include "h264pred.h"
+#include "h264qpel.h"
 #include "rectangle.h"
-
-#define interlaced_dct interlaced_dct_is_a_bad_name
-#define mb_intra       mb_intra_is_not_initialized_see_mb_type
 
 #define MAX_SPS_COUNT          32
 #define MAX_PPS_COUNT         256
@@ -59,19 +59,19 @@
 #define MAX_SLICES 16
 
 #ifdef ALLOW_INTERLACE
-#define MB_MBAFF    h->mb_mbaff
-#define MB_FIELD    h->mb_field_decoding_flag
-#define FRAME_MBAFF h->mb_aff_frame
-#define FIELD_PICTURE (s->picture_structure != PICT_FRAME)
+#define MB_MBAFF(h)    h->mb_mbaff
+#define MB_FIELD(h)    h->mb_field_decoding_flag
+#define FRAME_MBAFF(h) h->mb_aff_frame
+#define FIELD_PICTURE(h) (h->picture_structure != PICT_FRAME)
 #define LEFT_MBS 2
 #define LTOP     0
 #define LBOT     1
 #define LEFT(i)  (i)
 #else
-#define MB_MBAFF      0
-#define MB_FIELD      0
-#define FRAME_MBAFF   0
-#define FIELD_PICTURE 0
+#define MB_MBAFF(h)      0
+#define MB_FIELD(h)      0
+#define FRAME_MBAFF(h)   0
+#define FIELD_PICTURE(h) 0
 #undef  IS_INTERLACED
 #define IS_INTERLACED(mb_type) 0
 #define LEFT_MBS 1
@@ -79,14 +79,14 @@
 #define LBOT     0
 #define LEFT(i)  0
 #endif
-#define FIELD_OR_MBAFF_PICTURE (FRAME_MBAFF || FIELD_PICTURE)
+#define FIELD_OR_MBAFF_PICTURE(h) (FRAME_MBAFF(h) || FIELD_PICTURE(h))
 
 #ifndef CABAC
-#define CABAC h->pps.cabac
+#define CABAC(h) h->pps.cabac
 #endif
 
-#define CHROMA422 (h->sps.chroma_format_idc == 2)
-#define CHROMA444 (h->sps.chroma_format_idc == 3)
+#define CHROMA422(h) (h->sps.chroma_format_idc == 2)
+#define CHROMA444(h) (h->sps.chroma_format_idc == 3)
 
 #define EXTENDED_SAR       255
 
@@ -164,6 +164,8 @@ typedef struct SPS {
     int mb_aff;                        ///< mb_adaptive_frame_field_flag
     int direct_8x8_inference_flag;
     int crop;                          ///< frame_cropping_flag
+
+    /* those 4 are already in luma samples */
     unsigned int crop_left;            ///< frame_cropping_rect_left_offset
     unsigned int crop_right;           ///< frame_cropping_rect_right_offset
     unsigned int crop_top;             ///< frame_cropping_rect_top_offset
@@ -252,12 +254,40 @@ typedef struct MMCO {
  * H264Context
  */
 typedef struct H264Context {
-    MpegEncContext s;
+    AVCodecContext *avctx;
+    DSPContext       dsp;
+    VideoDSPContext vdsp;
     H264DSPContext h264dsp;
+    H264ChromaContext h264chroma;
+    H264QpelContext h264qpel;
+    MotionEstContext me;
+    ParseContext parse_context;
+    GetBitContext gb;
+    ERContext er;
+
+    Picture *DPB;
+    Picture *cur_pic_ptr;
+    Picture cur_pic;
+
     int pixel_shift;    ///< 0 for 8-bit H264, 1 for high-bit-depth H264
     int chroma_qp[2];   // QPc
 
     int qp_thresh;      ///< QP threshold to skip loopfilter
+
+    /* coded dimensions -- 16 * mb w/h */
+    int width, height;
+    int linesize, uvlinesize;
+    int chroma_x_shift, chroma_y_shift;
+
+    int qscale;
+    int droppable;
+    int data_partitioning;
+    int coded_picture_number;
+    int low_delay;
+
+    int context_initialized;
+    int flags;
+    int workaround_bugs;
 
     int prev_mb_skipped;
     int next_mb_skipped;
@@ -322,9 +352,6 @@ typedef struct H264Context {
     int mb_linesize;    ///< may be equal to s->linesize or s->linesize * 2, for mbaff
     int mb_uvlinesize;
 
-    int emu_edge_width;
-    int emu_edge_height;
-
     unsigned current_sps_id; ///< id of the current SPS
     SPS sps; ///< current sps
 
@@ -348,6 +375,8 @@ typedef struct H264Context {
     int mb_aff_frame;
     int mb_field_decoding_flag;
     int mb_mbaff;               ///< mb_aff_frame && mb_field_decoding_flag
+    int picture_structure;
+    int first_field;
 
     DECLARE_ALIGNED(8, uint16_t, sub_mb_type)[4];
 
@@ -386,9 +415,10 @@ typedef struct H264Context {
     GetBitContext *intra_gb_ptr;
     GetBitContext *inter_gb_ptr;
 
-    DECLARE_ALIGNED(16, DCTELEM, mb)[16 * 48 * 2]; ///< as a dct coeffecient is int32_t in high depth, we need to reserve twice the space.
-    DECLARE_ALIGNED(16, DCTELEM, mb_luma_dc)[3][16 * 2];
-    DCTELEM mb_padding[256 * 2];        ///< as mb is addressed by scantable[i] and scantable is uint8_t we can either check that i is not too large or ensure that there is some unused stuff after mb
+    const uint8_t *intra_pcm_ptr;
+    DECLARE_ALIGNED(16, int16_t, mb)[16 * 48 * 2]; ///< as a dct coeffecient is int32_t in high depth, we need to reserve twice the space.
+    DECLARE_ALIGNED(16, int16_t, mb_luma_dc)[3][16 * 2];
+    int16_t mb_padding[256 * 2];        ///< as mb is addressed by scantable[i] and scantable is uint8_t we can either check that i is not too large or ensure that there is some unused stuff after mb
 
     /**
      * Cabac
@@ -424,6 +454,13 @@ typedef struct H264Context {
 
     int x264_build;
 
+    int mb_x, mb_y;
+    int resync_mb_x;
+    int resync_mb_y;
+    int mb_skip_run;
+    int mb_height, mb_width;
+    int mb_stride;
+    int mb_num;
     int mb_xy;
 
     int is_complex;
@@ -448,7 +485,8 @@ typedef struct H264Context {
     int nal_length_size;  ///< Number of bytes used for nal length (1, 2 or 4)
     int got_first;        ///< this flag is != 0 if we've parsed a frame
 
-    int context_reinitialized;
+    int bit_depth_luma;         ///< luma bit depth from sps to detect changes
+    int chroma_format_idc;      ///< chroma format from sps to detect changes
 
     SPS *sps_buffers[MAX_SPS_COUNT];
     PPS *pps_buffers[MAX_PPS_COUNT];
@@ -521,11 +559,15 @@ typedef struct H264Context {
      */
     int max_contexts;
 
+    int slice_context_count;
+
     /**
      *  1 if the single thread fallback warning has already been
      *  displayed, 0 otherwise.
      */
     int single_decode_warning;
+
+    enum AVPictureType pict_type;
 
     int last_slice_type;
     /** @} */
@@ -578,6 +620,13 @@ typedef struct H264Context {
 
     int cur_chroma_format_idc;
     uint8_t *bipred_scratchpad;
+    uint8_t *edge_emu_buffer;
+    int16_t *dc_val_base;
+
+    AVBufferPool *qscale_table_pool;
+    AVBufferPool *mb_type_pool;
+    AVBufferPool *motion_val_pool;
+    AVBufferPool *ref_index_pool;
 } H264Context;
 
 extern const uint8_t ff_h264_chroma_qp[3][QP_MAX_NUM + 1]; ///< One chroma qp table for each supported bit depth (8, 9, 10).
@@ -618,7 +667,7 @@ const uint8_t *ff_h264_decode_nal(H264Context *h, const uint8_t *src,
  * Free any data that may have been allocated in the H264 context
  * like SPS, PPS etc.
  */
-av_cold void ff_h264_free_context(H264Context *h);
+void ff_h264_free_context(H264Context *h);
 
 /**
  * Reconstruct bitstream slice_type.
@@ -663,10 +712,9 @@ int ff_h264_check_intra4x4_pred_mode(H264Context *h);
 int ff_h264_check_intra_pred_mode(H264Context *h, int mode, int is_chroma);
 
 void ff_h264_hl_decode_mb(H264Context *h);
-int ff_h264_frame_start(H264Context *h);
 int ff_h264_decode_extradata(H264Context *h);
-av_cold int ff_h264_decode_init(AVCodecContext *avctx);
-av_cold void ff_h264_decode_init_vlc(void);
+int ff_h264_decode_init(AVCodecContext *avctx);
+void ff_h264_decode_init_vlc(void);
 
 /**
  * Decode a macroblock
@@ -786,7 +834,7 @@ static av_always_inline int pred_intra_mode(H264Context *h, int n)
     const int top    = h->intra4x4_pred_mode_cache[index8 - 8];
     const int min    = FFMIN(left, top);
 
-    tprintf(h->s.avctx, "mode:%d %d min:%d\n", left, top, min);
+    tprintf(h->avctx, "mode:%d %d min:%d\n", left, top, min);
 
     if (min < 0)
         return DC_PRED;
@@ -820,7 +868,7 @@ static av_always_inline void write_back_non_zero_count(H264Context *h)
     AV_COPY32(&nnz[32], &nnz_cache[4 + 8 * 11]);
     AV_COPY32(&nnz[36], &nnz_cache[4 + 8 * 12]);
 
-    if (!h->s.chroma_y_shift) {
+    if (!h->chroma_y_shift) {
         AV_COPY32(&nnz[24], &nnz_cache[4 + 8 * 8]);
         AV_COPY32(&nnz[28], &nnz_cache[4 + 8 * 9]);
         AV_COPY32(&nnz[40], &nnz_cache[4 + 8 * 13]);
@@ -829,18 +877,17 @@ static av_always_inline void write_back_non_zero_count(H264Context *h)
 }
 
 static av_always_inline void write_back_motion_list(H264Context *h,
-                                                    MpegEncContext *const s,
                                                     int b_stride,
                                                     int b_xy, int b8_xy,
                                                     int mb_type, int list)
 {
-    int16_t(*mv_dst)[2] = &s->current_picture.motion_val[list][b_xy];
+    int16_t(*mv_dst)[2] = &h->cur_pic.motion_val[list][b_xy];
     int16_t(*mv_src)[2] = &h->mv_cache[list][scan8[0]];
     AV_COPY128(mv_dst + 0 * b_stride, mv_src + 8 * 0);
     AV_COPY128(mv_dst + 1 * b_stride, mv_src + 8 * 1);
     AV_COPY128(mv_dst + 2 * b_stride, mv_src + 8 * 2);
     AV_COPY128(mv_dst + 3 * b_stride, mv_src + 8 * 3);
-    if (CABAC) {
+    if (CABAC(h)) {
         uint8_t (*mvd_dst)[2] = &h->mvd_table[list][FMO ? 8 * h->mb_xy
                                                         : h->mb2br_xy[h->mb_xy]];
         uint8_t(*mvd_src)[2]  = &h->mvd_cache[list][scan8[0]];
@@ -855,7 +902,7 @@ static av_always_inline void write_back_motion_list(H264Context *h,
     }
 
     {
-        int8_t *ref_index = &s->current_picture.ref_index[list][b8_xy];
+        int8_t *ref_index = &h->cur_pic.ref_index[list][b8_xy];
         int8_t *ref_cache = h->ref_cache[list];
         ref_index[0 + 0 * 2] = ref_cache[scan8[0]];
         ref_index[1 + 0 * 2] = ref_cache[scan8[4]];
@@ -866,21 +913,20 @@ static av_always_inline void write_back_motion_list(H264Context *h,
 
 static av_always_inline void write_back_motion(H264Context *h, int mb_type)
 {
-    MpegEncContext *const s = &h->s;
     const int b_stride      = h->b_stride;
-    const int b_xy  = 4 * s->mb_x + 4 * s->mb_y * h->b_stride; // try mb2b(8)_xy
+    const int b_xy  = 4 * h->mb_x + 4 * h->mb_y * h->b_stride; // try mb2b(8)_xy
     const int b8_xy = 4 * h->mb_xy;
 
     if (USES_LIST(mb_type, 0)) {
-        write_back_motion_list(h, s, b_stride, b_xy, b8_xy, mb_type, 0);
+        write_back_motion_list(h, b_stride, b_xy, b8_xy, mb_type, 0);
     } else {
-        fill_rectangle(&s->current_picture.ref_index[0][b8_xy],
+        fill_rectangle(&h->cur_pic.ref_index[0][b8_xy],
                        2, 2, 2, (uint8_t)LIST_NOT_USED, 1);
     }
     if (USES_LIST(mb_type, 1))
-        write_back_motion_list(h, s, b_stride, b_xy, b8_xy, mb_type, 1);
+        write_back_motion_list(h, b_stride, b_xy, b8_xy, mb_type, 1);
 
-    if (h->slice_type_nos == AV_PICTURE_TYPE_B && CABAC) {
+    if (h->slice_type_nos == AV_PICTURE_TYPE_B && CABAC(h)) {
         if (IS_8X8(mb_type)) {
             uint8_t *direct_table = &h->direct_table[4 * h->mb_xy];
             direct_table[1] = h->sub_mb_type[1] >> 1;
@@ -901,5 +947,8 @@ static av_always_inline int get_dct8x8_allowed(H264Context *h)
                  ((MB_TYPE_16x8 | MB_TYPE_8x16 | MB_TYPE_8x8 | MB_TYPE_DIRECT2) *
                   0x0001000100010001ULL));
 }
+
+void ff_h264_draw_horiz_band(H264Context *h, int y, int height);
+int ff_init_poc(H264Context *h, int pic_field_poc[2], int *pic_poc);
 
 #endif /* AVCODEC_H264_H */

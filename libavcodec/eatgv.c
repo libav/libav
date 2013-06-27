@@ -98,7 +98,7 @@ static int unpack(const uint8_t *src, const uint8_t *src_end,
                     src   += 4;
                 }
             } else {  // 10
-                size1  = ( ( src[1] & 0xC0) >> 6 );
+                size1  = ((src[1] & 0xC0) >> 6);
                 offset = (AV_RB16(&src[1]) & 0x3FFF) + 1;
                 size2  = (src[0] & 0x3F) + 4;
                 src   += 3;
@@ -116,7 +116,7 @@ static int unpack(const uint8_t *src, const uint8_t *src_end,
 
         if (size1 > 0) {
             size -= size1;
-            run   = FFMIN(size1, dst_end-dst);
+            run   = FFMIN(size1, dst_end - dst);
             memcpy(dst, src, run);
             dst += run;
             src += run;
@@ -126,7 +126,7 @@ static int unpack(const uint8_t *src, const uint8_t *src_end,
             if (dst - dst_start < offset)
                 return 0;
             size -= size2;
-            run   = FFMIN(size2, dst_end-dst);
+            run   = FFMIN(size2, dst_end - dst);
             av_memcpy_backptr(dst, offset, run);
             dst += run;
         }
@@ -139,7 +139,7 @@ static int unpack(const uint8_t *src, const uint8_t *src_end,
  * Decode inter-frame
  * @return 0 on success, -1 on critical buffer underflow
  */
-static int tgv_decode_inter(TgvContext * s, AVFrame *frame,
+static int tgv_decode_inter(TgvContext *s, AVFrame *frame,
                             const uint8_t *buf, const uint8_t *buf_end)
 {
     int num_mvs;

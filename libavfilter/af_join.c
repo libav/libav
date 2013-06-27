@@ -102,14 +102,23 @@ static int filter_frame(AVFilterLink *link, AVFrame *frame)
 static int parse_maps(AVFilterContext *ctx)
 {
     JoinContext *s = ctx->priv;
+    char separator = '|';
     char *cur      = s->map;
+
+#if FF_API_OLD_FILTER_OPTS
+    if (cur && strchr(cur, ',')) {
+        av_log(ctx, AV_LOG_WARNING, "This syntax is deprecated, use '|' to "
+               "separate the mappings.\n");
+        separator = ',';
+    }
+#endif
 
     while (cur && *cur) {
         char *sep, *next, *p;
         uint64_t in_channel = 0, out_channel = 0;
         int input_idx, out_ch_idx, in_ch_idx;
 
-        next = strchr(cur, ',');
+        next = strchr(cur, separator);
         if (next)
             *next++ = 0;
 
@@ -177,17 +186,10 @@ static int parse_maps(AVFilterContext *ctx)
     return 0;
 }
 
-static int join_init(AVFilterContext *ctx, const char *args)
+static av_cold int join_init(AVFilterContext *ctx)
 {
     JoinContext *s = ctx->priv;
     int ret, i;
-
-    s->class = &join_class;
-    av_opt_set_defaults(s);
-    if ((ret = av_set_options_string(s, args, "=", ":")) < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Error parsing options string '%s'.\n", args);
-        return ret;
-    }
 
     if (!(s->channel_layout = av_get_channel_layout(s->channel_layout_str))) {
         av_log(ctx, AV_LOG_ERROR, "Error parsing channel layout '%s'.\n",
@@ -232,7 +234,7 @@ fail:
     return ret;
 }
 
-static void join_uninit(AVFilterContext *ctx)
+static av_cold void join_uninit(AVFilterContext *ctx)
 {
     JoinContext *s = ctx->priv;
     int i;
@@ -442,7 +444,7 @@ static int join_request_frame(AVFilterLink *outlink)
             goto fail;
         }
         for (j = 0; j < nb_buffers; j++)
-            if (s->buffers[j]->buffer = buf->buffer)
+            if (s->buffers[j]->buffer == buf->buffer)
                 break;
         if (j == i)
             s->buffers[nb_buffers++] = buf;
@@ -475,8 +477,11 @@ static int join_request_frame(AVFilterLink *outlink)
         }
     }
 
-    frame->pts         = s->input_frames[0]->pts;
-    frame->linesize[0] = linesize;
+    frame->nb_samples     = nb_samples;
+    frame->channel_layout = outlink->channel_layout;
+    frame->sample_rate    = outlink->sample_rate;
+    frame->pts            = s->input_frames[0]->pts;
+    frame->linesize[0]    = linesize;
     if (frame->data != frame->extended_data) {
         memcpy(frame->data, frame->extended_data, sizeof(*frame->data) *
                FFMIN(FF_ARRAY_ELEMS(frame->data), s->nb_channels));
@@ -484,7 +489,8 @@ static int join_request_frame(AVFilterLink *outlink)
 
     ret = ff_filter_frame(outlink, frame);
 
-    memset(s->input_frames, 0, sizeof(*s->input_frames) * ctx->nb_inputs);
+    for (i = 0; i < ctx->nb_inputs; i++)
+        av_frame_free(&s->input_frames[i]);
 
     return ret;
 
@@ -508,6 +514,7 @@ AVFilter avfilter_af_join = {
     .description    = NULL_IF_CONFIG_SMALL("Join multiple audio streams into "
                                            "multi-channel output"),
     .priv_size      = sizeof(JoinContext),
+    .priv_class     = &join_class,
 
     .init           = join_init,
     .uninit         = join_uninit,
@@ -515,4 +522,6 @@ AVFilter avfilter_af_join = {
 
     .inputs  = NULL,
     .outputs = avfilter_af_join_outputs,
+
+    .flags   = AVFILTER_FLAG_DYNAMIC_INPUTS,
 };

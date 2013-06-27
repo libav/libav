@@ -18,11 +18,14 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavcodec/fmtconvert.h"
-
-#include "libavutil/ppc/util_altivec.h"
+#include "config.h"
+#include "libavutil/attributes.h"
 #include "libavutil/mem.h"
+#include "libavutil/ppc/util_altivec.h"
+#include "libavcodec/fmtconvert.h"
 #include "dsputil_altivec.h"
+
+#if HAVE_ALTIVEC
 
 static void int32_to_float_fmul_scalar_altivec(float *dst, const int *src,
                                                float mul, int len)
@@ -92,8 +95,8 @@ static void float_to_int16_altivec(int16_t *dst, const float *src, long len)
 static void float_to_int16_stride_altivec(int16_t *dst, const float *src,
                                           long len, int stride)
 {
-    int i, j;
-    vector signed short d, s;
+    int i;
+    vector signed short d;
 
     for (i = 0; i < len - 7; i += 8) {
         d = float_to_int16_one_altivec(src + i);
@@ -155,11 +158,16 @@ static void float_to_int16_interleave_altivec(int16_t *dst, const float **src,
     }
 }
 
-void ff_fmt_convert_init_altivec(FmtConvertContext *c, AVCodecContext *avctx)
+#endif /* HAVE_ALTIVEC */
+
+av_cold void ff_fmt_convert_init_ppc(FmtConvertContext *c,
+                                     AVCodecContext *avctx)
 {
+#if HAVE_ALTIVEC
     c->int32_to_float_fmul_scalar = int32_to_float_fmul_scalar_altivec;
     if (!(avctx->flags & CODEC_FLAG_BITEXACT)) {
         c->float_to_int16 = float_to_int16_altivec;
         c->float_to_int16_interleave = float_to_int16_interleave_altivec;
     }
+#endif /* HAVE_ALTIVEC */
 }

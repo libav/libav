@@ -20,8 +20,8 @@
 
 #include <stdint.h>
 
+#include "libavutil/attributes.h"
 #include "libavutil/arm/cpu.h"
-#include "libavcodec/dsputil.h"
 #include "libavcodec/h264dsp.h"
 
 void ff_h264_v_loop_filter_luma_neon(uint8_t *pix, int stride, int alpha,
@@ -50,25 +50,26 @@ void ff_biweight_h264_pixels_4_neon(uint8_t *dst, uint8_t *src, int stride,
                                     int height, int log2_den, int weightd,
                                     int weights, int offset);
 
-void ff_h264_idct_add_neon(uint8_t *dst, DCTELEM *block, int stride);
-void ff_h264_idct_dc_add_neon(uint8_t *dst, DCTELEM *block, int stride);
+void ff_h264_idct_add_neon(uint8_t *dst, int16_t *block, int stride);
+void ff_h264_idct_dc_add_neon(uint8_t *dst, int16_t *block, int stride);
 void ff_h264_idct_add16_neon(uint8_t *dst, const int *block_offset,
-                             DCTELEM *block, int stride,
+                             int16_t *block, int stride,
                              const uint8_t nnzc[6*8]);
 void ff_h264_idct_add16intra_neon(uint8_t *dst, const int *block_offset,
-                                  DCTELEM *block, int stride,
+                                  int16_t *block, int stride,
                                   const uint8_t nnzc[6*8]);
 void ff_h264_idct_add8_neon(uint8_t **dest, const int *block_offset,
-                            DCTELEM *block, int stride,
+                            int16_t *block, int stride,
                             const uint8_t nnzc[6*8]);
 
-void ff_h264_idct8_add_neon(uint8_t *dst, DCTELEM *block, int stride);
-void ff_h264_idct8_dc_add_neon(uint8_t *dst, DCTELEM *block, int stride);
+void ff_h264_idct8_add_neon(uint8_t *dst, int16_t *block, int stride);
+void ff_h264_idct8_dc_add_neon(uint8_t *dst, int16_t *block, int stride);
 void ff_h264_idct8_add4_neon(uint8_t *dst, const int *block_offset,
-                             DCTELEM *block, int stride,
+                             int16_t *block, int stride,
                              const uint8_t nnzc[6*8]);
 
-static void ff_h264dsp_init_neon(H264DSPContext *c, const int bit_depth, const int chroma_format_idc)
+static av_cold void h264dsp_init_neon(H264DSPContext *c, const int bit_depth,
+                                      const int chroma_format_idc)
 {
     if (bit_depth == 8) {
     c->h264_v_loop_filter_luma   = ff_h264_v_loop_filter_luma_neon;
@@ -96,10 +97,11 @@ static void ff_h264dsp_init_neon(H264DSPContext *c, const int bit_depth, const i
     }
 }
 
-void ff_h264dsp_init_arm(H264DSPContext *c, const int bit_depth, const int chroma_format_idc)
+av_cold void ff_h264dsp_init_arm(H264DSPContext *c, const int bit_depth,
+                                 const int chroma_format_idc)
 {
     int cpu_flags = av_get_cpu_flags();
 
     if (have_neon(cpu_flags))
-        ff_h264dsp_init_neon(c, bit_depth, chroma_format_idc);
+        h264dsp_init_neon(c, bit_depth, chroma_format_idc);
 }

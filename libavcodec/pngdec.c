@@ -31,8 +31,6 @@
 
 #include <zlib.h>
 
-//#define DEBUG
-
 typedef struct PNGDecContext {
     PNGDSPContext dsp;
 
@@ -249,14 +247,14 @@ static av_always_inline void convert_to_rgb32_loco(uint8_t *dst,
     int j;
     unsigned int r, g, b, a;
 
-    for (j = 0;j < width; j++) {
+    for (j = 0; j < width; j++) {
         r = src[0];
         g = src[1];
         b = src[2];
         a = src[3];
         if (loco) {
-            r = (r+g)&0xff;
-            b = (b+g)&0xff;
+            r = (r + g) & 0xff;
+            b = (b + g) & 0xff;
         }
         *(uint32_t *)dst = (a << 24) | (r << 16) | (g << 8) | b;
         dst += 4;

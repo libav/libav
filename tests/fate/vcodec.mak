@@ -53,7 +53,7 @@ fate-vsynth%-dv-50:              DECOPTS = -sws_flags neighbor
 fate-vsynth%-dv-50:              FMT     = dv
 
 FATE_VCODEC-$(call ENCDEC, FFV1, AVI)   += ffv1
-fate-vsynth%-ffv1:               ENCOPTS = -strict -2
+fate-vsynth%-ffv1:               ENCOPTS = -slices 4 -strict -2
 
 FATE_VCODEC-$(call ENCDEC, FFVHUFF, AVI) += ffvhuff
 
@@ -111,7 +111,7 @@ $(FATE_MPEG2:%=fate-vsynth\%-%): FMT    = mpeg2video
 $(FATE_MPEG2:%=fate-vsynth\%-%): CODEC  = mpeg2video
 
 fate-vsynth%-mpeg2:              ENCOPTS = -qscale 10
-fate-vsynth%-mpeg2-422:          ENCOPTS = -vb 1000k                    \
+fate-vsynth%-mpeg2-422:          ENCOPTS = -b:v 1000k                   \
                                            -bf 2                        \
                                            -trellis 1                   \
                                            -flags +mv0+ildct+ilme       \
@@ -121,7 +121,7 @@ fate-vsynth%-mpeg2-422:          ENCOPTS = -vb 1000k                    \
                                            -pix_fmt yuv422p
 fate-vsynth%-mpeg2-idct-int:     ENCOPTS = -qscale 10 -idct int -dct int
 fate-vsynth%-mpeg2-ilace:        ENCOPTS = -qscale 10 -flags +ildct+ilme
-fate-vsynth%-mpeg2-ivlc-qprd:    ENCOPTS = -vb 500k                     \
+fate-vsynth%-mpeg2-ivlc-qprd:    ENCOPTS = -b:v 500k                    \
                                            -bf 2                        \
                                            -trellis 1                   \
                                            -flags +mv0                  \

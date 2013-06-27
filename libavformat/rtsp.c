@@ -48,8 +48,6 @@
 #include "rtpenc.h"
 #include "mpegts.h"
 
-//#define DEBUG
-
 /* Timeout values for socket poll, in ms,
  * and read_packet(), in seconds  */
 #define POLL_TIMEOUT_MS 100
@@ -180,7 +178,8 @@ static void init_rtp_handler(RTPDynamicProtocolHandler *handler,
 {
     if (!handler)
         return;
-    codec->codec_id          = handler->codec_id;
+    if (codec)
+        codec->codec_id          = handler->codec_id;
     rtsp_st->dynamic_handler = handler;
     if (handler->alloc) {
         rtsp_st->dynamic_protocol_context = handler->alloc();
@@ -382,8 +381,17 @@ static void sdp_parse_line(AVFormatContext *s, SDPParseState *s1,
 
         if (!strcmp(ff_rtp_enc_name(rtsp_st->sdp_payload_type), "MP2T")) {
             /* no corresponding stream */
-            if (rt->transport == RTSP_TRANSPORT_RAW && !rt->ts && CONFIG_RTPDEC)
-                rt->ts = ff_mpegts_parse_open(s);
+            if (rt->transport == RTSP_TRANSPORT_RAW) {
+                if (!rt->ts && CONFIG_RTPDEC)
+                    rt->ts = ff_mpegts_parse_open(s);
+            } else {
+                RTPDynamicProtocolHandler *handler;
+                handler = ff_rtp_handler_find_by_id(
+                              rtsp_st->sdp_payload_type, AVMEDIA_TYPE_DATA);
+                init_rtp_handler(handler, rtsp_st, NULL);
+                if (handler && handler->init)
+                    handler->init(s, -1, rtsp_st->dynamic_protocol_context);
+            }
         } else if (rt->server_type == RTSP_SERVER_WMS &&
                    codec_type == AVMEDIA_TYPE_DATA) {
             /* RTX stream, a stream that carries all the other actual
@@ -1108,11 +1116,11 @@ start:
  *
  * @return zero if success, nonzero otherwise
  */
-static int ff_rtsp_send_cmd_with_content_async(AVFormatContext *s,
-                                               const char *method, const char *url,
-                                               const char *headers,
-                                               const unsigned char *send_content,
-                                               int send_content_length)
+static int rtsp_send_cmd_with_content_async(AVFormatContext *s,
+                                            const char *method, const char *url,
+                                            const char *headers,
+                                            const unsigned char *send_content,
+                                            int send_content_length)
 {
     RTSPState *rt = s->priv_data;
     char buf[4096], *out_buf;
@@ -1165,7 +1173,7 @@ static int ff_rtsp_send_cmd_with_content_async(AVFormatContext *s,
 int ff_rtsp_send_cmd_async(AVFormatContext *s, const char *method,
                            const char *url, const char *headers)
 {
-    return ff_rtsp_send_cmd_with_content_async(s, method, url, headers, NULL, 0);
+    return rtsp_send_cmd_with_content_async(s, method, url, headers, NULL, 0);
 }
 
 int ff_rtsp_send_cmd(AVFormatContext *s, const char *method, const char *url,
@@ -1190,9 +1198,9 @@ int ff_rtsp_send_cmd_with_content(AVFormatContext *s,
 
 retry:
     cur_auth_type = rt->auth_state.auth_type;
-    if ((ret = ff_rtsp_send_cmd_with_content_async(s, method, url, header,
-                                                   send_content,
-                                                   send_content_length)))
+    if ((ret = rtsp_send_cmd_with_content_async(s, method, url, header,
+                                                send_content,
+                                                send_content_length)))
         return ret;
 
     if ((ret = ff_rtsp_read_reply(s, reply, content_ptr, 0, method) ) < 0)
@@ -2022,7 +2030,7 @@ static int sdp_probe(AVProbeData *p1)
     while (p < p_end && *p != '\0') {
         if (p + sizeof("c=IN IP") - 1 < p_end &&
             av_strstart(p, "c=IN IP", NULL))
-            return AVPROBE_SCORE_MAX / 2;
+            return AVPROBE_SCORE_EXTENSION;
 
         while (p < p_end - 1 && *p != '\n') p++;
         if (++p >= p_end)
@@ -2128,7 +2136,7 @@ static int rtp_probe(AVProbeData *p)
 
 static int rtp_read_header(AVFormatContext *s)
 {
-    uint8_t recvbuf[1500];
+    uint8_t recvbuf[RTP_MAX_PACKET_LENGTH];
     char host[500], sdp[500];
     int ret, port;
     URLContext* in = NULL;

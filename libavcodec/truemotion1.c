@@ -34,10 +34,10 @@
 #include <string.h>
 
 #include "avcodec.h"
-#include "dsputil.h"
 #include "internal.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/internal.h"
+#include "libavutil/intreadwrite.h"
 #include "libavutil/mem.h"
 
 #include "truemotion1data.h"
@@ -355,7 +355,7 @@ static int truemotion1_decode_header(TrueMotion1Context *s)
         s->flags = FLAG_KEYFRAME;
 
     if (s->flags & FLAG_SPRITE) {
-        av_log_ask_for_sample(s->avctx, "SPRITE frame found.\n");
+        avpriv_request_sample(s->avctx, "Frame with sprite");
         /* FIXME header.width, height, xoffset and yoffset aren't initialized */
         return AVERROR_PATCHWELCOME;
     } else {
@@ -365,7 +365,7 @@ static int truemotion1_decode_header(TrueMotion1Context *s)
             if ((s->w < 213) && (s->h >= 176))
             {
                 s->flags |= FLAG_INTERPOLATED;
-                av_log_ask_for_sample(s->avctx, "INTERPOLATION selected.\n");
+                avpriv_request_sample(s->avctx, "Interpolated frame");
             }
         }
     }
@@ -468,7 +468,7 @@ static av_cold int truemotion1_decode_init(AVCodecContext *avctx)
 //    else
 //        avctx->pix_fmt = AV_PIX_FMT_RGB555;
 
-    s->frame.data[0] = NULL;
+    avcodec_get_frame_defaults(&s->frame);
 
     /* there is a vertical predictor for each pixel in a line; each vertical
      * predictor is 0 to start with */

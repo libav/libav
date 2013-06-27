@@ -516,8 +516,8 @@ static inline int get_ue_code(GetBitContext *gb, int order)
     return get_ue_golomb(gb);
 }
 
-static inline int dequant(AVSContext *h, DCTELEM *level_buf, uint8_t *run_buf,
-                          DCTELEM *dst, int mul, int shift, int coeff_num)
+static inline int dequant(AVSContext *h, int16_t *level_buf, uint8_t *run_buf,
+                          int16_t *dst, int mul, int shift, int coeff_num)
 {
     int round = 1 << (shift - 1);
     int pos = -1;
@@ -551,9 +551,9 @@ static int decode_residual_block(AVSContext *h, GetBitContext *gb,
                                  int qp, uint8_t *dst, int stride)
 {
     int i, level_code, esc_code, level, run, mask;
-    DCTELEM level_buf[65];
+    int16_t level_buf[65];
     uint8_t run_buf[65];
-    DCTELEM *block = h->block;
+    int16_t *block = h->block;
 
     for (i = 0;i < 65; i++) {
         level_code = get_ue_code(gb, r->golomb_order);
@@ -1081,7 +1081,8 @@ static int decode_seq_header(AVSContext *h)
     width  = get_bits(&h->gb, 14);
     height = get_bits(&h->gb, 14);
     if ((h->width || h->height) && (h->width != width || h->height != height)) {
-        av_log_missing_feature(h->avctx, "Width/height changing in CAVS", 0);
+        avpriv_report_missing_feature(h->avctx,
+                                      "Width/height changing in CAVS");
         return AVERROR_PATCHWELCOME;
     }
     h->width  = width;
@@ -1126,9 +1127,7 @@ static int cavs_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
     if (buf_size == 0) {
         if (!h->low_delay && h->DPB[0].f->data[0]) {
             *got_frame = 1;
-            if ((ret = av_frame_ref(data, h->DPB[0].f)) < 0)
-                return ret;
-            av_frame_unref(h->DPB[0].f);
+            av_frame_move_ref(data, h->DPB[0].f);
         }
         return 0;
     }
@@ -1136,7 +1135,7 @@ static int cavs_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
     buf_ptr = buf;
     buf_end = buf + buf_size;
     for(;;) {
-        buf_ptr = avpriv_mpv_find_start_code(buf_ptr, buf_end, &stc);
+        buf_ptr = avpriv_find_start_code(buf_ptr, buf_end, &stc);
         if ((stc & 0xFFFFFE00) || buf_ptr == buf_end)
             return FFMAX(0, buf_ptr - buf);
         input_size = (buf_end - buf_ptr) * 8;
@@ -1168,9 +1167,7 @@ static int cavs_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
                     *got_frame = 0;
                 }
             } else {
-                if ((ret = av_frame_ref(data, h->cur.f)) < 0)
-                    return ret;
-                av_frame_unref(h->cur.f);
+                av_frame_move_ref(data, h->cur.f);
             }
             break;
         case EXT_START_CODE:

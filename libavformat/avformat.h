@@ -207,10 +207,6 @@
 #include "avio.h"
 #include "libavformat/version.h"
 
-#if FF_API_AV_GETTIME
-#include "libavutil/time.h"
-#endif
-
 struct AVFormatContext;
 
 
@@ -341,7 +337,9 @@ typedef struct AVProbeData {
     int buf_size;       /**< Size of buf except extra allocated bytes */
 } AVProbeData;
 
-#define AVPROBE_SCORE_MAX 100               ///< maximum score, half of that is used for file-extension-based detection
+#define AVPROBE_SCORE_EXTENSION  50 ///< score for file extension
+#define AVPROBE_SCORE_MAX       100 ///< maximum score
+
 #define AVPROBE_PADDING_SIZE 32             ///< extra allocated bytes at the end of the probe buffer
 
 /// Demuxer will use avio_open, no opened file should be provided by the caller.
@@ -357,13 +355,18 @@ typedef struct AVProbeData {
 #define AVFMT_VARIABLE_FPS  0x0400 /**< Format allows variable fps. */
 #define AVFMT_NODIMENSIONS  0x0800 /**< Format does not need width/height */
 #define AVFMT_NOSTREAMS     0x1000 /**< Format does not require any streams */
-#define AVFMT_NOBINSEARCH   0x2000 /**< Format does not allow to fallback to binary search via read_timestamp */
-#define AVFMT_NOGENSEARCH   0x4000 /**< Format does not allow to fallback to generic search */
+#define AVFMT_NOBINSEARCH   0x2000 /**< Format does not allow to fall back on binary search via read_timestamp */
+#define AVFMT_NOGENSEARCH   0x4000 /**< Format does not allow to fall back on generic search */
 #define AVFMT_NO_BYTE_SEEK  0x8000 /**< Format does not allow seeking by bytes */
 #define AVFMT_ALLOW_FLUSH  0x10000 /**< Format allows flushing. If not set, the muxer will not receive a NULL packet in the write_packet function. */
 #define AVFMT_TS_NONSTRICT 0x20000 /**< Format does not require strictly
                                         increasing timestamps, but they must
                                         still be monotonic */
+#define AVFMT_TS_NEGATIVE  0x40000 /**< Format allows muxing negative
+                                        timestamps. If not set the timestamp
+                                        will be shifted in av_write_frame and
+                                        av_interleaved_write_frame so they
+                                        start from 0. */
 
 /**
  * @addtogroup lavf_encoding
@@ -636,17 +639,6 @@ typedef struct AVStream {
      *             not actually used for encoding.
      */
     AVCodecContext *codec;
-#if FF_API_R_FRAME_RATE
-    /**
-     * Real base framerate of the stream.
-     * This is the lowest framerate with which all timestamps can be
-     * represented accurately (it is the least common multiple of all
-     * framerates in the stream). Note, this value is just a guess!
-     * For example, if the time base is 1/90000 and all frames have either
-     * approximately 3600 or 1800 timer ticks, then r_frame_rate will be 50/1.
-     */
-    AVRational r_frame_rate;
-#endif
     void *priv_data;
 
     /**
@@ -722,12 +714,6 @@ typedef struct AVStream {
      */
 #define MAX_STD_TIMEBASES (60*12+5)
     struct {
-#if FF_API_R_FRAME_RATE
-        int64_t last_dts;
-        int64_t duration_gcd;
-        int duration_count;
-        double duration_error[MAX_STD_TIMEBASES];
-#endif
         int nb_decoded_frames;
         int found_decoder;
 
@@ -1042,6 +1028,18 @@ typedef struct AVFormatContext {
      */
 #define RAW_PACKET_BUFFER_SIZE 2500000
     int raw_packet_buffer_remaining_size;
+
+    /**
+     * Offset to remap timestamps to be non-negative.
+     * Expressed in timebase units.
+     */
+    int64_t offset;
+
+    /**
+     * Timebase for the timestamp offset.
+     */
+    AVRational offset_timebase;
+
 } AVFormatContext;
 
 typedef struct AVPacketList {
@@ -1287,24 +1285,6 @@ int av_find_best_stream(AVFormatContext *ic,
                         AVCodec **decoder_ret,
                         int flags);
 
-#if FF_API_READ_PACKET
-/**
- * @deprecated use AVFMT_FLAG_NOFILLIN | AVFMT_FLAG_NOPARSE to read raw
- * unprocessed packets
- *
- * Read a transport packet from a media file.
- *
- * This function is obsolete and should never be used.
- * Use av_read_frame() instead.
- *
- * @param s media file handle
- * @param pkt is filled
- * @return 0 if OK, AVERROR_xxx on error
- */
-attribute_deprecated
-int av_read_packet(AVFormatContext *s, AVPacket *pkt);
-#endif
-
 /**
  * Return the next frame of a stream.
  * This function returns what is stored in the file, and does not validate
@@ -1386,17 +1366,6 @@ int av_read_play(AVFormatContext *s);
  */
 int av_read_pause(AVFormatContext *s);
 
-#if FF_API_CLOSE_INPUT_FILE
-/**
- * @deprecated use avformat_close_input()
- * Close a media file (but not its codecs).
- *
- * @param s media file handle
- */
-attribute_deprecated
-void av_close_input_file(AVFormatContext *s);
-#endif
-
 /**
  * Close an opened input AVFormatContext. Free it and all its contents
  * and set *s to NULL.
@@ -1421,7 +1390,7 @@ void avformat_close_input(AVFormatContext **s);
  *
  * @param s Media file handle, must be allocated with avformat_alloc_context().
  *          Its oformat field must be set to the desired output format;
- *          Its pb field must be set to an already openened AVIOContext.
+ *          Its pb field must be set to an already opened AVIOContext.
  * @param options  An AVDictionary filled with AVFormatContext and muxer-private options.
  *                 On return this parameter will be destroyed and replaced with a dict containing
  *                 options that were not found. May be NULL.
@@ -1463,7 +1432,7 @@ int av_write_frame(AVFormatContext *s, AVPacket *pkt);
  * @param s media file handle
  * @param pkt The packet containing the data to be written. pkt->buf must be set
  * to a valid AVBufferRef describing the packet data. Libavformat takes
- * ownership of this reference and will unref it when it see fit. The caller
+ * ownership of this reference and will unref it when it sees fit. The caller
  * must not access the data through this reference after this function returns.
  * This can be NULL (at any time, not just at the end), to flush the
  * interleaving queues.
@@ -1477,16 +1446,6 @@ int av_write_frame(AVFormatContext *s, AVPacket *pkt);
  * @return 0 on success, a negative AVERROR on error.
  */
 int av_interleaved_write_frame(AVFormatContext *s, AVPacket *pkt);
-
-#if FF_API_INTERLEAVE_PACKET
-/**
- * @deprecated this function was never meant to be called by the user
- * programs.
- */
-attribute_deprecated
-int av_interleave_packet_per_dts(AVFormatContext *s, AVPacket *out,
-                                 AVPacket *pkt, int flush);
-#endif
 
 /**
  * Write the stream trailer to an output media file and free the

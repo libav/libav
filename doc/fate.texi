@@ -85,6 +85,8 @@ by default @var{slice+frame}
 Specify a mask to be applied to autodetected CPU flags.
 @item TARGET_EXEC
 Specify or override the wrapper used to run the tests.
+@item GEN
+Set to @var{1} to generate the missing or mismatched references.
 @end table
 
 @example
@@ -118,16 +120,20 @@ samples=/path/to/fate/samples
 workdir=                                # directory in which to do all the work
 fate_recv="ssh -T fate@@fate.libav.org"  # command to submit report
 comment=                                # optional description
+build_only=     # set to "yes" for a compile-only instance that skips tests
 
 # the following are optional and map to configure options
 arch=
 cpu=
 cross_prefix=
+as=
 cc=
+ld=
 target_os=
 sysroot=
 target_exec=
 target_path=
+target_samples=
 extra_cflags=
 extra_ldflags=
 extra_libs=

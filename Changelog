@@ -1,6 +1,32 @@
 Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
+version 10:
+- av_strnstr
+- support ID3v2 tags in ASF files
+- reference-counting for AVFrame and AVPacket data
+- avconv now fails when input options are used for output file
+  or vice versa
+- new avconv options -filter_script and -filter_complex_script, which allow a
+  filtergraph description to be read from a file
+- uniform options syntax across all filters
+- new interlace filter
+- JPEG 2000 decoder
+- new asetpts filter (same as setpts, but for audio)
+- new trim and atrim filters
+- avconv -t and -ss (output-only) options are now sample-accurate when
+  transcoding audio
+- Matroska muxer can now put the index at the beginning of the file.
+- avconv -deinterlace option removed, the yadif filter should be used instead
+- Apple Intermediate Codec decoder
+- Escape 130 video decoder
+- support for slice multithreading in libavfilter
+- VC-1 interlaced B-frame support
+- support for WavPack muxing (raw and in Matroska)
+- Go2Webinar decoder
+- WavPack encoding through libwavpack
+
+
 version 9:
 - av_basename and av_dirname
 - adobe and limelight publisher authentication in RTMP

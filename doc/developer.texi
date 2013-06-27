@@ -178,28 +178,38 @@ GCC statement expressions (@samp{(x = (@{ int y = 4; y; @})}).
 @end itemize
 
 @subsection Naming conventions
-All names are using underscores (_), not CamelCase. For example,
-@samp{avfilter_get_video_buffer} is a valid function name and
-@samp{AVFilterGetVideo} is not. The only exception from this are structure
-names; they should always be in the CamelCase
+All names should be composed with underscores (_), not CamelCase. For example,
+@samp{avfilter_get_video_buffer} is an acceptable function name and
+@samp{AVFilterGetVideo} is not. The only exception are structure
+names; they should always be CamelCase.
 
-There are following conventions for naming variables and functions:
+There are the following conventions for naming variables and functions:
 @itemize @bullet
 @item
 For local variables no prefix is required.
 @item
-For variables and functions declared as @code{static} no prefixes are required.
+For file-scope variables and functions declared as @code{static}, no prefix
+is required.
 @item
-For variables and functions used internally by the library, @code{ff_} prefix
-should be used.
-For example, @samp{ff_w64_demuxer}.
+For variables and functions visible outside of file scope, but only used
+internally by a library, an @code{ff_} prefix should be used,
+e.g. @samp{ff_w64_demuxer}.
 @item
-For variables and functions used internally across multiple libraries, use
-@code{avpriv_}. For example, @samp{avpriv_aac_parse_header}.
+For variables and functions visible outside of file scope, used internally
+across multiple libraries, use @code{avpriv_} as prefix, for example,
+@samp{avpriv_aac_parse_header}.
 @item
-For exported names, each library has its own prefixes. Just check the existing
-code and name accordingly.
+For externally visible symbols, each library has its own prefix. Check
+the existing code and choose names accordingly.
 @end itemize
+
+Furthermore, name space reserved for the system should not be invaded.
+Identifiers ending in @code{_t} are reserved by
+@url{http://pubs.opengroup.org/onlinepubs/007904975/functions/xsh_chap02_02.html#tag_02_02_02, POSIX}.
+Also avoid names starting with @code{__} or @code{_} followed by an uppercase
+letter as they are reserved by the C standard. Names starting with @code{_}
+are reserved at the file level and may not be used for externally visible
+symbols. If in doubt, just avoid names starting with @code{_} altogether.
 
 @subsection Miscellaneous conventions
 @itemize @bullet
@@ -222,7 +232,7 @@ set softtabstop=4
 set cindent
 set cinoptions=(0
 " Allow tabs in Makefiles.
-autocmd FileType make set noexpandtab shiftwidth=8 softtabstop=8
+autocmd FileType make,automake set noexpandtab shiftwidth=8 softtabstop=8
 " Trailing whitespace and tabs are forbidden, so highlight them.
 highlight ForbiddenWhitespace ctermbg=red guibg=red
 match ForbiddenWhitespace /\s\+$\|\t/
@@ -248,8 +258,13 @@ For Emacs, add these roughly equivalent lines to your @file{.emacs.d/init.el}:
 
 @enumerate
 @item
-   Contributions should be licensed under the LGPL 2.1, including an
-   "or any later version" clause, or the MIT license.  GPL 2 including
+   Contributions should be licensed under the
+   @uref{http://www.gnu.org/licenses/lgpl-2.1.html, LGPL 2.1},
+   including an "or any later version" clause, or, if you prefer
+   a gift-style license, the
+   @uref{http://www.isc.org/software/license/, ISC} or
+   @uref{http://mit-license.org/, MIT} license.
+   @uref{http://www.gnu.org/licenses/gpl-2.0.html, GPL 2} including
    an "or any later version" clause is also acceptable, but LGPL is
    preferred.
 @item
@@ -345,8 +360,6 @@ For Emacs, add these roughly equivalent lines to your @file{.emacs.d/init.el}:
 @end enumerate
 
 We think our rules are not too hard. If you have comments, contact us.
-
-Note, some rules were borrowed from the MPlayer project.
 
 @section Submitting patches
 
@@ -536,5 +549,145 @@ to commit the update reference with the change and to explain in the comment
 why the expected result changed.
 
 Please refer to @url{fate.html}.
+
+@subsection Visualizing Test Coverage
+
+The Libav build system allows visualizing the test coverage in an easy
+manner with the coverage tools @code{gcov}/@code{lcov}.  This involves
+the following steps:
+
+@enumerate
+@item
+    Configure to compile with instrumentation enabled:
+    @code{configure --toolchain=gcov}.
+@item
+    Run your test case, either manually or via FATE. This can be either
+    the full FATE regression suite, or any arbitrary invocation of any
+    front-end tool provided by Libav, in any combination.
+@item
+    Run @code{make lcov} to generate coverage data in HTML format.
+@item
+    View @code{lcov/index.html} in your preferred HTML viewer.
+@end enumerate
+
+You can use the command @code{make lcov-reset} to reset the coverage
+measurements. You will need to rerun @code{make lcov} after running a
+new test.
+
+@subsection Using Valgrind
+
+The configure script provides a shortcut for using valgrind to spot bugs
+related to memory handling. Just add the option
+@code{--toolchain=valgrind-memcheck} or @code{--toolchain=valgrind-massif}
+to your configure line, and reasonable defaults will be set for running
+FATE under the supervision of either the @strong{memcheck} or the
+@strong{massif} tool of the valgrind suite.
+
+In case you need finer control over how valgrind is invoked, use the
+@code{--target-exec='valgrind <your_custom_valgrind_options>} option in
+your configure line instead.
+
+@anchor{Release process}
+@section Release process
+
+Libav maintains a set of @strong{release branches}, which are the
+recommended deliverable for system integrators and distributors (such as
+Linux distributions, etc.). At irregular times, a @strong{release
+manager} prepares, tests and publishes tarballs on the
+@url{http://libav.org} website.
+
+There are two kinds of releases:
+
+@enumerate
+@item
+    @strong{Major releases} always include the latest and greatest
+    features and functionality.
+@item
+    @strong{Point releases} are cut from @strong{release} branches,
+    which are named @code{release/X}, with @code{X} being the release
+    version number.
+@end enumerate
+
+Note that we promise to our users that shared libraries from any Libav
+release never break programs that have been @strong{compiled} against
+previous versions of @strong{the same release series} in any case!
+
+However, from time to time, we do make API changes that require adaptations
+in applications. Such changes are only allowed in (new) major releases and
+require further steps such as bumping library version numbers and/or
+adjustments to the symbol versioning file. Please discuss such changes
+on the @strong{libav-devel} mailing list in time to allow forward planning.
+
+@anchor{Criteria for Point Releases}
+@subsection Criteria for Point Releases
+
+Changes that match the following criteria are valid candidates for
+inclusion into a point release:
+
+@enumerate
+@item
+    Fixes a security issue, preferably identified by a @strong{CVE
+    number} issued by @url{http://cve.mitre.org/}.
+@item
+    Fixes a documented bug in @url{http://bugzilla.libav.org}.
+@item
+    Improves the included documentation.
+@item
+    Retains both source code and binary compatibility with previous
+    point releases of the same release branch.
+@end enumerate
+
+The order for checking the rules is (1 OR 2 OR 3) AND 4.
+
+All Libav developers are welcome to nominate commits that they push to
+@code{master} by mailing the @strong{libav-stable} mailing list. The
+easiest way to do so is to include @code{CC: libav-stable@@libav.org} in
+the commit message.
+
+
+@subsection Release Checklist
+
+The release process involves the following steps:
+
+@enumerate
+@item
+    Ensure that the @file{RELEASE} file contains the version number for
+    the upcoming release.
+@item
+    File a release tracking bug in @url{http://bugzilla.libav.org}. Make
+    sure that the bug has an alias named @code{ReleaseX.Y} for the
+    @code{X.Y} release.
+@item
+    Announce the intent to do a release to the mailing list.
+@item
+    Reassign unresolved blocking bugs from previous release
+    tracking bugs to the new bug.
+@item
+    Review patch nominations that reach the @strong{libav-stable}
+    mailing list, and push patches that fulfill the stable release
+    criteria to the release branch.
+@item
+    Ensure that the FATE regression suite still passes in the release
+    branch on at least @strong{i386} and @strong{amd64}
+    (cf. @ref{Regression Tests}).
+@item
+    Prepare the release tarballs in @code{xz} and @code{gz} formats, and
+    supplementing files that contain @code{md5} and @code{sha1}
+    checksums.
+@item
+    Publish the tarballs at @url{http://libav.org/releases}. Create and
+    push an annotated tag in the form @code{vX}, with @code{X}
+    containing the version number.
+@item
+    Build the tarballs with the Windows binaries, and publish them at
+    @url{http://win32.libav.org/releases}.
+@item
+    Propose and send a patch to the @strong{libav-devel} mailing list
+    with a news entry for the website.
+@item
+    Publish the news entry.
+@item
+    Send announcement to the mailing list.
+@end enumerate
 
 @bye

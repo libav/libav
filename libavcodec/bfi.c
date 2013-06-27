@@ -33,7 +33,6 @@
 
 typedef struct BFIContext {
     AVCodecContext *avctx;
-    AVFrame frame;
     uint8_t *dst;
 } BFIContext;
 

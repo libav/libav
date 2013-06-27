@@ -36,7 +36,6 @@
 #include "libavcodec/avcodec.h"
 
 #include "libavfilter/avfilter.h"
-#include "libavfilter/avfiltergraph.h"
 
 #include "libavutil/avutil.h"
 #include "libavutil/dict.h"
@@ -158,6 +157,8 @@ typedef struct OptionsContext {
     int        nb_copy_initial_nonkeyframes;
     SpecifierOpt *filters;
     int        nb_filters;
+    SpecifierOpt *filter_scripts;
+    int        nb_filter_scripts;
     SpecifierOpt *pass;
     int        nb_pass;
     SpecifierOpt *passlogfiles;
@@ -200,6 +201,7 @@ typedef struct InputStream {
     int decoding_needed;     /* true if the packets must be decoded in 'raw_fifo' */
     AVCodec *dec;
     AVFrame *decoded_frame;
+    AVFrame *filter_frame; /* a ref of decoded_frame, to be sent to filters */
 
     int64_t       start;     /* time when read started */
     /* predicted dts of the next packet read for this stream or (when there are
@@ -222,9 +224,6 @@ typedef struct InputStream {
     int      resample_sample_rate;
     int      resample_channels;
     uint64_t resample_channel_layout;
-
-    /* a pool of free buffers for decoded data */
-    FrameBuffer *buffer_pool;
 
     /* decoded data from this stream goes into all those filters
      * currently video and audio only */
@@ -267,6 +266,8 @@ typedef struct OutputStream {
     /* pts of the first frame encoded for this stream, used for limiting
      * recording time */
     int64_t first_pts;
+    /* dts of the last packet sent to the muxer */
+    int64_t last_mux_dts;
     AVBitStreamFilterContext *bitstream_filters;
     AVCodec *enc;
     int64_t max_frames;
@@ -293,6 +294,7 @@ typedef struct OutputStream {
 
     int64_t sws_flags;
     AVDictionary *opts;
+    AVDictionary *resample_opts;
     int finished;        /* no more packets should be written for this stream */
     int stream_copy;
     const char *attachment_filename;

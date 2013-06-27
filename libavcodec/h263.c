@@ -27,10 +27,8 @@
  * h263/mpeg4 codec.
  */
 
-//#define DEBUG
 #include <limits.h>
 
-#include "dsputil.h"
 #include "avcodec.h"
 #include "mpegvideo.h"
 #include "h263.h"
@@ -40,8 +38,6 @@
 #include "flv.h"
 #include "mpeg4video.h"
 
-//#undef NDEBUG
-//#include <assert.h>
 
 uint8_t ff_h263_static_rl_table_store[2][2][2*MAX_RUN + MAX_LEVEL + 3];
 
@@ -226,7 +222,7 @@ void ff_h263_loop_filter(MpegEncContext * s){
     }
 }
 
-void ff_h263_pred_acdc(MpegEncContext * s, DCTELEM *block, int n)
+void ff_h263_pred_acdc(MpegEncContext * s, int16_t *block, int n)
 {
     int x, y, wrap, a, c, pred_dc, scale, i;
     int16_t *dc_val, *ac_val, *ac_val1;

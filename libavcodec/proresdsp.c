@@ -20,9 +20,12 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/attributes.h"
+#include "libavutil/common.h"
+#include "dct.h"
+#include "dsputil.h"
 #include "proresdsp.h"
 #include "simple_idct.h"
-#include "libavutil/common.h"
 
 #define BIAS     (1 << (PRORES_BITS_PER_SAMPLE - 1))           ///< bias value for converting signed pixels into unsigned ones
 #define CLIP_MIN (1 << (PRORES_BITS_PER_SAMPLE - 8))           ///< minimum value for clipping resulting pixels
@@ -34,7 +37,7 @@
 /**
  * Add bias value, clamp and output pixels of a slice
  */
-static void put_pixels(uint16_t *dst, int stride, const DCTELEM *in)
+static void put_pixels(uint16_t *dst, int stride, const int16_t *in)
 {
     int x, y, src_offset, dst_offset;
 
@@ -47,7 +50,7 @@ static void put_pixels(uint16_t *dst, int stride, const DCTELEM *in)
     }
 }
 
-static void prores_idct_put_c(uint16_t *out, int linesize, DCTELEM *block, const int16_t *qmat)
+static void prores_idct_put_c(uint16_t *out, int linesize, int16_t *block, const int16_t *qmat)
 {
     ff_prores_idct(block, qmat);
     put_pixels(out, linesize >> 1, block);
@@ -55,7 +58,7 @@ static void prores_idct_put_c(uint16_t *out, int linesize, DCTELEM *block, const
 #endif
 
 #if CONFIG_PRORES_ENCODER
-static void prores_fdct_c(const uint16_t *src, int linesize, DCTELEM *block)
+static void prores_fdct_c(const uint16_t *src, int linesize, int16_t *block)
 {
     int x, y;
     const uint16_t *tsrc = src;
@@ -69,7 +72,7 @@ static void prores_fdct_c(const uint16_t *src, int linesize, DCTELEM *block)
 }
 #endif
 
-void ff_proresdsp_init(ProresDSPContext *dsp)
+av_cold void ff_proresdsp_init(ProresDSPContext *dsp)
 {
 #if CONFIG_PRORES_DECODER
     dsp->idct_put = prores_idct_put_c;

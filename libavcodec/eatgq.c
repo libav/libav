@@ -39,10 +39,10 @@
 
 typedef struct TgqContext {
     AVCodecContext *avctx;
-    int width,height;
+    int width, height;
     ScanTable scantable;
     int qtable[64];
-    DECLARE_ALIGNED(16, DCTELEM, block)[6][64];
+    DECLARE_ALIGNED(16, int16_t, block)[6][64];
     GetByteContext gb;
 } TgqContext;
 
@@ -58,43 +58,44 @@ static av_cold int tgq_decode_init(AVCodecContext *avctx)
     return 0;
 }
 
-static void tgq_decode_block(TgqContext *s, DCTELEM block[64], GetBitContext *gb){
+static void tgq_decode_block(TgqContext *s, int16_t block[64], GetBitContext *gb)
+{
     uint8_t *perm = s->scantable.permutated;
     int i, j, value;
-    block[0] = get_sbits(gb,8) * s->qtable[0];
+    block[0] = get_sbits(gb, 8) * s->qtable[0];
     for (i = 1; i < 64;) {
-        switch (show_bits(gb,3)) {
+        switch (show_bits(gb, 3)) {
         case 4:
             block[perm[i++]] = 0;
         case 0:
             block[perm[i++]] = 0;
-            skip_bits(gb,3);
+            skip_bits(gb, 3);
             break;
         case 5:
         case 1:
-            skip_bits(gb,2);
-            value = get_bits(gb,6);
+            skip_bits(gb, 2);
+            value = get_bits(gb, 6);
             for (j = 0; j < value; j++)
                 block[perm[i++]] = 0;
             break;
         case 6:
-            skip_bits(gb,3);
+            skip_bits(gb, 3);
             block[perm[i]] = -s->qtable[perm[i]];
             i++;
             break;
         case 2:
-            skip_bits(gb,3);
+            skip_bits(gb, 3);
             block[perm[i]] = s->qtable[perm[i]];
             i++;
             break;
         case 7: // 111b
         case 3: // 011b
-            skip_bits(gb,2);
-            if (show_bits(gb,6) == 0x3F) {
+            skip_bits(gb, 2);
+            if (show_bits(gb, 6) == 0x3F) {
                 skip_bits(gb, 6);
-                block[perm[i]] = get_sbits(gb,8) * s->qtable[perm[i]];
+                block[perm[i]] = get_sbits(gb, 8) * s->qtable[perm[i]];
             } else {
-                block[perm[i]] = get_sbits(gb,6) * s->qtable[perm[i]];
+                block[perm[i]] = get_sbits(gb, 6) * s->qtable[perm[i]];
             }
             i++;
             break;
@@ -103,7 +104,7 @@ static void tgq_decode_block(TgqContext *s, DCTELEM block[64], GetBitContext *gb
     block[0] += 128 << 4;
 }
 
-static void tgq_idct_put_mb(TgqContext *s, DCTELEM (*block)[64], AVFrame *frame,
+static void tgq_idct_put_mb(TgqContext *s, int16_t (*block)[64], AVFrame *frame,
                             int mb_x, int mb_y)
 {
     int linesize = frame->linesize[0];
@@ -137,13 +138,13 @@ static void tgq_idct_put_mb_dconly(TgqContext *s, AVFrame *frame,
     uint8_t *dest_y  = frame->data[0] + (mb_y * 16 * linesize)             + mb_x * 16;
     uint8_t *dest_cb = frame->data[1] + (mb_y * 8  * frame->linesize[1]) + mb_x * 8;
     uint8_t *dest_cr = frame->data[2] + (mb_y * 8  * frame->linesize[2]) + mb_x * 8;
-    tgq_dconly(s,dest_y                 , linesize, dc[0]);
-    tgq_dconly(s,dest_y              + 8, linesize, dc[1]);
-    tgq_dconly(s,dest_y + 8*linesize    , linesize, dc[2]);
-    tgq_dconly(s,dest_y + 8*linesize + 8, linesize, dc[3]);
+    tgq_dconly(s, dest_y,                    linesize, dc[0]);
+    tgq_dconly(s, dest_y                + 8, linesize, dc[1]);
+    tgq_dconly(s, dest_y + 8 * linesize,     linesize, dc[2]);
+    tgq_dconly(s, dest_y + 8 * linesize + 8, linesize, dc[3]);
     if (!(s->avctx->flags & CODEC_FLAG_GRAY)) {
-        tgq_dconly(s,dest_cb, frame->linesize[1], dc[4]);
-        tgq_dconly(s,dest_cr, frame->linesize[2], dc[5]);
+        tgq_dconly(s, dest_cb, frame->linesize[1], dc[4]);
+        tgq_dconly(s, dest_cr, frame->linesize[2], dc[5]);
     }
 }
 
@@ -161,19 +162,19 @@ static void tgq_decode_mb(TgqContext *s, AVFrame *frame, int mb_y, int mb_x)
             tgq_decode_block(s, s->block[i], &gb);
         tgq_idct_put_mb(s, s->block, frame, mb_x, mb_y);
         bytestream2_skip(&s->gb, mode);
-    }else{
+    } else {
         if (mode == 3) {
             memset(dc, bytestream2_get_byte(&s->gb), 4);
             dc[4] = bytestream2_get_byte(&s->gb);
             dc[5] = bytestream2_get_byte(&s->gb);
-        }else if (mode == 6) {
+        } else if (mode == 6) {
             bytestream2_get_buffer(&s->gb, dc, 6);
-        }else if (mode == 12) {
+        } else if (mode == 12) {
             for (i = 0; i < 6; i++) {
                 dc[i] = bytestream2_get_byte(&s->gb);
                 bytestream2_skip(&s->gb, 1);
             }
-        }else{
+        } else {
             av_log(s->avctx, AV_LOG_ERROR, "unsupported mb mode %i\n", mode);
         }
         tgq_idct_put_mb_dconly(s, frame, mb_x, mb_y, dc);
@@ -182,7 +183,7 @@ static void tgq_decode_mb(TgqContext *s, AVFrame *frame, int mb_y, int mb_x)
 
 static void tgq_calculate_qtable(TgqContext *s, int quant)
 {
-    int i,j;
+    int i, j;
     const int a = (14 * (100 - quant)) / 100 + 1;
     const int b = (11 * (100 - quant)) / 100 + 4;
     for (j = 0; j < 8; j++)

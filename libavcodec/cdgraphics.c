@@ -266,7 +266,7 @@ static int cdg_decode_frame(AVCodecContext *avctx,
     int ret;
     uint8_t command, inst;
     uint8_t cdg_data[CDG_DATA_SIZE];
-    AVFrame *new_frame;
+    AVFrame *frame = data;
     CDGraphicsContext *cc = avctx->priv_data;
 
     if (buf_size < CDG_MINIMUM_PKT_SIZE) {
@@ -279,6 +279,8 @@ static int cdg_decode_frame(AVCodecContext *avctx,
         av_log(avctx, AV_LOG_ERROR, "reget_buffer() failed\n");
         return ret;
     }
+    if (!avctx->frame_number)
+        memset(cc->frame->data[0], 0, cc->frame->linesize[0] * avctx->height);
 
     command = bytestream_get_byte(&buf);
     inst    = bytestream_get_byte(&buf);
@@ -325,26 +327,27 @@ static int cdg_decode_frame(AVCodecContext *avctx,
                 return AVERROR(EINVAL);
             }
 
-            if (!(new_frame = av_frame_alloc()))
-                return AVERROR(ENOMEM);
-
-            ret = ff_get_buffer(avctx, new_frame, AV_GET_BUFFER_FLAG_REF);
+            ret = ff_get_buffer(avctx, frame, AV_GET_BUFFER_FLAG_REF);
             if (ret) {
                 av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
-                av_frame_free(&new_frame);
                 return ret;
             }
 
-            cdg_scroll(cc, cdg_data, new_frame, inst == CDG_INST_SCROLL_COPY);
-            av_frame_free(&cc->frame);
-            cc->frame = new_frame;
+            cdg_scroll(cc, cdg_data, frame, inst == CDG_INST_SCROLL_COPY);
+            av_frame_unref(cc->frame);
+            ret = av_frame_ref(cc->frame, frame);
+            if (ret < 0)
+                return ret;
             break;
         default:
             break;
         }
 
-        if ((ret = av_frame_ref(data, cc->frame)) < 0)
-            return ret;
+        if (!frame->data[0]) {
+            ret = av_frame_ref(frame, cc->frame);
+            if (ret < 0)
+                return ret;
+        }
         *got_frame = 1;
     } else {
         *got_frame = 0;

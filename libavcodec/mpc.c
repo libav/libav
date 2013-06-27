@@ -26,16 +26,16 @@
  * divided into 32 subbands.
  */
 
+#include "libavutil/attributes.h"
 #include "avcodec.h"
 #include "get_bits.h"
-#include "dsputil.h"
 #include "mpegaudiodsp.h"
 #include "mpegaudio.h"
 
 #include "mpc.h"
 #include "mpcdata.h"
 
-void ff_mpc_init(void)
+av_cold void ff_mpc_init(void)
 {
     ff_mpa_synth_init_fixed(ff_mpa_synth_window_fixed);
 }

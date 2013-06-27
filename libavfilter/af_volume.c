@@ -24,7 +24,7 @@
  * audio volume filter
  */
 
-#include "libavutil/audioconvert.h"
+#include "libavutil/channel_layout.h"
 #include "libavutil/common.h"
 #include "libavutil/eval.h"
 #include "libavutil/float_dsp.h"
@@ -60,18 +60,9 @@ static const AVClass volume_class = {
     .version    = LIBAVUTIL_VERSION_INT,
 };
 
-static av_cold int init(AVFilterContext *ctx, const char *args)
+static av_cold int init(AVFilterContext *ctx)
 {
     VolumeContext *vol = ctx->priv;
-    int ret;
-
-    vol->class = &volume_class;
-    av_opt_set_defaults(vol);
-
-    if ((ret = av_set_options_string(vol, args, "=", ":")) < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Error parsing options string '%s'.\n", args);
-        return ret;
-    }
 
     if (vol->precision == PRECISION_FIXED) {
         vol->volume_i = (int)(vol->volume * 256 + 0.5);
@@ -84,8 +75,7 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
                precision_str[vol->precision]);
     }
 
-    av_opt_free(vol);
-    return ret;
+    return 0;
 }
 
 static int query_formats(AVFilterContext *ctx)
@@ -184,7 +174,7 @@ static inline void scale_samples_s32(uint8_t *dst, const uint8_t *src,
 
 
 
-static void volume_init(VolumeContext *vol)
+static av_cold void volume_init(VolumeContext *vol)
 {
     vol->samples_align = 1;
 
@@ -311,6 +301,7 @@ AVFilter avfilter_af_volume = {
     .description    = NULL_IF_CONFIG_SMALL("Change input volume."),
     .query_formats  = query_formats,
     .priv_size      = sizeof(VolumeContext),
+    .priv_class     = &volume_class,
     .init           = init,
     .inputs         = avfilter_af_volume_inputs,
     .outputs        = avfilter_af_volume_outputs,

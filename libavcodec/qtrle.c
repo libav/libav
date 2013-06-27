@@ -47,23 +47,26 @@ typedef struct QtrleContext {
     uint32_t pal[256];
 } QtrleContext;
 
-#define CHECK_PIXEL_PTR(n) \
-  if ((pixel_ptr + n > pixel_limit) || (pixel_ptr + n < 0)) { \
-    av_log (s->avctx, AV_LOG_INFO, "Problem: pixel_ptr = %d, pixel_limit = %d\n", \
-      pixel_ptr + n, pixel_limit); \
-    return; \
-  } \
+#define CHECK_PIXEL_PTR(n)                                                            \
+    if ((pixel_ptr + n > pixel_limit) || (pixel_ptr + n < 0)) {                       \
+        av_log (s->avctx, AV_LOG_ERROR, "Problem: pixel_ptr = %d, pixel_limit = %d\n",\
+                pixel_ptr + n, pixel_limit);                                          \
+        return;                                                                       \
+    }                                                                                 \
 
 static void qtrle_decode_1bpp(QtrleContext *s, int row_ptr, int lines_to_change)
 {
     int rle_code;
-    int pixel_ptr = 0;
+    int pixel_ptr;
     int row_inc = s->frame.linesize[0];
     unsigned char pi0, pi1;  /* 2 8-pixel values */
     unsigned char *rgb = s->frame.data[0];
     int pixel_limit = s->frame.linesize[0] * s->avctx->height;
     int skip;
 
+    row_ptr  -= row_inc;
+    pixel_ptr = row_ptr;
+    lines_to_change++;
     while (lines_to_change) {
         skip     =              bytestream2_get_byte(&s->g);
         rle_code = (signed char)bytestream2_get_byte(&s->g);
@@ -115,6 +118,7 @@ static inline void qtrle_decode_2n4bpp(QtrleContext *s, int row_ptr,
 
     while (lines_to_change--) {
         pixel_ptr = row_ptr + (num_pixels * (bytestream2_get_byte(&s->g) - 1));
+        CHECK_PIXEL_PTR(0);
 
         while ((rle_code = (signed char)bytestream2_get_byte(&s->g)) != -1) {
             if (rle_code == 0) {
@@ -169,6 +173,7 @@ static void qtrle_decode_8bpp(QtrleContext *s, int row_ptr, int lines_to_change)
 
     while (lines_to_change--) {
         pixel_ptr = row_ptr + (4 * (bytestream2_get_byte(&s->g) - 1));
+        CHECK_PIXEL_PTR(0);
 
         while ((rle_code = (signed char)bytestream2_get_byte(&s->g)) != -1) {
             if (rle_code == 0) {
@@ -218,6 +223,7 @@ static void qtrle_decode_16bpp(QtrleContext *s, int row_ptr, int lines_to_change
 
     while (lines_to_change--) {
         pixel_ptr = row_ptr + (bytestream2_get_byte(&s->g) - 1) * 2;
+        CHECK_PIXEL_PTR(0);
 
         while ((rle_code = (signed char)bytestream2_get_byte(&s->g)) != -1) {
             if (rle_code == 0) {
@@ -261,6 +267,7 @@ static void qtrle_decode_24bpp(QtrleContext *s, int row_ptr, int lines_to_change
 
     while (lines_to_change--) {
         pixel_ptr = row_ptr + (bytestream2_get_byte(&s->g) - 1) * 3;
+        CHECK_PIXEL_PTR(0);
 
         while ((rle_code = (signed char)bytestream2_get_byte(&s->g)) != -1) {
             if (rle_code == 0) {
@@ -307,6 +314,7 @@ static void qtrle_decode_32bpp(QtrleContext *s, int row_ptr, int lines_to_change
 
     while (lines_to_change--) {
         pixel_ptr = row_ptr + (bytestream2_get_byte(&s->g) - 1) * 4;
+        CHECK_PIXEL_PTR(0);
 
         while ((rle_code = (signed char)bytestream2_get_byte(&s->g)) != -1) {
             if (rle_code == 0) {
@@ -377,7 +385,7 @@ static av_cold int qtrle_decode_init(AVCodecContext *avctx)
         return AVERROR_INVALIDDATA;
     }
 
-    s->frame.data[0] = NULL;
+    avcodec_get_frame_defaults(&s->frame);
 
     return 0;
 }

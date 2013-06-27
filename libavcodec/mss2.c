@@ -24,6 +24,7 @@
  */
 
 #include "libavutil/avassert.h"
+#include "error_resilience.h"
 #include "internal.h"
 #include "msmpeg4data.h"
 #include "vc1.h"
@@ -387,7 +388,7 @@ static int decode_wmv9(AVCodecContext *avctx, const uint8_t *buf, int buf_size,
 
     s->loop_filter = avctx->skip_loop_filter < AVDISCARD_ALL;
 
-    if (ff_vc1_parse_frame_header(v, &s->gb) == -1) {
+    if (ff_vc1_parse_frame_header(v, &s->gb) < 0) {
         av_log(v->s.avctx, AV_LOG_ERROR, "header error\n");
         return AVERROR_INVALIDDATA;
     }
@@ -405,7 +406,7 @@ static int decode_wmv9(AVCodecContext *avctx, const uint8_t *buf, int buf_size,
         return ret;
     }
 
-    ff_er_frame_start(s);
+    ff_mpeg_er_frame_start(s);
 
     v->bits = buf_size * 8;
 
@@ -418,7 +419,7 @@ static int decode_wmv9(AVCodecContext *avctx, const uint8_t *buf, int buf_size,
 
     ff_vc1_decode_blocks(v);
 
-    ff_er_frame_end(s);
+    ff_er_frame_end(&s->er);
 
     ff_MPV_frame_end(s);
 
@@ -429,8 +430,8 @@ static int decode_wmv9(AVCodecContext *avctx, const uint8_t *buf, int buf_size,
         ctx->dsp.upsample_plane(f->data[1], f->linesize[1], w >> 1, h >> 1);
         ctx->dsp.upsample_plane(f->data[2], f->linesize[2], w >> 1, h >> 1);
     } else if (v->respic)
-        av_log_ask_for_sample(v->s.avctx,
-                              "Asymmetric WMV9 rectangle subsampling\n");
+        avpriv_request_sample(v->s.avctx,
+                              "Asymmetric WMV9 rectangle subsampling");
 
     av_assert0(f->linesize[1] == f->linesize[2]);
 
@@ -748,9 +749,6 @@ static av_cold int wmv9_init(AVCodecContext *avctx)
     v->s.avctx    = avctx;
     avctx->flags |= CODEC_FLAG_EMU_EDGE;
     v->s.flags   |= CODEC_FLAG_EMU_EDGE;
-
-    if (avctx->idct_algo == FF_IDCT_AUTO)
-        avctx->idct_algo = FF_IDCT_WMV2;
 
     if ((ret = ff_vc1_init_common(v)) < 0)
         return ret;

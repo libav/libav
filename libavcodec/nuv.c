@@ -27,7 +27,6 @@
 #include "libavutil/lzo.h"
 #include "libavutil/imgutils.h"
 #include "avcodec.h"
-#include "dsputil.h"
 #include "internal.h"
 #include "rtjpeg.h"
 
@@ -150,7 +149,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
     AVFrame *picture   = data;
     int orig_size      = buf_size;
     int keyframe;
-    int result;
+    int result, init_frame = !avctx->frame_number;
     enum {
         NUV_UNCOMPRESSED  = '0',
         NUV_RTJPEG        = '1',
@@ -222,13 +221,20 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
         buf_size -= RTJPEG_HEADER_SIZE;
     }
 
-    if (keyframe)
+    if (keyframe) {
         av_frame_unref(&c->pic);
+        init_frame = 1;
+    }
 
     result = ff_reget_buffer(avctx, &c->pic);
     if (result < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return result;
+    }
+    if (init_frame) {
+        memset(c->pic.data[0], 0,    avctx->height * c->pic.linesize[0]);
+        memset(c->pic.data[1], 0x80, avctx->height * c->pic.linesize[1] / 2);
+        memset(c->pic.data[2], 0x80, avctx->height * c->pic.linesize[2] / 2);
     }
 
     c->pic.pict_type = keyframe ? AV_PICTURE_TYPE_I : AV_PICTURE_TYPE_P;

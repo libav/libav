@@ -23,13 +23,12 @@
  * libopencv wrapper functions
  */
 
-/* #define DEBUG */
-
 #include <opencv/cv.h>
 #include <opencv/cxcore.h>
 #include "libavutil/avstring.h"
 #include "libavutil/common.h"
 #include "libavutil/file.h"
+#include "libavutil/opt.h"
 #include "avfilter.h"
 #include "formats.h"
 #include "internal.h"
@@ -70,7 +69,9 @@ static int query_formats(AVFilterContext *ctx)
 }
 
 typedef struct {
-    const char *name;
+    const AVClass *class;
+    char *name;
+    char *params;
     int (*init)(AVFilterContext *ctx, const char *args);
     void (*uninit)(AVFilterContext *ctx);
     void (*end_frame_filter)(AVFilterContext *ctx, IplImage *inimg, IplImage *outimg);
@@ -85,8 +86,8 @@ typedef struct {
 
 static av_cold int smooth_init(AVFilterContext *ctx, const char *args)
 {
-    OCVContext *ocv = ctx->priv;
-    SmoothContext *smooth = ocv->priv;
+    OCVContext *s = ctx->priv;
+    SmoothContext *smooth = s->priv;
     char type_str[128] = "gaussian";
 
     smooth->param1 = 3;
@@ -95,7 +96,7 @@ static av_cold int smooth_init(AVFilterContext *ctx, const char *args)
     smooth->param4 = 0.0;
 
     if (args)
-        sscanf(args, "%127[^:]:%d:%d:%lf:%lf", type_str, &smooth->param1, &smooth->param2, &smooth->param3, &smooth->param4);
+        sscanf(args, "%127[^|]|%d|%d|%lf|%lf", type_str, &smooth->param1, &smooth->param2, &smooth->param3, &smooth->param4);
 
     if      (!strcmp(type_str, "blur"         )) smooth->type = CV_BLUR;
     else if (!strcmp(type_str, "blur_no_scale")) smooth->type = CV_BLUR_NO_SCALE;
@@ -128,8 +129,8 @@ static av_cold int smooth_init(AVFilterContext *ctx, const char *args)
 
 static void smooth_end_frame_filter(AVFilterContext *ctx, IplImage *inimg, IplImage *outimg)
 {
-    OCVContext *ocv = ctx->priv;
-    SmoothContext *smooth = ocv->priv;
+    OCVContext *s = ctx->priv;
+    SmoothContext *smooth = s->priv;
     cvSmooth(inimg, outimg, smooth->type, smooth->param1, smooth->param2, smooth->param3, smooth->param4);
 }
 
@@ -177,7 +178,7 @@ static int read_shape_from_file(int *cols, int *rows, int **values, const char *
                 p++;
                 break;
             } else
-                (*values)[*cols*i + j] = !!isgraph(*(p++));
+                (*values)[*cols*i + j] = !!av_isgraph(*(p++));
         }
     }
     av_file_unmap(buf, size);
@@ -251,8 +252,8 @@ typedef struct {
 
 static av_cold int dilate_init(AVFilterContext *ctx, const char *args)
 {
-    OCVContext *ocv = ctx->priv;
-    DilateContext *dilate = ocv->priv;
+    OCVContext *s = ctx->priv;
+    DilateContext *dilate = s->priv;
     char default_kernel_str[] = "3x3+0x0/rect";
     char *kernel_str;
     const char *buf = args;
@@ -261,14 +262,14 @@ static av_cold int dilate_init(AVFilterContext *ctx, const char *args)
     dilate->nb_iterations = 1;
 
     if (args)
-        kernel_str = av_get_token(&buf, ":");
+        kernel_str = av_get_token(&buf, "|");
     if ((ret = parse_iplconvkernel(&dilate->kernel,
                                    *kernel_str ? kernel_str : default_kernel_str,
                                    ctx)) < 0)
         return ret;
     av_free(kernel_str);
 
-    sscanf(buf, ":%d", &dilate->nb_iterations);
+    sscanf(buf, "|%d", &dilate->nb_iterations);
     av_log(ctx, AV_LOG_VERBOSE, "iterations_nb:%d\n", dilate->nb_iterations);
     if (dilate->nb_iterations <= 0) {
         av_log(ctx, AV_LOG_ERROR, "Invalid non-positive value '%d' for nb_iterations\n",
@@ -280,23 +281,23 @@ static av_cold int dilate_init(AVFilterContext *ctx, const char *args)
 
 static av_cold void dilate_uninit(AVFilterContext *ctx)
 {
-    OCVContext *ocv = ctx->priv;
-    DilateContext *dilate = ocv->priv;
+    OCVContext *s = ctx->priv;
+    DilateContext *dilate = s->priv;
 
     cvReleaseStructuringElement(&dilate->kernel);
 }
 
 static void dilate_end_frame_filter(AVFilterContext *ctx, IplImage *inimg, IplImage *outimg)
 {
-    OCVContext *ocv = ctx->priv;
-    DilateContext *dilate = ocv->priv;
+    OCVContext *s = ctx->priv;
+    DilateContext *dilate = s->priv;
     cvDilate(inimg, outimg, dilate->kernel, dilate->nb_iterations);
 }
 
 static void erode_end_frame_filter(AVFilterContext *ctx, IplImage *inimg, IplImage *outimg)
 {
-    OCVContext *ocv = ctx->priv;
-    DilateContext *dilate = ocv->priv;
+    OCVContext *s = ctx->priv;
+    DilateContext *dilate = s->priv;
     cvErode(inimg, outimg, dilate->kernel, dilate->nb_iterations);
 }
 
@@ -314,47 +315,41 @@ static OCVFilterEntry ocv_filter_entries[] = {
     { "smooth", sizeof(SmoothContext), smooth_init, NULL, smooth_end_frame_filter },
 };
 
-static av_cold int init(AVFilterContext *ctx, const char *args)
+static av_cold int init(AVFilterContext *ctx)
 {
-    OCVContext *ocv = ctx->priv;
-    char name[128], priv_args[1024];
+    OCVContext *s = ctx->priv;
     int i;
-    char c;
-
-    sscanf(args, "%127[^=:]%c%1023s", name, &c, priv_args);
 
     for (i = 0; i < FF_ARRAY_ELEMS(ocv_filter_entries); i++) {
         OCVFilterEntry *entry = &ocv_filter_entries[i];
-        if (!strcmp(name, entry->name)) {
-            ocv->name             = entry->name;
-            ocv->init             = entry->init;
-            ocv->uninit           = entry->uninit;
-            ocv->end_frame_filter = entry->end_frame_filter;
+        if (!strcmp(s->name, entry->name)) {
+            s->init             = entry->init;
+            s->uninit           = entry->uninit;
+            s->end_frame_filter = entry->end_frame_filter;
 
-            if (!(ocv->priv = av_mallocz(entry->priv_size)))
+            if (!(s->priv = av_mallocz(entry->priv_size)))
                 return AVERROR(ENOMEM);
-            return ocv->init(ctx, priv_args);
+            return s->init(ctx, s->params);
         }
     }
 
-    av_log(ctx, AV_LOG_ERROR, "No libopencv filter named '%s'\n", name);
+    av_log(ctx, AV_LOG_ERROR, "No libopencv filter named '%s'\n", s->name);
     return AVERROR(EINVAL);
 }
 
 static av_cold void uninit(AVFilterContext *ctx)
 {
-    OCVContext *ocv = ctx->priv;
+    OCVContext *s = ctx->priv;
 
-    if (ocv->uninit)
-        ocv->uninit(ctx);
-    av_free(ocv->priv);
-    memset(ocv, 0, sizeof(*ocv));
+    if (s->uninit)
+        s->uninit(ctx);
+    av_free(s->priv);
 }
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
-    OCVContext *ocv = ctx->priv;
+    OCVContext *s = ctx->priv;
     AVFilterLink *outlink= inlink->dst->outputs[0];
     AVFrame *out;
     IplImage inimg, outimg;
@@ -368,13 +363,28 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     fill_iplimage_from_frame(&inimg , in , inlink->format);
     fill_iplimage_from_frame(&outimg, out, inlink->format);
-    ocv->end_frame_filter(ctx, &inimg, &outimg);
+    s->end_frame_filter(ctx, &inimg, &outimg);
     fill_frame_from_iplimage(out, &outimg, inlink->format);
 
     av_frame_free(&in);
 
     return ff_filter_frame(outlink, out);
 }
+
+#define OFFSET(x) offsetof(OCVContext, x)
+#define FLAGS AV_OPT_FLAG_VIDEO_PARAM
+static const AVOption options[] = {
+    { "filter_name",   NULL, OFFSET(name),   AV_OPT_TYPE_STRING, .flags = FLAGS },
+    { "filter_params", NULL, OFFSET(params), AV_OPT_TYPE_STRING, .flags = FLAGS },
+    { NULL },
+};
+
+static const AVClass ocv_class = {
+    .class_name = "ocv",
+    .item_name  = av_default_item_name,
+    .option     = options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
 
 static const AVFilterPad avfilter_vf_ocv_inputs[] = {
     {
@@ -398,6 +408,7 @@ AVFilter avfilter_vf_ocv = {
     .description = NULL_IF_CONFIG_SMALL("Apply transform using libopencv."),
 
     .priv_size = sizeof(OCVContext),
+    .priv_class = &ocv_class,
 
     .query_formats = query_formats,
     .init = init,

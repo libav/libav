@@ -50,7 +50,9 @@ static int avs_probe(AVProbeData * p)
 
     d = p->buf;
     if (d[0] == 'w' && d[1] == 'W' && d[2] == 0x10 && d[3] == 0)
-        return 50;
+        /* Ensure the buffer probe scores higher than the extension probe.
+         * This avoids problems with misdetection as AviSynth scripts. */
+        return AVPROBE_SCORE_EXTENSION + 1;
 
     return 0;
 }
@@ -188,9 +190,6 @@ static int avs_read_packet(AVFormatContext * s, AVPacket * pkt)
                     avs->st_video->codec->height = avs->height;
                     avs->st_video->codec->bits_per_coded_sample=avs->bits_per_sample;
                     avs->st_video->nb_frames = avs->nb_frames;
-#if FF_API_R_FRAME_RATE
-                    avs->st_video->r_frame_rate =
-#endif
                     avs->st_video->avg_frame_rate = (AVRational){avs->fps, 1};
                 }
                 return avs_read_video_packet(s, pkt, type, sub_type, size,

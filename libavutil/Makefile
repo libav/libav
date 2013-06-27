@@ -10,8 +10,8 @@ HEADERS = adler32.h                                                     \
           avutil.h                                                      \
           base64.h                                                      \
           blowfish.h                                                    \
-          buffer.h                                                      \
           bswap.h                                                       \
+          buffer.h                                                      \
           channel_layout.h                                              \
           common.h                                                      \
           cpu.h                                                         \
@@ -102,6 +102,10 @@ OBJS-$(CONFIG_LZO)                      += lzo.o
 OBJS += $(COMPAT_OBJS:%=../compat/%)
 
 SKIPHEADERS          = old_pix_fmts.h
+
+SKIPHEADERS-$(HAVE_ATOMICS_GCC)        += atomic_gcc.h
+SKIPHEADERS-$(HAVE_ATOMICS_SUNCC)      += atomic_suncc.h
+SKIPHEADERS-$(HAVE_ATOMICS_WIN32)      += atomic_win32.h
 
 TESTPROGS = adler32                                                     \
             aes                                                         \

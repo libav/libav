@@ -36,7 +36,6 @@
 #include "libavutil/imgutils.h"
 #include "libavutil/opt.h"
 #include "avcodec.h"
-#include "dsputil.h"
 #include "internal.h"
 #include "mjpeg.h"
 #include "mjpegdec.h"
@@ -90,6 +89,7 @@ av_cold int ff_mjpeg_decode_init(AVCodecContext *avctx)
         s->picture_ptr = &s->picture;
 
     s->avctx = avctx;
+    ff_hpeldsp_init(&s->hdsp, avctx->flags);
     ff_dsputil_init(&s->dsp, avctx);
     ff_init_scantable(s->dsp.idct_permutation, &s->scantable, ff_zigzag_direct);
     s->buffer_size   = 0;
@@ -244,9 +244,9 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
         nb_components > MAX_COMPONENTS)
         return -1;
     if (s->ls && !(s->bits <= 8 || nb_components == 1)) {
-        av_log_missing_feature(s->avctx,
-                               "For JPEG-LS anything except <= 8 bits/component"
-                               " or 16-bit gray", 0);
+        avpriv_report_missing_feature(s->avctx,
+                                      "JPEG-LS that is not <= 8 "
+                                      "bits/component or 16-bit gray");
         return AVERROR_PATCHWELCOME;
     }
     s->nb_components = nb_components;
@@ -265,13 +265,20 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
         s->quant_index[i] = get_bits(&s->gb, 8);
         if (s->quant_index[i] >= 4)
             return AVERROR_INVALIDDATA;
+        if (!s->h_count[i] || !s->v_count[i]) {
+            av_log(s->avctx, AV_LOG_ERROR,
+                   "Invalid sampling factor in component %d %d:%d\n",
+                   i, s->h_count[i], s->v_count[i]);
+            return AVERROR_INVALIDDATA;
+        }
+
         av_log(s->avctx, AV_LOG_DEBUG, "component %d %d:%d id: %d quant:%d\n",
                i, s->h_count[i], s->v_count[i],
                s->component_id[i], s->quant_index[i]);
     }
 
     if (s->ls && (s->h_max > 1 || s->v_max > 1)) {
-        av_log_missing_feature(s->avctx, "Subsampling in JPEG-LS", 0);
+        avpriv_report_missing_feature(s->avctx, "Subsampling in JPEG-LS");
         return AVERROR_PATCHWELCOME;
     }
 
@@ -403,7 +410,7 @@ static inline int mjpeg_decode_dc(MJpegDecodeContext *s, int dc_index)
 }
 
 /* decode block and dequantize */
-static int decode_block(MJpegDecodeContext *s, DCTELEM *block, int component,
+static int decode_block(MJpegDecodeContext *s, int16_t *block, int component,
                         int dc_index, int ac_index, int16_t *quant_matrix)
 {
     int code, i, j, level, val;
@@ -451,7 +458,7 @@ static int decode_block(MJpegDecodeContext *s, DCTELEM *block, int component,
     return 0;
 }
 
-static int decode_dc_progressive(MJpegDecodeContext *s, DCTELEM *block,
+static int decode_dc_progressive(MJpegDecodeContext *s, int16_t *block,
                                  int component, int dc_index,
                                  int16_t *quant_matrix, int Al)
 {
@@ -469,7 +476,7 @@ static int decode_dc_progressive(MJpegDecodeContext *s, DCTELEM *block,
 }
 
 /* decode block and dequantize - progressive JPEG version */
-static int decode_block_progressive(MJpegDecodeContext *s, DCTELEM *block,
+static int decode_block_progressive(MJpegDecodeContext *s, int16_t *block,
                                     uint8_t *last_nnz, int ac_index,
                                     int16_t *quant_matrix,
                                     int ss, int se, int Al, int *EOBRUN)
@@ -567,7 +574,7 @@ for (; ; i++) {                                                     \
 }
 
 /* decode block and dequantize - progressive JPEG refinement pass */
-static int decode_block_refinement(MJpegDecodeContext *s, DCTELEM *block,
+static int decode_block_refinement(MJpegDecodeContext *s, int16_t *block,
                                    uint8_t *last_nnz,
                                    int ac_index, int16_t *quant_matrix,
                                    int ss, int se, int Al, int *EOBRUN)
@@ -704,10 +711,9 @@ static int ljpeg_decode_rgb_scan(MJpegDecodeContext *s, int predictor,
 }
 
 static int ljpeg_decode_yuv_scan(MJpegDecodeContext *s, int predictor,
-                                 int point_transform)
+                                 int point_transform, int nb_components)
 {
     int i, mb_x, mb_y;
-    const int nb_components = 3;
 
     for (mb_y = 0; mb_y < s->mb_height; mb_y++) {
         for (mb_x = 0; mb_x < s->mb_width; mb_x++) {
@@ -859,8 +865,9 @@ static int mjpeg_decode_scan(MJpegDecodeContext *s, int nb_components, int Ah,
                     ptr = data[c] + block_offset;
                     if (!s->progressive) {
                         if (copy_mb)
-                            copy_block8(ptr, reference_data[c] + block_offset,
-                                        linesize[c], linesize[c], 8);
+                            s->hdsp.put_pixels_tab[1][0](ptr,
+                                reference_data[c] + block_offset,
+                                linesize[c], 8);
                         else {
                             s->dsp.clear_block(s->block);
                             if (decode_block(s, s->block, i,
@@ -875,7 +882,7 @@ static int mjpeg_decode_scan(MJpegDecodeContext *s, int nb_components, int Ah,
                     } else {
                         int block_idx  = s->block_stride[c] * (v * mb_y + y) +
                                          (h * mb_x + x);
-                        DCTELEM *block = s->blocks[c][block_idx];
+                        int16_t *block = s->blocks[c][block_idx];
                         if (Ah)
                             block[0] += get_bits1(&s->gb) *
                                         s->quant_matrixes[s->quant_index[c]][0] << Al;
@@ -934,6 +941,11 @@ static int mjpeg_decode_scan_progressive_ac(MJpegDecodeContext *s, int ss,
     int16_t *quant_matrix = s->quant_matrixes[s->quant_index[c]];
     GetBitContext mb_bitmask_gb;
 
+    if (ss < 0  || ss >= 64 ||
+        se < ss || se >= 64 ||
+        Ah < 0  || Al < 0)
+        return AVERROR_INVALIDDATA;
+
     if (mb_bitmask)
         init_get_bits(&mb_bitmask_gb, mb_bitmask, s->mb_width * s->mb_height);
 
@@ -952,7 +964,7 @@ static int mjpeg_decode_scan_progressive_ac(MJpegDecodeContext *s, int ss,
         int block_offset = mb_y * linesize * 8;
         uint8_t *ptr     = data + block_offset;
         int block_idx    = mb_y * s->block_stride[c];
-        DCTELEM (*block)[64] = &s->blocks[c][block_idx];
+        int16_t (*block)[64] = &s->blocks[c][block_idx];
         uint8_t *last_nnz    = &s->last_nnz[c][block_idx];
         for (mb_x = 0; mb_x < s->mb_width; mb_x++, block++, last_nnz++) {
             const int copy_mb = mb_bitmask && !get_bits1(&mb_bitmask_gb);
@@ -974,8 +986,9 @@ static int mjpeg_decode_scan_progressive_ac(MJpegDecodeContext *s, int ss,
 
             if (last_scan) {
                 if (copy_mb) {
-                    copy_block8(ptr, reference_data + block_offset,
-                                linesize, linesize, 8);
+                    s->hdsp.put_pixels_tab[1][0](ptr,
+                                                 reference_data + block_offset,
+                                                 linesize, 8);
                 } else {
                     s->dsp.idct_put(ptr, linesize, *block);
                     ptr += 8;
@@ -1089,7 +1102,8 @@ next_field:
                     return ret;
             } else {
                 if ((ret = ljpeg_decode_yuv_scan(s, predictor,
-                                                 point_transform)) < 0)
+                                                 point_transform,
+                                                 nb_components)) < 0)
                     return ret;
             }
         }
@@ -1482,6 +1496,12 @@ int ff_mjpeg_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
                 /* Comment */
             else if (start_code == COM)
                 mjpeg_decode_com(s);
+
+            if (!CONFIG_JPEGLS_DECODER &&
+                (start_code == SOF48 || start_code == LSE)) {
+                av_log(avctx, AV_LOG_ERROR, "JPEG-LS support not enabled.\n");
+                return AVERROR(ENOSYS);
+            }
 
             switch (start_code) {
             case SOI:

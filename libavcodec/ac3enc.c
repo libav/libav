@@ -26,18 +26,17 @@
  * The simplest AC-3 encoder.
  */
 
-//#define ASSERT_LEVEL 2
-
 #include <stdint.h>
 
+#include "libavutil/attributes.h"
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/crc.h"
+#include "libavutil/internal.h"
 #include "libavutil/opt.h"
 #include "avcodec.h"
 #include "put_bits.h"
-#include "dsputil.h"
 #include "ac3dsp.h"
 #include "ac3.h"
 #include "fft.h"
@@ -754,7 +753,7 @@ static void count_frame_bits_fixed(AC3EncodeContext *s)
  * Initialize bit allocation.
  * Set default parameter codes and calculate parameter values.
  */
-static void bit_alloc_init(AC3EncodeContext *s)
+static av_cold void bit_alloc_init(AC3EncodeContext *s)
 {
     int ch;
 
@@ -2052,9 +2051,6 @@ av_cold int ff_ac3_encode_close(AVCodecContext *avctx)
 
     s->mdct_end(s);
 
-#if FF_API_OLD_ENCODE_AUDIO
-    av_freep(&avctx->coded_frame);
-#endif
     return 0;
 }
 
@@ -2483,14 +2479,6 @@ av_cold int ff_ac3_encode_init(AVCodecContext *avctx)
     ret = allocate_buffers(s);
     if (ret)
         goto init_fail;
-
-#if FF_API_OLD_ENCODE_AUDIO
-    avctx->coded_frame= avcodec_alloc_frame();
-    if (!avctx->coded_frame) {
-        ret = AVERROR(ENOMEM);
-        goto init_fail;
-    }
-#endif
 
     ff_dsputil_init(&s->dsp, avctx);
     avpriv_float_dsp_init(&s->fdsp, avctx->flags & CODEC_FLAG_BITEXACT);

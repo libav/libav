@@ -30,7 +30,6 @@
 #include "internal.h"
 
 typedef struct YopDecContext {
-    AVFrame frame;
     AVCodecContext *avctx;
 
     int num_pal_colors;
@@ -39,6 +38,7 @@ typedef struct YopDecContext {
 
     uint8_t *low_nibble;
     uint8_t *srcptr;
+    uint8_t *src_end;
     uint8_t *dstptr;
     uint8_t *dstbuf;
 } YopDecContext;
@@ -89,6 +89,11 @@ static av_cold int yop_decode_init(AVCodecContext *avctx)
         return AVERROR_INVALIDDATA;
     }
 
+    if (avctx->extradata_size < 3) {
+        av_log(avctx, AV_LOG_ERROR, "Missing or incomplete extradata.\n");
+        return AVERROR_INVALIDDATA;
+    }
+
     avctx->pix_fmt = AV_PIX_FMT_PAL8;
 
     s->num_pal_colors = avctx->extradata[0];
@@ -110,8 +115,13 @@ static av_cold int yop_decode_init(AVCodecContext *avctx)
  * @param s codec context
  * @param tag the tag that was in the nibble
  */
-static void yop_paint_block(YopDecContext *s, int linesize, int tag)
+static int yop_paint_block(YopDecContext *s, int linesize, int tag)
 {
+    if (s->src_end - s->srcptr < paint_lut[tag][3]) {
+        av_log(s->avctx, AV_LOG_ERROR, "Packet too small.\n");
+        return AVERROR_INVALIDDATA;
+    }
+
     s->dstptr[0]            = s->srcptr[0];
     s->dstptr[1]            = s->srcptr[paint_lut[tag][0]];
     s->dstptr[linesize]     = s->srcptr[paint_lut[tag][1]];
@@ -119,6 +129,7 @@ static void yop_paint_block(YopDecContext *s, int linesize, int tag)
 
     // The number of src bytes consumed is in the last part of the lut entry.
     s->srcptr += paint_lut[tag][3];
+    return 0;
 }
 
 /**
@@ -173,15 +184,24 @@ static int yop_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
     int ret, i, x, y;
     uint32_t *palette;
 
+    if (avpkt->size < 4 + 3 * s->num_pal_colors) {
+        av_log(avctx, AV_LOG_ERROR, "Packet too small.\n");
+        return AVERROR_INVALIDDATA;
+    }
+
     ret = ff_get_buffer(avctx, frame, 0);
     if (ret < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }
 
+    if (!avctx->frame_number)
+        memset(frame->data[1], 0, AVPALETTE_SIZE);
+
     s->dstbuf     = frame->data[0];
     s->dstptr     = frame->data[0];
     s->srcptr     = avpkt->data + 4;
+    s->src_end    = avpkt->data + avpkt->size;
     s->low_nibble = NULL;
 
     is_odd_frame = avpkt->data[0];
@@ -205,7 +225,9 @@ static int yop_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
             tag = yop_get_next_nibble(s);
 
             if (tag != 0xf) {
-                yop_paint_block(s, frame->linesize[0], tag);
+                ret = yop_paint_block(s, frame->linesize[0], tag);
+                if (ret < 0)
+                    return ret;
             } else {
                 tag = yop_get_next_nibble(s);
                 ret = yop_copy_previous_block(s, frame->linesize[0], tag);

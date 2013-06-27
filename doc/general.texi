@@ -79,6 +79,14 @@ Go to @url{http://www.webmproject.org/} and follow the instructions for
 installing the library. Then pass @code{--enable-libvpx} to configure to
 enable it.
 
+@section libwavpack
+
+Libav can make use of the libwavpack library for WavPack encoding.
+
+Go to @url{http://www.wavpack.com/} and follow the instructions for
+installing the library. Then pass @code{--enable-libwavpack} to configure to
+enable it.
+
 @section x264
 
 Libav can make use of the x264 library for H.264 encoding.
@@ -374,8 +382,8 @@ following image formats are supported:
     @tab Digital Picture Exchange
 @item JPEG         @tab X @tab X
     @tab Progressive JPEG is not supported.
-@item JPEG 2000    @tab E @tab E
-    @tab decoding supported through external library libopenjpeg
+@item JPEG 2000    @tab E @tab X
+    @tab encoding supported through external library libopenjpeg
 @item JPEG-LS      @tab X @tab X
 @item LJPEG        @tab X @tab
     @tab Lossless JPEG
@@ -431,6 +439,7 @@ following image formats are supported:
 @item AMV Video              @tab     @tab  X
     @tab Used in Chinese MP3 players.
 @item ANSI/ASCII art         @tab     @tab  X
+@item Apple Intermediate Codec @tab     @tab  X
 @item Apple MJPEG-B          @tab     @tab  X
 @item Apple ProRes           @tab  X  @tab  X
 @item Apple QuickDraw        @tab     @tab  X
@@ -497,6 +506,7 @@ following image formats are supported:
 @item Electronic Arts TGQ video  @tab     @tab  X
 @item Electronic Arts TQI video  @tab     @tab  X
 @item Escape 124             @tab     @tab  X
+@item Escape 130             @tab     @tab  X
 @item FFmpeg video codec #1  @tab  X  @tab  X
     @tab experimental lossless codec (fourcc: FFV1)
 @item Flash Screen Video v1  @tab  X  @tab  X
@@ -506,6 +516,8 @@ following image formats are supported:
     @tab Sorenson H.263 used in Flash
 @item Forward Uncompressed   @tab     @tab  X
 @item Fraps                  @tab     @tab  X
+@item Go2Webinar             @tab     @tab  X
+    @tab fourcc: G2M4
 @item H.261                  @tab  X  @tab  X
 @item H.263 / H.263-1996     @tab  X  @tab  X
 @item H.263+ / H.263-1998 / H.263 version 2  @tab  X  @tab  X
@@ -808,7 +820,8 @@ following image formats are supported:
 @item TwinVQ (VQF flavor)    @tab     @tab  X
 @item Vorbis                 @tab  E  @tab  X
     @tab A native but very primitive encoder exists.
-@item WavPack                @tab     @tab  X
+@item WavPack                @tab  E  @tab  X
+    @tab supported through external library libwavpack
 @item Westwood Audio (SND1)  @tab     @tab  X
 @item Windows Media Audio 1  @tab  X  @tab  X
 @item Windows Media Audio 2  @tab  X  @tab  X

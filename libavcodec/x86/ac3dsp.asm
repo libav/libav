@@ -66,7 +66,7 @@ cglobal ac3_exponent_min, 3, 4, 2, exp, reuse_blks, expn, offset
 %define LOOP_ALIGN
 INIT_MMX mmx
 AC3_EXPONENT_MIN
-%if HAVE_MMXEXT
+%if HAVE_MMXEXT_EXTERNAL
 %define LOOP_ALIGN ALIGN 16
 INIT_MMX mmxext
 AC3_EXPONENT_MIN
@@ -378,42 +378,6 @@ cglobal ac3_compute_mantissa_size, 1, 2, 4, mant_cnt, sum
     psubd    %1, %2
 %endif
 %endmacro
-
-%if HAVE_AMD3DNOW_EXTERNAL
-INIT_MMX 3dnow
-cglobal ac3_extract_exponents, 3, 3, 0, exp, coef, len
-    add      expq, lenq
-    lea     coefq, [coefq+4*lenq]
-    neg      lenq
-    movq       m3, [pd_1]
-    movq       m4, [pd_151]
-.loop:
-    movq       m0, [coefq+4*lenq  ]
-    movq       m1, [coefq+4*lenq+8]
-    PABSD      m0, m2
-    PABSD      m1, m2
-    pslld      m0, 1
-    por        m0, m3
-    pi2fd      m2, m0
-    psrld      m2, 23
-    movq       m0, m4
-    psubd      m0, m2
-    pslld      m1, 1
-    por        m1, m3
-    pi2fd      m2, m1
-    psrld      m2, 23
-    movq       m1, m4
-    psubd      m1, m2
-    packssdw   m0, m0
-    packuswb   m0, m0
-    packssdw   m1, m1
-    packuswb   m1, m1
-    punpcklwd  m0, m1
-    movd  [expq+lenq], m0
-    add      lenq, 4
-    jl .loop
-    REP_RET
-%endif
 
 %macro AC3_EXTRACT_EXPONENTS 0
 cglobal ac3_extract_exponents, 3, 3, 4, exp, coef, len

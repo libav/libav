@@ -67,6 +67,21 @@ int av_stristart(const char *str, const char *pfx, const char **ptr);
 char *av_stristr(const char *haystack, const char *needle);
 
 /**
+ * Locate the first occurrence of the string needle in the string haystack
+ * where not more than hay_length characters are searched. A zero-length
+ * string needle is considered to match at the start of haystack.
+ *
+ * This function is a length-limited version of the standard strstr().
+ *
+ * @param haystack   string to search in
+ * @param needle     string to search for
+ * @param hay_length length of string to search in
+ * @return           pointer to the located match within haystack
+ *                   or a null pointer if no match
+ */
+char *av_strnstr(const char *haystack, const char *needle, size_t hay_length);
+
+/**
  * Copy the string src to dst, but no more than size - 1 bytes, and
  * null-terminate dst.
  *
@@ -137,6 +152,21 @@ char *av_d2str(double d);
 char *av_get_token(const char **buf, const char *term);
 
 /**
+ * Locale-independent conversion of ASCII isdigit.
+ */
+int av_isdigit(int c);
+
+/**
+ * Locale-independent conversion of ASCII isgraph.
+ */
+int av_isgraph(int c);
+
+/**
+ * Locale-independent conversion of ASCII isspace.
+ */
+int av_isspace(int c);
+
+/**
  * Locale-independent conversion of ASCII characters to uppercase.
  */
 static inline int av_toupper(int c)
@@ -155,6 +185,11 @@ static inline int av_tolower(int c)
         c ^= 0x20;
     return c;
 }
+
+/**
+ * Locale-independent conversion of ASCII isxdigit.
+ */
+int av_isxdigit(int c);
 
 /*
  * Locale-independent case-insensitive compare.

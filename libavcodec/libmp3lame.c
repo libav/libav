@@ -78,9 +78,6 @@ static av_cold int mp3lame_encode_close(AVCodecContext *avctx)
 {
     LAMEContext *s = avctx->priv_data;
 
-#if FF_API_OLD_ENCODE_AUDIO
-    av_freep(&avctx->coded_frame);
-#endif
     av_freep(&s->samples_flt[0]);
     av_freep(&s->samples_flt[1]);
     av_freep(&s->buffer);
@@ -141,14 +138,6 @@ static av_cold int mp3lame_encode_init(AVCodecContext *avctx)
     ff_af_queue_init(avctx, &s->afq);
 
     avctx->frame_size  = lame_get_framesize(s->gfp);
-
-#if FF_API_OLD_ENCODE_AUDIO
-    avctx->coded_frame = avcodec_alloc_frame();
-    if (!avctx->coded_frame) {
-        ret = AVERROR(ENOMEM);
-        goto error;
-    }
-#endif
 
     /* allocate float sample buffers */
     if (avctx->sample_fmt == AV_SAMPLE_FMT_FLTP) {
@@ -217,7 +206,7 @@ static int mp3lame_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
         }
     } else {
         lame_result = lame_encode_flush(s->gfp, s->buffer + s->buffer_index,
-                                        BUFFER_SIZE - s->buffer_index);
+                                        s->buffer_size - s->buffer_index);
     }
     if (lame_result < 0) {
         if (lame_result == -1) {

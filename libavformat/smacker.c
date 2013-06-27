@@ -210,7 +210,8 @@ static int smacker_read_header(AVFormatContext *s)
 
 
     /* load trees to extradata, they will be unpacked by decoder */
-    st->codec->extradata = av_malloc(smk->treesize + 16);
+    st->codec->extradata = av_mallocz(smk->treesize + 16 +
+                                      FF_INPUT_BUFFER_PADDING_SIZE);
     st->codec->extradata_size = smk->treesize + 16;
     if(!st->codec->extradata){
         av_log(s, AV_LOG_ERROR, "Cannot allocate %i bytes of extradata\n", smk->treesize + 16);
@@ -274,7 +275,7 @@ static int smacker_read_packet(AVFormatContext *s, AVPacket *pkt)
                 } else if(t & 0x40){ /* copy with offset */
                     off = avio_r8(s->pb);
                     j = (t & 0x3F) + 1;
-                    if (off + j > 0xff) {
+                    if (off + j > 0x100) {
                         av_log(s, AV_LOG_ERROR,
                                "Invalid palette update, offset=%d length=%d extends beyond palette size\n",
                                off, j);
@@ -303,10 +304,14 @@ static int smacker_read_packet(AVFormatContext *s, AVPacket *pkt)
         /* if audio chunks are present, put them to stack and retrieve later */
         for(i = 0; i < 7; i++) {
             if(flags & 1) {
-                int size;
+                uint32_t size;
                 uint8_t *tmpbuf;
 
                 size = avio_rl32(s->pb) - 4;
+                if (!size || size > frame_size) {
+                    av_log(s, AV_LOG_ERROR, "Invalid audio part size\n");
+                    return AVERROR_INVALIDDATA;
+                }
                 frame_size -= size;
                 frame_size -= 4;
                 smk->curstream++;
@@ -334,6 +339,7 @@ static int smacker_read_packet(AVFormatContext *s, AVPacket *pkt)
         if(ret != frame_size)
             return AVERROR(EIO);
         pkt->stream_index = smk->videoindex;
+        pkt->pts          = smk->cur_frame;
         pkt->size = ret + 769;
         smk->cur_frame++;
         smk->nextpos = avio_tell(s->pb);

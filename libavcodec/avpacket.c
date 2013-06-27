@@ -66,7 +66,7 @@ int av_new_packet(AVPacket *pkt, int size)
     if ((unsigned)size >= (unsigned)size + FF_INPUT_BUFFER_PADDING_SIZE)
         return AVERROR(EINVAL);
 
-    buf = av_buffer_alloc(size + FF_INPUT_BUFFER_PADDING_SIZE);
+    av_buffer_realloc(&buf, size + FF_INPUT_BUFFER_PADDING_SIZE);
     if (!buf)
         return AVERROR(ENOMEM);
 
@@ -124,15 +124,16 @@ int av_grow_packet(AVPacket *pkt, int grow_by)
 
 int av_packet_from_data(AVPacket *pkt, uint8_t *data, int size)
 {
-    if (size < FF_INPUT_BUFFER_PADDING_SIZE)
+    if (size >= INT_MAX - FF_INPUT_BUFFER_PADDING_SIZE)
         return AVERROR(EINVAL);
 
-    pkt->buf = av_buffer_create(data, size, av_buffer_default_free, NULL, 0);
+    pkt->buf = av_buffer_create(data, size + FF_INPUT_BUFFER_PADDING_SIZE,
+                                av_buffer_default_free, NULL, 0);
     if (!pkt->buf)
         return AVERROR(ENOMEM);
 
     pkt->data = data;
-    pkt->size = size - FF_INPUT_BUFFER_PADDING_SIZE;
+    pkt->size = size;
 #if FF_API_DESTRUCT_PACKET
     pkt->destruct = dummy_destruct_packet;
 #endif
@@ -143,7 +144,7 @@ int av_packet_from_data(AVPacket *pkt, uint8_t *data, int size)
 #define ALLOC_MALLOC(data, size) data = av_malloc(size)
 #define ALLOC_BUF(data, size)                \
 do {                                         \
-    pkt->buf = av_buffer_alloc(size);        \
+    av_buffer_realloc(&pkt->buf, size);      \
     data = pkt->buf ? pkt->buf->data : NULL; \
 } while (0)
 
@@ -192,9 +193,12 @@ int av_dup_packet(AVPacket *pkt)
                      pkt->side_data_elems * sizeof(*pkt->side_data), 0, ALLOC_MALLOC);
             memset(pkt->side_data, 0,
                    pkt->side_data_elems * sizeof(*pkt->side_data));
-            for (i = 0; i < pkt->side_data_elems; i++)
+            for (i = 0; i < pkt->side_data_elems; i++) {
                 DUP_DATA(pkt->side_data[i].data, tmp_pkt.side_data[i].data,
                          tmp_pkt.side_data[i].size, 1, ALLOC_MALLOC);
+                pkt->side_data[i].size = tmp_pkt.side_data[i].size;
+                pkt->side_data[i].type = tmp_pkt.side_data[i].type;
+            }
         }
     }
     return 0;

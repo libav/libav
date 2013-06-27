@@ -20,7 +20,7 @@
 
 #include "atomic.h"
 
-#if !HAVE_MEMORYBARRIER && !HAVE_SYNC_SYNCHRONIZE
+#if !HAVE_ATOMICS_NATIVE
 
 #if HAVE_PTHREADS
 
@@ -28,7 +28,7 @@
 
 static pthread_mutex_t atomic_lock = PTHREAD_MUTEX_INITIALIZER;
 
-int av_atomic_int_get(volatile int *ptr)
+int avpriv_atomic_int_get(volatile int *ptr)
 {
     int res;
 
@@ -39,14 +39,14 @@ int av_atomic_int_get(volatile int *ptr)
     return res;
 }
 
-void av_atomic_int_set(volatile int *ptr, int val)
+void avpriv_atomic_int_set(volatile int *ptr, int val)
 {
     pthread_mutex_lock(&atomic_lock);
     *ptr = val;
     pthread_mutex_unlock(&atomic_lock);
 }
 
-int av_atomic_int_add_and_fetch(volatile int *ptr, int inc)
+int avpriv_atomic_int_add_and_fetch(volatile int *ptr, int inc)
 {
     int res;
 
@@ -58,7 +58,7 @@ int av_atomic_int_add_and_fetch(volatile int *ptr, int inc)
     return res;
 }
 
-void *av_atomic_ptr_cas(void * volatile *ptr, void *oldval, void *newval)
+void *avpriv_atomic_ptr_cas(void * volatile *ptr, void *oldval, void *newval)
 {
     void *ret;
     pthread_mutex_lock(&atomic_lock);
@@ -69,26 +69,25 @@ void *av_atomic_ptr_cas(void * volatile *ptr, void *oldval, void *newval)
     return ret;
 }
 
-#else
-// assume there is no threading at all, noop implementations of everything
+#elif !HAVE_THREADS
 
-int av_atomic_int_get(volatile int *ptr)
+int avpriv_atomic_int_get(volatile int *ptr)
 {
     return *ptr;
 }
 
-void av_atomic_int_set(volatile int *ptr, int val)
+void avpriv_atomic_int_set(volatile int *ptr, int val)
 {
     *ptr = val;
 }
 
-int av_atomic_int_add_and_fetch(volatile int *ptr, int inc)
+int avpriv_atomic_int_add_and_fetch(volatile int *ptr, int inc)
 {
     *ptr += inc;
     return *ptr;
 }
 
-void *av_atomic_ptr_cas(void * volatile *ptr, void *oldval, void *newval)
+void *avpriv_atomic_ptr_cas(void * volatile *ptr, void *oldval, void *newval)
 {
     if (*ptr == oldval) {
         *ptr = newval;
@@ -97,22 +96,26 @@ void *av_atomic_ptr_cas(void * volatile *ptr, void *oldval, void *newval)
     return *ptr;
 }
 
-#endif // HAVE_PTHREADS
+#else
 
-#endif
+#error "Threading is enabled, but there is no implementation of atomic operations available"
+
+#endif /* HAVE_PTHREADS */
+
+#endif /* !HAVE_MEMORYBARRIER && !HAVE_SYNC_VAL_COMPARE_AND_SWAP && !HAVE_MACHINE_RW_BARRIER */
 
 #ifdef TEST
 #include <assert.h>
 
-int main(int argc, char *argv[])
+int main(void)
 {
     volatile int val = 1;
     int res;
 
-    res = av_atomic_int_add_and_fetch(&val, 1);
+    res = avpriv_atomic_int_add_and_fetch(&val, 1);
     assert(res == 2);
-    av_atomic_int_set(&val, 3);
-    res = av_atomic_int_get(&val);
+    avpriv_atomic_int_set(&val, 3);
+    res = avpriv_atomic_int_get(&val);
     assert(res == 3);
 
     return 0;

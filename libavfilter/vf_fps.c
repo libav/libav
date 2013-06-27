@@ -64,28 +64,20 @@ static const AVClass class = {
     .version    = LIBAVUTIL_VERSION_INT,
 };
 
-static av_cold int init(AVFilterContext *ctx, const char *args)
+static av_cold int init(AVFilterContext *ctx)
 {
     FPSContext *s = ctx->priv;
     int ret;
-
-    s->class = &class;
-    av_opt_set_defaults(s);
-
-    if ((ret = av_set_options_string(s, args, "=", ":")) < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Error parsing the options string %s.\n",
-               args);
-        return ret;
-    }
 
     if ((ret = av_parse_video_rate(&s->framerate, s->fps)) < 0) {
         av_log(ctx, AV_LOG_ERROR, "Error parsing framerate %s.\n", s->fps);
         return ret;
     }
-    av_opt_free(s);
 
     if (!(s->fifo = av_fifo_alloc(2*sizeof(AVFrame*))))
         return AVERROR(ENOMEM);
+
+    s->pts          = AV_NOPTS_VALUE;
 
     av_log(ctx, AV_LOG_VERBOSE, "fps=%d/%d\n", s->framerate.num, s->framerate.den);
     return 0;
@@ -120,7 +112,6 @@ static int config_props(AVFilterLink* link)
     link->time_base = (AVRational){ s->framerate.den, s->framerate.num };
     link->w         = link->src->inputs[0]->w;
     link->h         = link->src->inputs[0]->h;
-    s->pts          = AV_NOPTS_VALUE;
 
     return 0;
 }
@@ -290,6 +281,7 @@ AVFilter avfilter_vf_fps = {
     .uninit    = uninit,
 
     .priv_size = sizeof(FPSContext),
+    .priv_class = &class,
 
     .inputs    = avfilter_vf_fps_inputs,
     .outputs   = avfilter_vf_fps_outputs,

@@ -1,6 +1,6 @@
 /*
  * RTMP input format
- * Copyright (c) 2009 Kostya Shishkov
+ * Copyright (c) 2009 Konstantin Shishkov
  *
  * This file is part of Libav.
  *
@@ -356,11 +356,11 @@ int ff_amf_tag_size(const uint8_t *data, const uint8_t *data_end)
                 data++;
                 break;
             }
-            if (data + size >= data_end || data + size < data)
+            if (size < 0 || size >= data_end - data)
                 return -1;
             data += size;
             t = ff_amf_tag_size(data, data_end);
-            if (t < 0 || data + t >= data_end)
+            if (t < 0 || t >= data_end - data)
                 return -1;
             data += t;
         }
@@ -389,7 +389,7 @@ int ff_amf_get_field_value(const uint8_t *data, const uint8_t *data_end,
         int size = bytestream_get_be16(&data);
         if (!size)
             break;
-        if (data + size >= data_end || data + size < data)
+        if (size < 0 || size >= data_end - data)
             return -1;
         data += size;
         if (size == namelen && !memcmp(data-size, name, namelen)) {
@@ -410,7 +410,7 @@ int ff_amf_get_field_value(const uint8_t *data, const uint8_t *data_end,
             return 0;
         }
         len = ff_amf_tag_size(data, data_end);
-        if (len < 0 || data + len >= data_end || data + len < data)
+        if (len < 0 || len >= data_end - data)
             return -1;
         data += len;
     }
@@ -438,9 +438,10 @@ static const char* rtmp_packet_type(int type)
     }
 }
 
-static void ff_amf_tag_contents(void *ctx, const uint8_t *data, const uint8_t *data_end)
+static void amf_tag_contents(void *ctx, const uint8_t *data,
+                             const uint8_t *data_end)
 {
-    int size;
+    unsigned int size;
     char buf[1024];
 
     if (data >= data_end)
@@ -459,7 +460,7 @@ static void ff_amf_tag_contents(void *ctx, const uint8_t *data, const uint8_t *d
         } else {
             size = bytestream_get_be32(&data);
         }
-        size = FFMIN(size, 1023);
+        size = FFMIN(size, sizeof(buf) - 1);
         memcpy(buf, data, size);
         buf[size] = 0;
         av_log(ctx, AV_LOG_DEBUG, " string '%s'\n", buf);
@@ -472,22 +473,21 @@ static void ff_amf_tag_contents(void *ctx, const uint8_t *data, const uint8_t *d
     case AMF_DATA_TYPE_OBJECT:
         av_log(ctx, AV_LOG_DEBUG, " {\n");
         for (;;) {
-            int size = bytestream_get_be16(&data);
             int t;
-            memcpy(buf, data, size);
-            buf[size] = 0;
+            size = bytestream_get_be16(&data);
+            av_strlcpy(buf, data, FFMIN(sizeof(buf), size + 1));
             if (!size) {
                 av_log(ctx, AV_LOG_DEBUG, " }\n");
                 data++;
                 break;
             }
-            if (data + size >= data_end || data + size < data)
+            if (size >= data_end - data)
                 return;
             data += size;
             av_log(ctx, AV_LOG_DEBUG, "  %s: ", buf);
-            ff_amf_tag_contents(ctx, data, data_end);
+            amf_tag_contents(ctx, data, data_end);
             t = ff_amf_tag_size(data, data_end);
-            if (t < 0 || data + t >= data_end)
+            if (t < 0 || t >= data_end - data)
                 return;
             data += t;
         }
@@ -508,7 +508,7 @@ void ff_rtmp_packet_dump(void *ctx, RTMPPacket *p)
         uint8_t *src = p->data, *src_end = p->data + p->data_size;
         while (src < src_end) {
             int sz;
-            ff_amf_tag_contents(ctx, src, src_end);
+            amf_tag_contents(ctx, src, src_end);
             sz = ff_amf_tag_size(src, src_end);
             if (sz < 0)
                 break;

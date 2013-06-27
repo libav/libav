@@ -185,9 +185,6 @@ static av_cold int ac3_decode_init(AVCodecContext *avctx)
     }
     s->downmixed = 1;
 
-    avcodec_get_frame_defaults(&s->frame);
-    avctx->coded_frame = &s->frame;
-
     for (i = 0; i < AC3_MAX_CHANNELS; i++) {
         s->xcfptr[i] = s->transform_coeffs[i];
         s->dlyptr[i] = s->delay[i];
@@ -442,8 +439,9 @@ static void ac3_decode_transform_coeffs_ch(AC3DecodeContext *s, int ch_index, ma
         int mantissa;
         switch (bap) {
         case 0:
+            /* random noise with approximate range of -0.707 to 0.707 */
             if (dither)
-                mantissa = (av_lfg_get(&s->dith_state) & 0x7FFFFF) - 0x400000;
+                mantissa = (av_lfg_get(&s->dith_state) / 362) - 5932275;
             else
                 mantissa = 0;
             break;
@@ -876,7 +874,7 @@ static int decode_audio_block(AC3DecodeContext *s, int blk)
             /* check for enhanced coupling */
             if (s->eac3 && get_bits1(gbc)) {
                 /* TODO: parse enhanced coupling strategy info */
-                av_log_missing_feature(s->avctx, "Enhanced coupling", 1);
+                avpriv_request_sample(s->avctx, "Enhanced coupling");
                 return AVERROR_PATCHWELCOME;
             }
 
@@ -1266,6 +1264,7 @@ static int decode_audio_block(AC3DecodeContext *s, int blk)
 static int ac3_decode_frame(AVCodecContext * avctx, void *data,
                             int *got_frame_ptr, AVPacket *avpkt)
 {
+    AVFrame *frame     = data;
     const uint8_t *buf = avpkt->data;
     int buf_size = avpkt->size;
     AC3DecodeContext *s = avctx->priv_data;
@@ -1337,8 +1336,10 @@ static int ac3_decode_frame(AVCodecContext * avctx, void *data,
     if (!err) {
         avctx->sample_rate = s->sample_rate;
         avctx->bit_rate    = s->bit_rate;
+    }
 
-        /* channel config */
+    /* channel config */
+    if (!err || (s->channels && s->out_channels != s->channels)) {
         s->out_channels = s->channels;
         s->output_mode  = s->channel_mode;
         if (s->lfe_on)
@@ -1357,20 +1358,20 @@ static int ac3_decode_frame(AVCodecContext * avctx, void *data,
                 s->fbw_channels == s->out_channels)) {
             set_downmix_coeffs(s);
         }
-    } else if (!s->out_channels) {
-        s->out_channels = avctx->channels;
-        if (s->out_channels < s->channels)
-            s->output_mode  = s->out_channels == 1 ? AC3_CHMODE_MONO : AC3_CHMODE_STEREO;
+    } else if (!s->channels) {
+        av_log(avctx, AV_LOG_ERROR, "unable to determine channel mode\n");
+        return AVERROR_INVALIDDATA;
     }
+    avctx->channels = s->out_channels;
+
     /* set audio service type based on bitstream mode for AC-3 */
     avctx->audio_service_type = s->bitstream_mode;
     if (s->bitstream_mode == 0x7 && s->channels > 1)
         avctx->audio_service_type = AV_AUDIO_SERVICE_TYPE_KARAOKE;
 
     /* get output buffer */
-    avctx->channels = s->out_channels;
-    s->frame.nb_samples = s->num_blocks * 256;
-    if ((ret = ff_get_buffer(avctx, &s->frame, 0)) < 0) {
+    frame->nb_samples = s->num_blocks * 256;
+    if ((ret = ff_get_buffer(avctx, frame, 0)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }
@@ -1379,7 +1380,7 @@ static int ac3_decode_frame(AVCodecContext * avctx, void *data,
     channel_map = ff_ac3_dec_channel_map[s->output_mode & ~AC3_OUTPUT_LFEON][s->lfe_on];
     for (ch = 0; ch < s->channels; ch++) {
         if (ch < s->out_channels)
-            s->outptr[channel_map[ch]] = (float *)s->frame.data[ch];
+            s->outptr[channel_map[ch]] = (float *)frame->data[ch];
         else
             s->outptr[ch] = s->output[ch];
         output[ch] = s->output[ch];
@@ -1402,8 +1403,7 @@ static int ac3_decode_frame(AVCodecContext * avctx, void *data,
     for (ch = 0; ch < s->out_channels; ch++)
         memcpy(s->output[ch], output[ch], 1024);
 
-    *got_frame_ptr   = 1;
-    *(AVFrame *)data = s->frame;
+    *got_frame_ptr = 1;
 
     return FFMIN(buf_size, s->frame_size);
 }

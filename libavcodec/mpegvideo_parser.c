@@ -21,7 +21,8 @@
  */
 
 #include "parser.h"
-#include "mpegvideo.h"
+#include "mpeg12.h"
+#include "internal.h"
 
 struct MpvParseContext {
     ParseContext pc;
@@ -48,7 +49,7 @@ static void mpegvideo_extract_headers(AVCodecParserContext *s,
 
     while (buf < buf_end) {
         start_code= -1;
-        buf= avpriv_mpv_find_start_code(buf, buf_end, &start_code);
+        buf= avpriv_find_start_code(buf, buf_end, &start_code);
         bytes_left = buf_end - buf;
         switch(start_code) {
         case PICTURE_START_CODE:
@@ -113,6 +114,14 @@ static void mpegvideo_extract_headers(AVCodecParserContext *s,
                                 s->repeat_pict = 2;
                             }
                         }
+
+                        if (!pc->progressive_sequence) {
+                            if (top_field_first)
+                                s->field_order = AV_FIELD_TT;
+                            else
+                                s->field_order = AV_FIELD_BB;
+                        } else
+                            s->field_order = AV_FIELD_PROGRESSIVE;
                     }
                     break;
                 }

@@ -34,6 +34,6 @@ typedef struct PNMContext {
 } PNMContext;
 
 int ff_pnm_decode_header(AVCodecContext *avctx, PNMContext * const s);
-av_cold int ff_pnm_init(AVCodecContext *avctx);
+int ff_pnm_init(AVCodecContext *avctx);
 
 #endif /* AVCODEC_PNM_H */

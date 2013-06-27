@@ -26,7 +26,7 @@
 #ifndef AVCODEC_MSS2DSP_H
 #define AVCODEC_MSS2DSP_H
 
-#include "dsputil.h"
+#include <stdint.h>
 
 typedef struct MSS2DSPContext {
     void (*mss2_blit_wmv9)(uint8_t *dst, int dst_stride,
@@ -45,6 +45,6 @@ typedef struct MSS2DSPContext {
     void (*upsample_plane)(uint8_t *plane, int plane_stride, int w, int h);
 } MSS2DSPContext;
 
-av_cold void ff_mss2dsp_init(MSS2DSPContext* dsp);
+void ff_mss2dsp_init(MSS2DSPContext *dsp);
 
 #endif /* AVCODEC_MSS2DSP_H */

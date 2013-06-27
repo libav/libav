@@ -226,7 +226,7 @@ static inline int tm2_read_header(TM2Context *ctx, const uint8_t *buf)
 
     switch (magic) {
     case TM2_OLD_HEADER_MAGIC:
-        av_log_missing_feature(ctx->avctx, "TM2 old header", 1);
+        avpriv_request_sample(ctx->avctx, "Old TM2 header");
         return 0;
     case TM2_NEW_HEADER_MAGIC:
         return 0;
@@ -900,7 +900,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
     }
 
     l->avctx       = avctx;
-    l->pic.data[0] = NULL;
+    avcodec_get_frame_defaults(&l->pic);
     avctx->pix_fmt = AV_PIX_FMT_BGR24;
 
     ff_dsputil_init(&l->dsp, avctx);

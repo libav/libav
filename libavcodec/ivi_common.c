@@ -100,7 +100,7 @@ static int ivi_create_huff_from_desc(const IVIHuffDesc *cb, VLC *vlc, int flag)
                     (flag ? INIT_VLC_USE_NEW_STATIC : 0) | INIT_VLC_LE);
 }
 
-void ff_ivi_init_static_vlc(void)
+av_cold void ff_ivi_init_static_vlc(void)
 {
     int i;
     static VLC_TYPE table_data[8192 * 16][2];
@@ -418,7 +418,11 @@ static int ivi_decode_blocks(GetBitContext *gb, IVIBandDesc *band, IVITile *tile
         cbp      = mb->cbp;
         buf_offs = mb->buf_offs;
 
-        quant = av_clip(band->glob_quant + mb->q_delta, 0, 23);
+        quant = band->glob_quant + mb->q_delta;
+        if (avctx->codec_id == AV_CODEC_ID_INDEO4)
+            quant = av_clip(quant, 0, 31);
+        else
+            quant = av_clip(quant, 0, 23);
 
         base_tab  = is_intra ? band->intra_base  : band->inter_base;
         scale_tab = is_intra ? band->intra_scale : band->inter_scale;
@@ -527,9 +531,10 @@ static int ivi_decode_blocks(GetBitContext *gb, IVIBandDesc *band, IVITile *tile
                 /* block not coded */
                 /* for intra blocks apply the dc slant transform */
                 /* for inter - perform the motion compensation without delta */
-                if (is_intra && band->dc_transform) {
-                    band->dc_transform(&prev_dc, band->buf + buf_offs,
-                                       band->pitch, blk_size);
+                if (is_intra) {
+                    if (band->dc_transform)
+                        band->dc_transform(&prev_dc, band->buf + buf_offs,
+                                           band->pitch, blk_size);
                 } else
                     mc_no_delta_func(band->buf + buf_offs,
                                      band->ref_buf + buf_offs + mv_y * band->pitch + mv_x,

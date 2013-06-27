@@ -40,7 +40,6 @@
 #include "nellymoser.h"
 #include "avcodec.h"
 #include "audio_frame_queue.h"
-#include "dsputil.h"
 #include "fft.h"
 #include "internal.h"
 #include "sinewin.h"
@@ -55,7 +54,6 @@
 typedef struct NellyMoserEncodeContext {
     AVCodecContext  *avctx;
     int             last_frame;
-    DSPContext      dsp;
     AVFloatDSPContext fdsp;
     FFTContext      mdct_ctx;
     AudioFrameQueue afq;
@@ -122,12 +120,12 @@ static void apply_mdct(NellyMoserEncodeContext *s)
     float *in1 = s->buf + NELLY_BUF_LEN;
     float *in2 = s->buf + 2 * NELLY_BUF_LEN;
 
-    s->fdsp.vector_fmul       (s->in_buff,                 in0, ff_sine_128, NELLY_BUF_LEN);
-    s->dsp.vector_fmul_reverse(s->in_buff + NELLY_BUF_LEN, in1, ff_sine_128, NELLY_BUF_LEN);
+    s->fdsp.vector_fmul        (s->in_buff,                 in0, ff_sine_128, NELLY_BUF_LEN);
+    s->fdsp.vector_fmul_reverse(s->in_buff + NELLY_BUF_LEN, in1, ff_sine_128, NELLY_BUF_LEN);
     s->mdct_ctx.mdct_calc(&s->mdct_ctx, s->mdct_out, s->in_buff);
 
-    s->fdsp.vector_fmul       (s->in_buff,                 in1, ff_sine_128, NELLY_BUF_LEN);
-    s->dsp.vector_fmul_reverse(s->in_buff + NELLY_BUF_LEN, in2, ff_sine_128, NELLY_BUF_LEN);
+    s->fdsp.vector_fmul        (s->in_buff,                 in1, ff_sine_128, NELLY_BUF_LEN);
+    s->fdsp.vector_fmul_reverse(s->in_buff + NELLY_BUF_LEN, in2, ff_sine_128, NELLY_BUF_LEN);
     s->mdct_ctx.mdct_calc(&s->mdct_ctx, s->mdct_out + NELLY_BUF_LEN, s->in_buff);
 }
 
@@ -142,9 +140,6 @@ static av_cold int encode_end(AVCodecContext *avctx)
         av_free(s->path);
     }
     ff_af_queue_close(&s->afq);
-#if FF_API_OLD_ENCODE_AUDIO
-    av_freep(&avctx->coded_frame);
-#endif
 
     return 0;
 }
@@ -173,7 +168,6 @@ static av_cold int encode_init(AVCodecContext *avctx)
     s->avctx = avctx;
     if ((ret = ff_mdct_init(&s->mdct_ctx, 8, 0, 32768.0)) < 0)
         goto error;
-    ff_dsputil_init(&s->dsp, avctx);
     avpriv_float_dsp_init(&s->fdsp, avctx->flags & CODEC_FLAG_BITEXACT);
 
     /* Generate overlap window */
@@ -189,14 +183,6 @@ static av_cold int encode_init(AVCodecContext *avctx)
             goto error;
         }
     }
-
-#if FF_API_OLD_ENCODE_AUDIO
-    avctx->coded_frame = avcodec_alloc_frame();
-    if (!avctx->coded_frame) {
-        ret = AVERROR(ENOMEM);
-        goto error;
-    }
-#endif
 
     return 0;
 error:

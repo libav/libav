@@ -39,7 +39,6 @@
 #include "libavutil/channel_layout.h"
 #include "avcodec.h"
 #include "get_bits.h"
-#include "dsputil.h"
 #include "internal.h"
 #include "rdft.h"
 #include "mpegaudiodsp.h"
@@ -130,8 +129,6 @@ typedef struct {
  * QDM2 decoder context
  */
 typedef struct {
-    AVFrame frame;
-
     /// Parameters from codec header, do not change during playback
     int nb_channels;         ///< number of channels
     int channels;            ///< number of channels
@@ -1234,6 +1231,11 @@ static void qdm2_decode_super_block (QDM2Context *q)
     for (i = 0; packet_bytes > 0; i++) {
         int j;
 
+        if (i >= FF_ARRAY_ELEMS(q->sub_packet_list_A)) {
+            SAMPLES_NEEDED_2("too many packet bytes");
+            return;
+        }
+
         q->sub_packet_list_A[i].next = NULL;
 
         if (i > 0) {
@@ -1833,6 +1835,10 @@ static av_cold int qdm2_decode_init(AVCodecContext *avctx)
         av_log(avctx, AV_LOG_ERROR, "Unknown FFT order (%d), contact the developers!\n", s->fft_order);
         return -1;
     }
+    if (s->fft_size != (1 << (s->fft_order - 1))) {
+        av_log(avctx, AV_LOG_ERROR, "FFT size %d not power of 2.\n", s->fft_size);
+        return AVERROR_INVALIDDATA;
+    }
 
     ff_rdft_init(&s->rdft_ctx, s->fft_order, IDFT_C2R);
     ff_mpadsp_init(&s->mpadsp);
@@ -1840,9 +1846,6 @@ static av_cold int qdm2_decode_init(AVCodecContext *avctx)
     qdm2_init(s);
 
     avctx->sample_fmt = AV_SAMPLE_FMT_S16;
-
-    avcodec_get_frame_defaults(&s->frame);
-    avctx->coded_frame = &s->frame;
 
     return 0;
 }
@@ -1921,6 +1924,7 @@ static int qdm2_decode (QDM2Context *q, const uint8_t *in, int16_t *out)
 static int qdm2_decode_frame(AVCodecContext *avctx, void *data,
                              int *got_frame_ptr, AVPacket *avpkt)
 {
+    AVFrame *frame     = data;
     const uint8_t *buf = avpkt->data;
     int buf_size = avpkt->size;
     QDM2Context *s = avctx->priv_data;
@@ -1933,12 +1937,12 @@ static int qdm2_decode_frame(AVCodecContext *avctx, void *data,
         return -1;
 
     /* get output buffer */
-    s->frame.nb_samples = 16 * s->frame_size;
-    if ((ret = ff_get_buffer(avctx, &s->frame, 0)) < 0) {
+    frame->nb_samples = 16 * s->frame_size;
+    if ((ret = ff_get_buffer(avctx, frame, 0)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }
-    out = (int16_t *)s->frame.data[0];
+    out = (int16_t *)frame->data[0];
 
     for (i = 0; i < 16; i++) {
         if (qdm2_decode(s, buf, out) < 0)
@@ -1946,8 +1950,7 @@ static int qdm2_decode_frame(AVCodecContext *avctx, void *data,
         out += s->channels * s->frame_size;
     }
 
-    *got_frame_ptr   = 1;
-    *(AVFrame *)data = s->frame;
+    *got_frame_ptr = 1;
 
     return s->checksum_size;
 }

@@ -24,6 +24,7 @@
  * AAC encoder psychoacoustic model
  */
 
+#include "libavutil/attributes.h"
 #include "avcodec.h"
 #include "aactab.h"
 #include "psymodel.h"
@@ -248,7 +249,8 @@ static float lame_calc_attack_threshold(int bitrate)
 /**
  * LAME psy model specific initialization
  */
-static void lame_window_init(AacPsyContext *ctx, AVCodecContext *avctx) {
+static av_cold void lame_window_init(AacPsyContext *ctx, AVCodecContext *avctx)
+{
     int i, j;
 
     for (i = 0; i < avctx->channels; i++) {
@@ -310,7 +312,7 @@ static av_cold int psy_3gpp_init(FFPsyContext *ctx) {
         AacPsyCoeffs *coeffs = pctx->psy_coef[j];
         const uint8_t *band_sizes = ctx->bands[j];
         float line_to_frequency = ctx->avctx->sample_rate / (j ? 256.f : 2048.0f);
-        float avg_chan_bits = chan_bitrate / ctx->avctx->sample_rate * (j ? 128.0f : 1024.0f);
+        float avg_chan_bits = chan_bitrate * (j ? 128.0f : 1024.0f) / ctx->avctx->sample_rate;
         /* reference encoder uses 2.4% here instead of 60% like the spec says */
         float bark_pe = 0.024f * PSY_3GPP_BITS_TO_PE(avg_chan_bits) / num_bark;
         float en_spread_low = j ? PSY_3GPP_EN_SPREAD_LOW_S : PSY_3GPP_EN_SPREAD_LOW_L;
@@ -804,7 +806,8 @@ static FFPsyWindowInfo psy_lame_window(FFPsyContext *ctx, const float *audio,
                 sum1 += psy_fir_coeffs[j] * (firbuf[i + j] + firbuf[i + PSY_LAME_FIR_LEN - j]);
                 sum2 += psy_fir_coeffs[j + 1] * (firbuf[i + j + 1] + firbuf[i + PSY_LAME_FIR_LEN - j - 1]);
             }
-            /* NOTE: The LAME psymodel expects it's input in the range -32768 to 32768. Tuning this for normalized floats would be difficult. */
+            /* NOTE: The LAME psymodel expects its input in the range -32768 to
+             * 32768. Tuning this for normalized floats would be difficult. */
             hpfsmpl[i] = (sum1 + sum2) * 32768.0f;
         }
 

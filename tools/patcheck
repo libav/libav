@@ -67,7 +67,7 @@ $EGREP $OPT '^\+ *(const *|)static' $*| $EGREP --color=always '[^=]= *(0|NULL)[^
 cat $TMP
 hiegrep '# *ifdef * (HAVE|CONFIG)_' 'ifdefs that should be #if' $*
 
-hiegrep '\b(awnser|cant|dont|wont|usefull|successfull|occured|teh|alot|wether|skiped|heigth|informations|colums|loosy|loosing|seperate|preceed|upto|paket|posible|unkown|inpossible|dimention|acheive)\b' 'common typos' $*
+hiegrep '\b(awnser|cant|dont|wont|doesnt|usefull|successfull|occured|teh|alot|wether|skiped|heigth|informations|colums|loosy|loosing|seperate|preceed|upto|paket|posible|unkown|inpossible|dimention|acheive)\b' 'common typos' $*
 
 hiegrep 'av_log\( *NULL' 'Missing context in av_log' $*
 hiegrep '[^sn]printf' 'Please use av_log' $*
@@ -173,7 +173,7 @@ vertical align =
 /* and * align
 arrays fitting in smaller types
 variables written to twice with no interspaced read
-memset(block, 0, 6*64*sizeof(DCTELEM)); -> clear_blocks
+memset(block, 0, 6*64*sizeof(int16_t)); -> clear_blocks
 check existence of long_name in AVCodec
 check that the patch does not touch codec & (de)muxer layer at the same time ->split
 

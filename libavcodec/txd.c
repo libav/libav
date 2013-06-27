@@ -51,7 +51,7 @@ static int txd_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
     if (version < 8 || version > 9) {
         av_log(avctx, AV_LOG_ERROR, "texture data version %i is unsupported\n",
                                                                     version);
-        return AVERROR_INVALIDDATA;
+        return AVERROR_PATCHWELCOME;
     }
 
     if (depth == 8) {
@@ -60,7 +60,7 @@ static int txd_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
         avctx->pix_fmt = AV_PIX_FMT_RGB32;
     } else {
         av_log(avctx, AV_LOG_ERROR, "depth of %i is unsupported\n", depth);
-        return AVERROR_INVALIDDATA;
+        return AVERROR_PATCHWELCOME;
     }
 
     if ((ret = av_image_check_size(w, h, 0, avctx)) < 0)

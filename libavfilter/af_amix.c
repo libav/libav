@@ -28,6 +28,7 @@
  * output.
  */
 
+#include "libavutil/attributes.h"
 #include "libavutil/audio_fifo.h"
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
@@ -488,19 +489,10 @@ fail:
     return ret;
 }
 
-static int init(AVFilterContext *ctx, const char *args)
+static av_cold int init(AVFilterContext *ctx)
 {
     MixContext *s = ctx->priv;
-    int i, ret;
-
-    s->class = &amix_class;
-    av_opt_set_defaults(s);
-
-    if ((ret = av_set_options_string(s, args, "=", ":")) < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Error parsing options string '%s'.\n", args);
-        return ret;
-    }
-    av_opt_free(s);
+    int i;
 
     for (i = 0; i < s->nb_inputs; i++) {
         char name[32];
@@ -519,7 +511,7 @@ static int init(AVFilterContext *ctx, const char *args)
     return 0;
 }
 
-static void uninit(AVFilterContext *ctx)
+static av_cold void uninit(AVFilterContext *ctx)
 {
     int i;
     MixContext *s = ctx->priv;
@@ -563,6 +555,7 @@ AVFilter avfilter_af_amix = {
     .name          = "amix",
     .description   = NULL_IF_CONFIG_SMALL("Audio mixing."),
     .priv_size     = sizeof(MixContext),
+    .priv_class    = &amix_class,
 
     .init           = init,
     .uninit         = uninit,
@@ -570,4 +563,6 @@ AVFilter avfilter_af_amix = {
 
     .inputs    = NULL,
     .outputs   = avfilter_af_amix_outputs,
+
+    .flags     = AVFILTER_FLAG_DYNAMIC_INPUTS,
 };

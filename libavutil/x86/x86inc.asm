@@ -752,7 +752,7 @@ SECTION .note.GNU-stack noalloc noexec nowrite progbits
         %elifidn %1, sse3
             %define movu lddqu
         %endif
-        %if notcpuflag(mmx2)
+        %if notcpuflag(sse2)
             CPUNOP basicnop
         %endif
     %else
@@ -1087,10 +1087,10 @@ AVX_INSTR blendpd, 1, 0, 0
 AVX_INSTR blendps, 1, 0, 0
 AVX_INSTR blendvpd, 1, 0, 0
 AVX_INSTR blendvps, 1, 0, 0
-AVX_INSTR cmppd, 1, 0, 0
-AVX_INSTR cmpps, 1, 0, 0
-AVX_INSTR cmpsd, 1, 0, 0
-AVX_INSTR cmpss, 1, 0, 0
+AVX_INSTR cmppd, 1, 1, 0
+AVX_INSTR cmpps, 1, 1, 0
+AVX_INSTR cmpsd, 1, 1, 0
+AVX_INSTR cmpss, 1, 1, 0
 AVX_INSTR cvtdq2ps, 1, 0, 0
 AVX_INSTR cvtpd2dq, 1, 0, 0
 AVX_INSTR cvtps2dq, 1, 0, 0

@@ -23,41 +23,42 @@
 
 #include "config.h"
 
-#if HAVE_MEMORYBARRIER
-#include "atomic_win32.h"
-#elif HAVE_SYNC_SYNCHRONIZE
+#if HAVE_ATOMICS_GCC
 #include "atomic_gcc.h"
+#elif HAVE_ATOMICS_WIN32
+#include "atomic_win32.h"
+#elif HAVE_ATOMICS_SUNCC
+#include "atomic_suncc.h"
 #else
 
 /**
- * Loads the current value stored in an atomic integer.
+ * Load the current value stored in an atomic integer.
  *
  * @param ptr atomic integer
  * @return the current value of the atomic integer
- * @note this acts as a memory barrier
+ * @note This acts as a memory barrier.
  */
-int av_atomic_int_get(volatile int *ptr);
+int avpriv_atomic_int_get(volatile int *ptr);
 
 /**
- * Stores a new value in an atomic integer.
+ * Store a new value in an atomic integer.
  *
  * @param ptr atomic integer
  * @param val the value to store in the atomic integer
- * @note this acts as a memory barrier
+ * @note This acts as a memory barrier.
  */
-void av_atomic_int_set(volatile int *ptr, int val);
+void avpriv_atomic_int_set(volatile int *ptr, int val);
 
 /**
- * Adds up a value to an atomic integer.
+ * Add a value to an atomic integer.
  *
  * @param ptr atomic integer
- * @param inc the value to add up to the atomic integer (may be
- *            negative)
+ * @param inc the value to add to the atomic integer (may be negative)
  * @return the new value of the atomic integer.
- * @note this does NOT act as a memory barrier. This is primarily
+ * @note This does NOT act as a memory barrier. This is primarily
  *       intended for reference counting.
  */
-int av_atomic_int_add_and_fetch(volatile int *ptr, int inc);
+int avpriv_atomic_int_add_and_fetch(volatile int *ptr, int inc);
 
 /**
  * Atomic pointer compare and swap.
@@ -67,7 +68,7 @@ int av_atomic_int_add_and_fetch(volatile int *ptr, int inc);
  * @param newval value to replace *ptr with
  * @return the value of *ptr before comparison
  */
-void *av_atomic_ptr_cas(void * volatile *ptr, void *oldval, void *newval);
+void *avpriv_atomic_ptr_cas(void * volatile *ptr, void *oldval, void *newval);
 
-#endif
+#endif /* HAVE_MEMORYBARRIER */
 #endif /* AVUTIL_ATOMIC_H */

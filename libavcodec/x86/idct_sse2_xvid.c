@@ -38,12 +38,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavcodec/dsputil.h"
 #include "libavutil/internal.h"
 #include "libavutil/mem.h"
 #include "libavutil/x86/asm.h"
 #include "idct_xvid.h"
-#include "dsputil_mmx.h"
+#include "dsputil_x86.h"
 
 #if HAVE_INLINE_ASM
 
@@ -377,7 +376,7 @@ inline void ff_idct_xvid_sse2(short *block)
     JZ("%%esi", "1f")
     "5:                                                          \n\t"
     iMTX_MULT("7*16(%0)", MANGLE(iTab2), ROUND(walkenIdctRounders+5*16), PUT_ODD(ROW7))
-#if !ARCH_X86_64
+#if ARCH_X86_32
     iLLM_HEAD
 #endif
     iLLM_PASS("%0")

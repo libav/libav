@@ -33,7 +33,7 @@ typedef struct PayloadContext PayloadContext;
 typedef struct RTPDynamicProtocolHandler RTPDynamicProtocolHandler;
 
 #define RTP_MIN_PACKET_LENGTH 12
-#define RTP_MAX_PACKET_LENGTH 1500
+#define RTP_MAX_PACKET_LENGTH 8192
 
 #define RTP_REORDER_QUEUE_DEFAULT_SIZE 10
 
@@ -160,9 +160,6 @@ struct RTPDemuxContext {
     int64_t  unwrapped_timestamp;
     int64_t  range_start_offset;
     int max_payload_size;
-    struct MpegTSContext *ts;   /* only used for MP2T payloads */
-    int read_buf_index;
-    int read_buf_size;
     /* used to send back RTCP RR */
     char hostname[256];
 
@@ -191,9 +188,6 @@ struct RTPDemuxContext {
     unsigned int octet_count;
     unsigned int last_octet_count;
     int64_t last_feedback_time;
-
-    /* buffer for partially parsed packets */
-    uint8_t buf[RTP_MAX_PACKET_LENGTH];
 
     /* dynamic payload stuff */
     const RTPDynamicProtocolHandler *handler;

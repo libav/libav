@@ -70,6 +70,7 @@ typedef struct X264Context {
     int slice_max_size;
     char *stats;
     int nal_hrd;
+    char *x264_params;
 } X264Context;
 
 static void X264_log(void *p, int level, const char *fmt, va_list args)
@@ -278,7 +279,8 @@ static av_cold int X264_init(AVCodecContext *avctx)
             (float)avctx->rc_initial_buffer_occupancy / avctx->rc_buffer_size;
     }
 
-    x4->params.rc.f_ip_factor             = 1 / fabs(avctx->i_quant_factor);
+    if (avctx->i_quant_factor > 0)
+        x4->params.rc.f_ip_factor         = 1 / fabs(avctx->i_quant_factor);
     x4->params.rc.f_pb_factor             = avctx->b_quant_factor;
     x4->params.analyse.i_chroma_qp_offset = avctx->chromaoffset;
 
@@ -407,6 +409,22 @@ static av_cold int X264_init(AVCodecContext *avctx)
     if (avctx->flags & CODEC_FLAG_GLOBAL_HEADER)
         x4->params.b_repeat_headers = 0;
 
+    if (x4->x264_params) {
+        AVDictionary *dict    = NULL;
+        AVDictionaryEntry *en = NULL;
+
+        if (!av_dict_parse_string(&dict, x4->x264_params, "=", ":", 0)) {
+            while ((en = av_dict_get(dict, "", en, AV_DICT_IGNORE_SUFFIX))) {
+                if (x264_param_parse(&x4->params, en->key, en->value) < 0)
+                    av_log(avctx, AV_LOG_WARNING,
+                           "Error parsing option '%s = %s'.\n",
+                            en->key, en->value);
+            }
+
+            av_dict_free(&dict);
+        }
+    }
+
     // update AVCodecContext with x264 parameters
     avctx->has_b_frames = x4->params.i_bframe ?
         x4->params.i_bframe_pyramid ? 2 : 1 : 0;
@@ -527,6 +545,7 @@ static const AVOption options[] = {
     { "none",          NULL, 0, AV_OPT_TYPE_CONST, {.i64 = X264_NAL_HRD_NONE}, INT_MIN, INT_MAX, VE, "nal-hrd" },
     { "vbr",           NULL, 0, AV_OPT_TYPE_CONST, {.i64 = X264_NAL_HRD_VBR},  INT_MIN, INT_MAX, VE, "nal-hrd" },
     { "cbr",           NULL, 0, AV_OPT_TYPE_CONST, {.i64 = X264_NAL_HRD_CBR},  INT_MIN, INT_MAX, VE, "nal-hrd" },
+    { "x264-params",  "Override the x264 configuration using a :-separated list of key=value parameters", OFFSET(x264_params), AV_OPT_TYPE_STRING, { 0 }, 0, 0, VE },
     { NULL },
 };
 
@@ -541,6 +560,7 @@ static const AVCodecDefault x264_defaults[] = {
     { "b",                "0" },
     { "bf",               "-1" },
     { "g",                "-1" },
+    { "i_qfactor",        "-1" },
     { "qmin",             "-1" },
     { "qmax",             "-1" },
     { "qdiff",            "-1" },

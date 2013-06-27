@@ -26,11 +26,32 @@
 
 #include <stdint.h>
 
+#include "libavutil/buffer.h"
 #include "libavutil/mathematics.h"
 #include "libavutil/pixfmt.h"
 #include "avcodec.h"
+#include "config.h"
 
-#define FF_SANE_NB_CHANNELS 128U
+#define FF_SANE_NB_CHANNELS 63U
+
+typedef struct FramePool {
+    /**
+     * Pools for each data plane. For audio all the planes have the same size,
+     * so only pools[0] is used.
+     */
+    AVBufferPool *pools[4];
+
+    /*
+     * Pool parameters
+     */
+    int format;
+    int width, height;
+    int stride_align[AV_NUM_DATA_POINTERS];
+    int linesize[4];
+    int planes;
+    int channels;
+    int samples;
+} FramePool;
 
 typedef struct AVCodecInternal {
     /**
@@ -56,14 +77,6 @@ typedef struct AVCodecInternal {
      */
     int allocate_progress;
 
-#if FF_API_OLD_DECODE_AUDIO
-    /**
-     * Internal sample count used by avcodec_encode_audio() to fabricate pts.
-     * Can be removed along with avcodec_encode_audio().
-     */
-    int sample_count;
-#endif
-
     /**
      * An audio frame with less than required samples has been submitted and
      * padded with silence. Reject all subsequent frames.
@@ -71,6 +84,8 @@ typedef struct AVCodecInternal {
     int last_audio_frame;
 
     AVFrame to_free;
+
+    FramePool *pool;
 } AVCodecInternal;
 
 struct AVCodecDefault {
@@ -146,5 +161,9 @@ int ff_get_buffer(AVCodecContext *avctx, AVFrame *frame, int flags);
  * ff_get_buffer() to allocate the buffer when needed.
  */
 int ff_reget_buffer(AVCodecContext *avctx, AVFrame *frame);
+
+const uint8_t *avpriv_find_start_code(const uint8_t *restrict p,
+                                      const uint8_t *end,
+                                      uint32_t *restrict state);
 
 #endif /* AVCODEC_INTERNAL_H */
