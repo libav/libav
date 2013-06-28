@@ -42,6 +42,26 @@ static uint8_t * const ff_h264_lps_range = ff_h264_cabac_tables + H264_LPS_RANGE
 static uint8_t * const ff_h264_mlps_state = ff_h264_cabac_tables + H264_MLPS_STATE_OFFSET;
 static uint8_t * const ff_h264_last_coeff_flag_offset_8x8 = ff_h264_cabac_tables + H264_LAST_COEFF_FLAG_OFFSET_8x8_OFFSET;
 
+/**
+ * Skip @p n bytes and reset the decoder.
+ * @return the address of the first skipped byte or NULL if there's less than @p n bytes left
+ */
+static av_unused const uint8_t* skip_bytes(CABACContext *c, int n) {
+    const uint8_t *ptr = c->bytestream;
+
+    if (c->low & 0x1)
+        ptr--;
+#if CABAC_BITS == 16
+    if (c->low & 0x1FF)
+        ptr--;
+#endif
+    if ((int) (c->bytestream_end - ptr) < n)
+        return NULL;
+    ff_init_cabac_decoder(c, ptr + n, c->bytestream_end - ptr);
+
+    return ptr;
+}
+
 static void refill(CABACContext *c){
 #if CABAC_BITS == 16
         c->low+= (c->bytestream[0]<<9) + (c->bytestream[1]<<1);
