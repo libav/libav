@@ -354,11 +354,22 @@ static int decode_band_hdr(IVI45DecContext *ctx, IVIBandDesc *band,
                 av_log(avctx, AV_LOG_ERROR, "Custom scan pattern encountered!\n");
                 return AVERROR_INVALIDDATA;
             }
+            if (scan_indx > 4 && scan_indx < 10) {
+                if (band->blk_size != 4)
+                    return AVERROR_INVALIDDATA;
+            } else if (band->blk_size != 8)
+                return AVERROR_INVALIDDATA;
+
             band->scan = scan_index_to_tab[scan_indx];
 
             band->quant_mat = get_bits(&ctx->gb, 5);
             if (band->quant_mat == 31) {
                 av_log(avctx, AV_LOG_ERROR, "Custom quant matrix encountered!\n");
+                return AVERROR_INVALIDDATA;
+            }
+            if (band->quant_mat >= FF_ARRAY_ELEMS(quant_index_to_tab)) {
+                av_log_ask_for_sample(avctx, "Quantization matrix %d",
+                                      band->quant_mat);
                 return AVERROR_INVALIDDATA;
             }
         }
@@ -458,7 +469,7 @@ static int decode_mb_info(IVI45DecContext *ctx, IVIBandDesc *band,
                 }
 
                 mb->mv_x = mb->mv_y = 0; /* no motion vector coded */
-                if (band->inherit_mv) {
+                if (band->inherit_mv && ref_mb) {
                     /* motion vector inheritance */
                     if (mv_scale) {
                         mb->mv_x = ivi_scale_mv(ref_mb->mv_x, mv_scale);
@@ -470,7 +481,10 @@ static int decode_mb_info(IVI45DecContext *ctx, IVIBandDesc *band,
                 }
             } else {
                 if (band->inherit_mv) {
-                    mb->type = ref_mb->type; /* copy mb_type from corresponding reference mb */
+                    /* copy mb_type from corresponding reference mb */
+                    if (!ref_mb)
+                        return AVERROR_INVALIDDATA;
+                    mb->type = ref_mb->type;
                 } else if (ctx->frame_type == FRAMETYPE_INTRA) {
                     mb->type = 0; /* mb_type is always INTRA for intra-frames */
                 } else {
@@ -493,14 +507,15 @@ static int decode_mb_info(IVI45DecContext *ctx, IVIBandDesc *band,
                     mb->mv_x = mb->mv_y = 0; /* there is no motion vector in intra-macroblocks */
                 } else {
                     if (band->inherit_mv) {
-                        /* motion vector inheritance */
-                        if (mv_scale) {
-                            mb->mv_x = ivi_scale_mv(ref_mb->mv_x, mv_scale);
-                            mb->mv_y = ivi_scale_mv(ref_mb->mv_y, mv_scale);
-                        } else {
-                            mb->mv_x = ref_mb->mv_x;
-                            mb->mv_y = ref_mb->mv_y;
-                        }
+                        if (ref_mb)
+                            /* motion vector inheritance */
+                            if (mv_scale) {
+                                mb->mv_x = ivi_scale_mv(ref_mb->mv_x, mv_scale);
+                                mb->mv_y = ivi_scale_mv(ref_mb->mv_y, mv_scale);
+                            } else {
+                                mb->mv_x = ref_mb->mv_x;
+                                mb->mv_y = ref_mb->mv_y;
+                            }
                     } else {
                         /* decode motion vector deltas */
                         mv_delta = get_vlc2(&ctx->gb, ctx->mb_vlc.tab->table,
