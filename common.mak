@@ -23,7 +23,8 @@ TOOLS     += $(TOOLS-yes)
 TOOLOBJS  := $(TOOLS:%=tools/%.o)
 TOOLS     := $(TOOLS:%=tools/%$(EXESUF))
 
-DEP_LIBS := $(foreach NAME,$(FFLIBS),lib$(NAME)/$($(CONFIG_SHARED:yes=S)LIBNAME))
+PATH_LIBNAME = $(foreach NAME,$(1),lib$(NAME)/$($(CONFIG_SHARED:yes=S)LIBNAME))
+DEP_LIBS := $(foreach lib,$(FFLIBS),$(call PATH_LIBNAME,$(lib)))
 
 ALLHEADERS := $(subst $(SRC_DIR)/,$(SUBDIR),$(wildcard $(SRC_DIR)/*.h $(SRC_DIR)/$(ARCH)/*.h))
 SKIPHEADERS += $(ARCH_HEADERS:%=$(ARCH)/%) $(SKIPHEADERS-)

@@ -357,3 +357,4 @@ TESTPROGS = seek
 TOOLS     = aviocat pktdumper probetest
 
 $(SUBDIR)output-example$(EXESUF): ELIBS = -lswscale -lavutil
+$(SUBDIR)output-example$(EXESUF): $(call PATH_LIBNAME,swscale)
