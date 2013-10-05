@@ -27,9 +27,9 @@
  * h263 decoder.
  */
 
-//#define DEBUG
 #include <limits.h>
 
+#include "libavutil/attributes.h"
 #include "libavutil/internal.h"
 #include "libavutil/mathematics.h"
 #include "avcodec.h"
@@ -39,9 +39,6 @@
 #include "unary.h"
 #include "flv.h"
 #include "mpeg4video.h"
-
-//#undef NDEBUG
-//#include <assert.h>
 
 // The defines below define the number of bits that are read at once for
 // reading vlc values. Changing these may improve speed and data cache needs
@@ -101,7 +98,7 @@ static VLC cbpc_b_vlc;
 /* init vlcs */
 
 /* XXX: find a better solution to handle static init */
-void ff_h263_decode_init_vlc(void)
+av_cold void ff_h263_decode_init_vlc(void)
 {
     static int done = 0;
 

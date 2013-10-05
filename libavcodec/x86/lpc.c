@@ -19,11 +19,16 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavutil/x86/asm.h"
 #include "libavutil/attributes.h"
 #include "libavutil/cpu.h"
 #include "libavutil/internal.h"
+#include "libavutil/mem.h"
+#include "libavutil/x86/asm.h"
+#include "libavutil/x86/cpu.h"
 #include "libavcodec/lpc.h"
+
+DECLARE_ASM_CONST(16, double, pd_1)[2] = { 1.0, 1.0 };
+DECLARE_ASM_CONST(16, double, pd_2)[2] = { 2.0, 2.0 };
 
 #if HAVE_SSE2_INLINE
 
@@ -36,8 +41,8 @@ static void lpc_apply_welch_window_sse2(const int32_t *data, int len,
     x86_reg j =  n2*sizeof(int32_t);
     __asm__ volatile(
         "movsd   %4,     %%xmm7                \n\t"
-        "movapd  "MANGLE(ff_pd_1)", %%xmm6     \n\t"
-        "movapd  "MANGLE(ff_pd_2)", %%xmm5     \n\t"
+        "movapd  "MANGLE(pd_1)", %%xmm6        \n\t"
+        "movapd  "MANGLE(pd_2)", %%xmm5        \n\t"
         "movlhps %%xmm7, %%xmm7                \n\t"
         "subpd   %%xmm5, %%xmm7                \n\t"
         "addsd   %%xmm6, %%xmm7                \n\t"
@@ -86,9 +91,9 @@ static void lpc_compute_autocorr_sse2(const double *data, int len, int lag,
         x86_reg i = -len*sizeof(double);
         if(j == lag-2) {
             __asm__ volatile(
-                "movsd    "MANGLE(ff_pd_1)", %%xmm0 \n\t"
-                "movsd    "MANGLE(ff_pd_1)", %%xmm1 \n\t"
-                "movsd    "MANGLE(ff_pd_1)", %%xmm2 \n\t"
+                "movsd    "MANGLE(pd_1)", %%xmm0    \n\t"
+                "movsd    "MANGLE(pd_1)", %%xmm1    \n\t"
+                "movsd    "MANGLE(pd_1)", %%xmm2    \n\t"
                 "1:                                 \n\t"
                 "movapd   (%2,%0), %%xmm3           \n\t"
                 "movupd -8(%3,%0), %%xmm4           \n\t"
@@ -116,8 +121,8 @@ static void lpc_compute_autocorr_sse2(const double *data, int len, int lag,
             );
         } else {
             __asm__ volatile(
-                "movsd    "MANGLE(ff_pd_1)", %%xmm0 \n\t"
-                "movsd    "MANGLE(ff_pd_1)", %%xmm1 \n\t"
+                "movsd    "MANGLE(pd_1)", %%xmm0    \n\t"
+                "movsd    "MANGLE(pd_1)", %%xmm1    \n\t"
                 "1:                                 \n\t"
                 "movapd   (%3,%0), %%xmm3           \n\t"
                 "movupd -8(%4,%0), %%xmm4           \n\t"
@@ -145,9 +150,9 @@ static void lpc_compute_autocorr_sse2(const double *data, int len, int lag,
 av_cold void ff_lpc_init_x86(LPCContext *c)
 {
 #if HAVE_SSE2_INLINE
-    int mm_flags = av_get_cpu_flags();
+    int cpu_flags = av_get_cpu_flags();
 
-    if (mm_flags & (AV_CPU_FLAG_SSE2|AV_CPU_FLAG_SSE2SLOW)) {
+    if (INLINE_SSE2(cpu_flags) && (cpu_flags & AV_CPU_FLAG_SSE2SLOW)) {
         c->lpc_apply_welch_window = lpc_apply_welch_window_sse2;
         c->lpc_compute_autocorr   = lpc_compute_autocorr_sse2;
     }

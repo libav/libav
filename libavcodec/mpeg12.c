@@ -25,7 +25,7 @@
  * MPEG-1/2 decoder
  */
 
-//#define DEBUG
+#include "libavutil/attributes.h"
 #include "internal.h"
 #include "avcodec.h"
 #include "dsputil.h"
@@ -33,16 +33,35 @@
 #include "error_resilience.h"
 #include "mpeg12.h"
 #include "mpeg12data.h"
-#include "mpeg12decdata.h"
 #include "bytestream.h"
-#include "vdpau_internal.h"
 #include "xvmc_internal.h"
 #include "thread.h"
 
-//#undef NDEBUG
-//#include <assert.h>
-
 uint8_t ff_mpeg12_static_rl_table_store[2][2][2*MAX_RUN + MAX_LEVEL + 3];
+
+static const uint8_t table_mb_ptype[7][2] = {
+    { 3, 5 }, // 0x01 MB_INTRA
+    { 1, 2 }, // 0x02 MB_PAT
+    { 1, 3 }, // 0x08 MB_FOR
+    { 1, 1 }, // 0x0A MB_FOR|MB_PAT
+    { 1, 6 }, // 0x11 MB_QUANT|MB_INTRA
+    { 1, 5 }, // 0x12 MB_QUANT|MB_PAT
+    { 2, 5 }, // 0x1A MB_QUANT|MB_FOR|MB_PAT
+};
+
+static const uint8_t table_mb_btype[11][2] = {
+    { 3, 5 }, // 0x01 MB_INTRA
+    { 2, 3 }, // 0x04 MB_BACK
+    { 3, 3 }, // 0x06 MB_BACK|MB_PAT
+    { 2, 4 }, // 0x08 MB_FOR
+    { 3, 4 }, // 0x0A MB_FOR|MB_PAT
+    { 2, 2 }, // 0x0C MB_FOR|MB_BACK
+    { 3, 2 }, // 0x0E MB_FOR|MB_BACK|MB_PAT
+    { 1, 6 }, // 0x11 MB_QUANT|MB_INTRA
+    { 2, 6 }, // 0x16 MB_QUANT|MB_BACK|MB_PAT
+    { 3, 6 }, // 0x1A MB_QUANT|MB_FOR|MB_PAT
+    { 2, 5 }, // 0x1E MB_QUANT|MB_FOR|MB_BACK|MB_PAT
+};
 
 #define INIT_2D_VLC_RL(rl, static_size)\
 {\
@@ -55,7 +74,7 @@ uint8_t ff_mpeg12_static_rl_table_store[2][2][2*MAX_RUN + MAX_LEVEL + 3];
     init_2d_vlc_rl(&rl);\
 }
 
-static void init_2d_vlc_rl(RLTable *rl)
+static av_cold void init_2d_vlc_rl(RLTable *rl)
 {
     int i;
 
@@ -88,7 +107,7 @@ static void init_2d_vlc_rl(RLTable *rl)
     }
 }
 
-void ff_mpeg12_common_init(MpegEncContext *s)
+av_cold void ff_mpeg12_common_init(MpegEncContext *s)
 {
 
     s->y_dc_scale_table =

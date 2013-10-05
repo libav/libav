@@ -25,6 +25,7 @@
  * FF Video Codec 1 (a lossless codec)
  */
 
+#include "libavutil/attributes.h"
 #include "libavutil/avassert.h"
 #include "avcodec.h"
 #include "get_bits.h"
@@ -130,7 +131,7 @@ const uint8_t ffv1_ver2_state[256] = {
 };
 
 
-int ffv1_common_init(AVCodecContext *avctx)
+av_cold int ffv1_common_init(AVCodecContext *avctx)
 {
     FFV1Context *s = avctx->priv_data;
 
@@ -193,6 +194,10 @@ av_cold int ffv1_init_slice_contexts(FFV1Context *f)
     int i;
 
     f->slice_count = f->num_h_slices * f->num_v_slices;
+    if (f->slice_count <= 0) {
+        av_log(f->avctx, AV_LOG_ERROR, "Invalid number of slices\n");
+        return AVERROR(EINVAL);
+    }
 
     for (i = 0; i < f->slice_count; i++) {
         FFV1Context *fs = av_mallocz(sizeof(*fs));

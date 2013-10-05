@@ -27,6 +27,7 @@
 #include "libavutil/avassert.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/common.h"
+#include "libavutil/internal.h"
 #include "libavutil/mathematics.h"
 
 #include "audio.h"
@@ -36,7 +37,7 @@
 
 typedef struct {
     AVFrame *cur_frame;          ///< last frame delivered on the sink
-    AVAudioFifo  *audio_fifo;    ///< FIFO for audio samples
+    AVAudioFifo *audio_fifo;     ///< FIFO for audio samples
     int64_t next_pts;            ///< interpolating audio pts
 } BufferSinkContext;
 
@@ -58,7 +59,8 @@ static int filter_frame(AVFilterLink *link, AVFrame *frame)
     return 0;
 }
 
-int av_buffersink_get_frame(AVFilterContext *ctx, AVFrame *frame)
+int attribute_align_arg av_buffersink_get_frame(AVFilterContext *ctx,
+                                                AVFrame *frame)
 {
     BufferSinkContext *s    = ctx->priv;
     AVFilterLink      *link = ctx->inputs[0];
@@ -95,10 +97,10 @@ static int read_from_fifo(AVFilterContext *ctx, AVFrame *frame,
     av_frame_free(&tmp);
 
     return 0;
-
 }
 
-int av_buffersink_get_samples(AVFilterContext *ctx, AVFrame *frame, int nb_samples)
+int attribute_align_arg av_buffersink_get_samples(AVFilterContext *ctx,
+                                                  AVFrame *frame, int nb_samples)
 {
     BufferSinkContext *s = ctx->priv;
     AVFilterLink   *link = ctx->inputs[0];
@@ -133,10 +135,10 @@ int av_buffersink_get_samples(AVFilterContext *ctx, AVFrame *frame, int nb_sampl
     }
 
     return ret;
-
 }
 
 #if FF_API_AVFILTERBUFFER
+FF_DISABLE_DEPRECATION_WARNINGS
 static void compat_free_buffer(AVFilterBuffer *buf)
 {
     AVFrame *frame = buf->priv;
@@ -144,7 +146,8 @@ static void compat_free_buffer(AVFilterBuffer *buf)
     av_free(buf);
 }
 
-static int compat_read(AVFilterContext *ctx, AVFilterBufferRef **pbuf, int nb_samples)
+static int compat_read(AVFilterContext *ctx,
+                       AVFilterBufferRef **pbuf, int nb_samples)
 {
     AVFilterBufferRef *buf;
     AVFrame *frame;
@@ -195,54 +198,55 @@ fail:
     return ret;
 }
 
-int av_buffersink_read(AVFilterContext *ctx, AVFilterBufferRef **buf)
+int attribute_align_arg av_buffersink_read(AVFilterContext *ctx, AVFilterBufferRef **buf)
 {
     return compat_read(ctx, buf, 0);
 }
 
-int av_buffersink_read_samples(AVFilterContext *ctx, AVFilterBufferRef **buf,
-                               int nb_samples)
+int attribute_align_arg av_buffersink_read_samples(AVFilterContext *ctx, AVFilterBufferRef **buf,
+                                                   int nb_samples)
 {
     return compat_read(ctx, buf, nb_samples);
 }
+FF_ENABLE_DEPRECATION_WARNINGS
 #endif
 
 static const AVFilterPad avfilter_vsink_buffer_inputs[] = {
     {
-        .name        = "default",
-        .type        = AVMEDIA_TYPE_VIDEO,
+        .name         = "default",
+        .type         = AVMEDIA_TYPE_VIDEO,
         .filter_frame = filter_frame,
-        .needs_fifo  = 1
+        .needs_fifo   = 1
     },
     { NULL }
 };
 
 AVFilter avfilter_vsink_buffer = {
-    .name      = "buffersink",
+    .name        = "buffersink",
     .description = NULL_IF_CONFIG_SMALL("Buffer video frames, and make them available to the end of the filter graph."),
-    .priv_size = sizeof(BufferSinkContext),
-    .uninit    = uninit,
+    .priv_size   = sizeof(BufferSinkContext),
+    .uninit      = uninit,
 
-    .inputs    = avfilter_vsink_buffer_inputs,
-    .outputs   = NULL,
+    .inputs      = avfilter_vsink_buffer_inputs,
+    .outputs     = NULL,
 };
 
 static const AVFilterPad avfilter_asink_abuffer_inputs[] = {
     {
-        .name           = "default",
-        .type           = AVMEDIA_TYPE_AUDIO,
-        .filter_frame   = filter_frame,
-        .needs_fifo     = 1
+        .name         = "default",
+        .type         = AVMEDIA_TYPE_AUDIO,
+        .filter_frame = filter_frame,
+        .needs_fifo   = 1
     },
     { NULL }
 };
 
 AVFilter avfilter_asink_abuffer = {
-    .name      = "abuffersink",
+    .name        = "abuffersink",
     .description = NULL_IF_CONFIG_SMALL("Buffer audio frames, and make them available to the end of the filter graph."),
-    .priv_size = sizeof(BufferSinkContext),
-    .uninit    = uninit,
+    .priv_size   = sizeof(BufferSinkContext),
+    .uninit      = uninit,
 
-    .inputs    = avfilter_asink_abuffer_inputs,
-    .outputs   = NULL,
+    .inputs      = avfilter_asink_abuffer_inputs,
+    .outputs     = NULL,
 };

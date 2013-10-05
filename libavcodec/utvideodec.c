@@ -511,10 +511,22 @@ static av_cold int decode_init(AVCodecContext *avctx)
     case MKTAG('U', 'L', 'Y', '0'):
         c->planes      = 3;
         avctx->pix_fmt = AV_PIX_FMT_YUV420P;
+        avctx->colorspace = AVCOL_SPC_BT470BG;
         break;
     case MKTAG('U', 'L', 'Y', '2'):
         c->planes      = 3;
         avctx->pix_fmt = AV_PIX_FMT_YUV422P;
+        avctx->colorspace = AVCOL_SPC_BT470BG;
+        break;
+    case MKTAG('U', 'L', 'H', '0'):
+        c->planes      = 3;
+        avctx->pix_fmt = AV_PIX_FMT_YUV420P;
+        avctx->colorspace = AVCOL_SPC_BT709;
+        break;
+    case MKTAG('U', 'L', 'H', '2'):
+        c->planes      = 3;
+        avctx->pix_fmt = AV_PIX_FMT_YUV422P;
+        avctx->colorspace = AVCOL_SPC_BT709;
         break;
     default:
         av_log(avctx, AV_LOG_ERROR, "Unknown Ut Video FOURCC provided (%08X)\n",
@@ -536,6 +548,7 @@ static av_cold int decode_end(AVCodecContext *avctx)
 
 AVCodec ff_utvideo_decoder = {
     .name           = "utvideo",
+    .long_name      = NULL_IF_CONFIG_SMALL("Ut Video"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_UTVIDEO,
     .priv_data_size = sizeof(UtvideoContext),
@@ -543,5 +556,4 @@ AVCodec ff_utvideo_decoder = {
     .close          = decode_end,
     .decode         = decode_frame,
     .capabilities   = CODEC_CAP_DR1 | CODEC_CAP_FRAME_THREADS,
-    .long_name      = NULL_IF_CONFIG_SMALL("Ut Video"),
 };

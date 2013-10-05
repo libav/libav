@@ -28,7 +28,6 @@
  */
 
 #define BITSTREAM_READER_LE
-//#define DEBUG
 #include <limits.h>
 #include "avcodec.h"
 #include "get_bits.h"
@@ -469,6 +468,7 @@ static av_cold int tta_decode_close(AVCodecContext *avctx) {
 
 AVCodec ff_tta_decoder = {
     .name           = "tta",
+    .long_name      = NULL_IF_CONFIG_SMALL("TTA (True Audio)"),
     .type           = AVMEDIA_TYPE_AUDIO,
     .id             = AV_CODEC_ID_TTA,
     .priv_data_size = sizeof(TTAContext),
@@ -476,5 +476,4 @@ AVCodec ff_tta_decoder = {
     .close          = tta_decode_close,
     .decode         = tta_decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("TTA (True Audio)"),
 };

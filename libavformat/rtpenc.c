@@ -28,8 +28,6 @@
 
 #include "rtpenc.h"
 
-//#define DEBUG
-
 static const AVOption options[] = {
     FF_RTP_FLAG_OPTS(RTPMuxContext, flags),
     { "payload_type", "Specify RTP payload type", offsetof(RTPMuxContext, payload_type), AV_OPT_TYPE_INT, {.i64 = -1 }, -1, 127, AV_OPT_FLAG_ENCODING_PARAM },
@@ -275,8 +273,7 @@ static void rtcp_send_sr(AVFormatContext *s1, int64_t ntp_time)
     avio_w8(s1->pb, RTCP_SR);
     avio_wb16(s1->pb, 6); /* length in words - 1 */
     avio_wb32(s1->pb, s->ssrc);
-    avio_wb32(s1->pb, ntp_time / 1000000);
-    avio_wb32(s1->pb, ((ntp_time % 1000000) << 32) / 1000000);
+    avio_wb64(s1->pb, NTP_TO_RTP_FORMAT(ntp_time));
     avio_wb32(s1->pb, rtp_ts);
     avio_wb32(s1->pb, s->packet_count);
     avio_wb32(s1->pb, s->octet_count);

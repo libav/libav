@@ -82,6 +82,21 @@ void log_callback_help(void *ptr, int level, const char *fmt, va_list vl)
     vfprintf(stdout, fmt, vl);
 }
 
+static void (*program_exit)(int ret);
+
+void register_exit(void (*cb)(int ret))
+{
+    program_exit = cb;
+}
+
+void exit_program(int ret)
+{
+    if (program_exit)
+        program_exit(ret);
+
+    exit(ret);
+}
+
 double parse_number_or_die(const char *context, const char *numstr, int type,
                            double min, double max)
 {
@@ -99,7 +114,7 @@ double parse_number_or_die(const char *context, const char *numstr, int type,
     else
         return d;
     av_log(NULL, AV_LOG_FATAL, error, context, numstr, min, max);
-    exit(1);
+    exit_program(1);
     return 0;
 }
 
@@ -110,7 +125,7 @@ int64_t parse_time_or_die(const char *context, const char *timestr,
     if (av_parse_time(&us, timestr, is_duration) < 0) {
         av_log(NULL, AV_LOG_FATAL, "Invalid %s specification for %s: %s\n",
                is_duration ? "duration" : "date", context, timestr);
-        exit(1);
+        exit_program(1);
     }
     return us;
 }
@@ -167,7 +182,10 @@ static const OptionDef *find_option(const OptionDef *po, const char *name)
     return po;
 }
 
-#if HAVE_COMMANDLINETOARGVW
+/* _WIN32 means using the windows libc - cygwin doesn't define that
+ * by default. HAVE_COMMANDLINETOARGVW is true on cygwin, while
+ * it doesn't provide the actual command line via GetCommandLineW(). */
+#if HAVE_COMMANDLINETOARGVW && defined(_WIN32)
 #include <windows.h>
 #include <shellapi.h>
 /* Will be leaked on exit */
@@ -272,7 +290,7 @@ static int write_option(void *optctx, const OptionDef *po, const char *opt,
         }
     }
     if (po->flags & OPT_EXIT)
-        exit(0);
+        exit_program(0);
 
     return 0;
 }
@@ -332,7 +350,7 @@ void parse_options(void *optctx, int argc, char **argv, const OptionDef *options
             opt++;
 
             if ((ret = parse_option(optctx, opt, argv[optindex], options)) < 0)
-                exit(1);
+                exit_program(1);
             optindex += ret;
         } else {
             if (parse_arg_function)
@@ -538,7 +556,7 @@ static void init_parse_context(OptionParseContext *octx,
     octx->nb_groups = nb_groups;
     octx->groups    = av_mallocz(sizeof(*octx->groups) * octx->nb_groups);
     if (!octx->groups)
-        exit(1);
+        exit_program(1);
 
     for (i = 0; i < octx->nb_groups; i++)
         octx->groups[i].group_def = &groups[i];
@@ -705,7 +723,7 @@ int opt_loglevel(void *optctx, const char *opt, const char *arg)
                "Possible levels are numbers or:\n", arg);
         for (i = 0; i < FF_ARRAY_ELEMS(log_levels); i++)
             av_log(NULL, AV_LOG_FATAL, "\"%s\"\n", log_levels[i].name);
-        exit(1);
+        exit_program(1);
     }
     av_log_set_level(level);
     return 0;
@@ -1161,11 +1179,11 @@ int show_pix_fmts(void *optctx, const char *opt, const char *arg)
     while ((pix_desc = av_pix_fmt_desc_next(pix_desc))) {
         enum AVPixelFormat pix_fmt = av_pix_fmt_desc_get_id(pix_desc);
         printf("%c%c%c%c%c %-16s       %d            %2d\n",
-               sws_isSupportedInput (pix_fmt)      ? 'I' : '.',
-               sws_isSupportedOutput(pix_fmt)      ? 'O' : '.',
-               pix_desc->flags & PIX_FMT_HWACCEL   ? 'H' : '.',
-               pix_desc->flags & PIX_FMT_PAL       ? 'P' : '.',
-               pix_desc->flags & PIX_FMT_BITSTREAM ? 'B' : '.',
+               sws_isSupportedInput (pix_fmt)              ? 'I' : '.',
+               sws_isSupportedOutput(pix_fmt)              ? 'O' : '.',
+               pix_desc->flags & AV_PIX_FMT_FLAG_HWACCEL   ? 'H' : '.',
+               pix_desc->flags & AV_PIX_FMT_FLAG_PAL       ? 'P' : '.',
+               pix_desc->flags & AV_PIX_FMT_FLAG_BITSTREAM ? 'B' : '.',
                pix_desc->name,
                pix_desc->nb_components,
                av_get_bits_per_pixel(pix_desc));
@@ -1268,6 +1286,7 @@ static void show_help_muxer(const char *name)
         show_help_children(fmt->priv_class, AV_OPT_FLAG_ENCODING_PARAM);
 }
 
+#if CONFIG_AVFILTER
 static void show_help_filter(const char *name)
 {
     const AVFilter *f = avfilter_get_by_name(name);
@@ -1282,6 +1301,9 @@ static void show_help_filter(const char *name)
     }
 
     printf("Filter %s [%s]:\n", f->name, f->description);
+
+    if (f->flags & AVFILTER_FLAG_SLICE_THREADS)
+        printf("    slice threading supported\n");
 
     printf("    Inputs:\n");
     count = avfilter_pad_count(f->inputs);
@@ -1305,6 +1327,7 @@ static void show_help_filter(const char *name)
         show_help_children(f->priv_class, AV_OPT_FLAG_VIDEO_PARAM |
                                           AV_OPT_FLAG_AUDIO_PARAM);
 }
+#endif
 
 int show_help(void *optctx, const char *opt, const char *arg)
 {
@@ -1326,8 +1349,10 @@ int show_help(void *optctx, const char *opt, const char *arg)
         show_help_demuxer(par);
     } else if (!strcmp(topic, "muxer")) {
         show_help_muxer(par);
+#if CONFIG_AVFILTER
     } else if (!strcmp(topic, "filter")) {
         show_help_filter(par);
+#endif
     } else {
         show_help_default(topic, par);
     }
@@ -1579,13 +1604,13 @@ void *grow_array(void *array, int elem_size, int *size, int new_size)
 {
     if (new_size >= INT_MAX / elem_size) {
         av_log(NULL, AV_LOG_ERROR, "Array too big.\n");
-        exit(1);
+        exit_program(1);
     }
     if (*size < new_size) {
         uint8_t *tmp = av_realloc(array, new_size*elem_size);
         if (!tmp) {
             av_log(NULL, AV_LOG_ERROR, "Could not alloc buffer.\n");
-            exit(1);
+            exit_program(1);
         }
         memset(tmp + *size*elem_size, 0, (new_size-*size) * elem_size);
         *size = new_size;

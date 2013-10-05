@@ -90,7 +90,7 @@ static void decode(RA288Context *ractx, float gain, int cb_coef)
     memmove(ractx->sp_hist + 70, ractx->sp_hist + 75, 36*sizeof(*block));
 
     /* block 46 of G.728 spec */
-    sum = 32.;
+    sum = 32.0;
     for (i=0; i < 10; i++)
         sum -= gain_block[9-i] * ractx->gain_lpc[i];
 
@@ -104,7 +104,7 @@ static void decode(RA288Context *ractx, float gain, int cb_coef)
     for (i=0; i < 5; i++)
         buffer[i] = codetable[cb_coef][i] * sumsum;
 
-    sum = avpriv_scalarproduct_float_c(buffer, buffer, 5) * ((1 << 24) / 5.);
+    sum = avpriv_scalarproduct_float_c(buffer, buffer, 5) * ((1 << 24) / 5.0);
 
     sum = FFMAX(sum, 1);
 
@@ -150,7 +150,7 @@ static void do_hybrid_window(RA288Context *ractx,
     }
 
     /* Multiply by the white noise correcting factor (WNCF). */
-    *out *= 257./256.;
+    *out *= 257.0 / 256.0;
 }
 
 /**
@@ -224,11 +224,11 @@ static int ra288_decode_frame(AVCodecContext * avctx, void *data,
 
 AVCodec ff_ra_288_decoder = {
     .name           = "real_288",
+    .long_name      = NULL_IF_CONFIG_SMALL("RealAudio 2.0 (28.8K)"),
     .type           = AVMEDIA_TYPE_AUDIO,
     .id             = AV_CODEC_ID_RA_288,
     .priv_data_size = sizeof(RA288Context),
     .init           = ra288_decode_init,
     .decode         = ra288_decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("RealAudio 2.0 (28.8K)"),
 };

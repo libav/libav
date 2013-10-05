@@ -32,9 +32,7 @@
 
 #include "libavutil/intreadwrite.h"
 #include "avcodec.h"
-
-
-//#define DEBUG
+#include "rnd_avg.h"
 
 /* encoding scans */
 extern const uint8_t ff_alternate_horizontal_scan[64];
@@ -79,7 +77,6 @@ could be reached easily ...
 /* add and put pixel (decoding) */
 // blocksizes for op_pixels_func are 8x4,8x8 16x8 16x16
 //h for op_pixels_func is limited to {width/2, width} but never larger than 16 and never smaller than 4
-typedef void (*op_pixels_func)(uint8_t *block/*align width (8 or 16)*/, const uint8_t *pixels/*align 1*/, ptrdiff_t line_size, int h);
 typedef void (*tpel_mc_func)(uint8_t *block/*align width (8 or 16)*/, const uint8_t *pixels/*align 1*/, int line_size, int w, int h);
 typedef void (*qpel_mc_func)(uint8_t *dst/*align width (8 or 16)*/, uint8_t *src/*align 1*/, ptrdiff_t stride);
 
@@ -103,12 +100,6 @@ DEF_OLD_QPEL(qpel8_mc32_old_c)
 DEF_OLD_QPEL(qpel8_mc13_old_c)
 DEF_OLD_QPEL(qpel8_mc33_old_c)
 
-#define CALL_2X_PIXELS(a, b, n)\
-static void a(uint8_t *block, const uint8_t *pixels, ptrdiff_t line_size, int h){\
-    b(block  , pixels  , line_size, h);\
-    b(block+n, pixels+n, line_size, h);\
-}
-
 /* motion estimation */
 // h is limited to {width/2, width, 2*width} but never larger than 16 and never smaller than 2
 // although currently h<4 is not used as functions with width <8 are neither used nor implemented
@@ -131,11 +122,6 @@ void ff_init_scantable_permutation(uint8_t *idct_permutation,
  * DSPContext.
  */
 typedef struct DSPContext {
-    /**
-     * Size of DCT coefficients.
-     */
-    int dct_bits;
-
     /* pixel ops : interface with DCT */
     void (*get_pixels)(int16_t *block/*align 16*/, const uint8_t *pixels/*align 8*/, int line_size);
     void (*diff_pixels)(int16_t *block/*align 16*/, const uint8_t *s1/*align 8*/, const uint8_t *s2/*align 8*/, int stride);
@@ -181,54 +167,6 @@ typedef struct DSPContext {
 
     int (*ssd_int8_vs_int16)(const int8_t *pix1, const int16_t *pix2,
                              int size);
-
-    /**
-     * Halfpel motion compensation with rounding (a+b+1)>>1.
-     * this is an array[4][4] of motion compensation functions for 4
-     * horizontal blocksizes (8,16) and the 4 halfpel positions<br>
-     * *pixels_tab[ 0->16xH 1->8xH ][ xhalfpel + 2*yhalfpel ]
-     * @param block destination where the result is stored
-     * @param pixels source
-     * @param line_size number of bytes in a horizontal line of block
-     * @param h height
-     */
-    op_pixels_func put_pixels_tab[4][4];
-
-    /**
-     * Halfpel motion compensation with rounding (a+b+1)>>1.
-     * This is an array[4][4] of motion compensation functions for 4
-     * horizontal blocksizes (8,16) and the 4 halfpel positions<br>
-     * *pixels_tab[ 0->16xH 1->8xH ][ xhalfpel + 2*yhalfpel ]
-     * @param block destination into which the result is averaged (a+b+1)>>1
-     * @param pixels source
-     * @param line_size number of bytes in a horizontal line of block
-     * @param h height
-     */
-    op_pixels_func avg_pixels_tab[4][4];
-
-    /**
-     * Halfpel motion compensation with no rounding (a+b)>>1.
-     * this is an array[2][4] of motion compensation functions for 2
-     * horizontal blocksizes (8,16) and the 4 halfpel positions<br>
-     * *pixels_tab[ 0->16xH 1->8xH ][ xhalfpel + 2*yhalfpel ]
-     * @param block destination where the result is stored
-     * @param pixels source
-     * @param line_size number of bytes in a horizontal line of block
-     * @param h height
-     */
-    op_pixels_func put_no_rnd_pixels_tab[2][4];
-
-    /**
-     * Halfpel motion compensation with no rounding (a+b)>>1.
-     * this is an array[4] of motion compensation functions for 1
-     * horizontal blocksize (16) and the 4 halfpel positions<br>
-     * *pixels_tab[0][ xhalfpel + 2*yhalfpel ]
-     * @param block destination into which the result is averaged (a+b)>>1
-     * @param pixels source
-     * @param line_size number of bytes in a horizontal line of block
-     * @param h height
-     */
-    op_pixels_func avg_no_rnd_pixels_tab[4];
 
     /**
      * Thirdpel motion compensation with rounding (a+b+1)>>1.
@@ -379,9 +317,9 @@ void ff_set_cmp(DSPContext* c, me_cmp_func *cmp, int type);
 void ff_dsputil_init_alpha(DSPContext* c, AVCodecContext *avctx);
 void ff_dsputil_init_arm(DSPContext* c, AVCodecContext *avctx);
 void ff_dsputil_init_bfin(DSPContext* c, AVCodecContext *avctx);
-void ff_dsputil_init_mmx(DSPContext* c, AVCodecContext *avctx);
 void ff_dsputil_init_ppc(DSPContext* c, AVCodecContext *avctx);
 void ff_dsputil_init_sh4(DSPContext* c, AVCodecContext *avctx);
 void ff_dsputil_init_vis(DSPContext* c, AVCodecContext *avctx);
+void ff_dsputil_init_x86(DSPContext* c, AVCodecContext *avctx);
 
 #endif /* AVCODEC_DSPUTIL_H */

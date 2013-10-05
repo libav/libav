@@ -84,14 +84,12 @@ static int32_t scalarproduct_int16_altivec(const int16_t *v1, const int16_t *v2,
 {
     int i;
     LOAD_ZERO;
-    const vec_s16 *pv;
     register vec_s16 vec1;
     register vec_s32 res = vec_splat_s32(0), t;
     int32_t ires;
 
     for(i = 0; i < order; i += 8){
-        pv = (const vec_s16*)v1;
-        vec1 = vec_perm(pv[0], pv[1], vec_lvsl(0, v1));
+        vec1 = vec_unaligned_load(v1);
         t = vec_msum(vec1, vec_ld(0, v2), zero_s32v);
         res = vec_sums(t, res);
         v1 += 8;
@@ -129,8 +127,8 @@ static int32_t scalarproduct_and_madd_int16_altivec(int16_t *v1, const int16_t *
         pv1[0] = vec_mladd(t0, muls, i0);
         pv1[1] = vec_mladd(t1, muls, i1);
         pv1 += 2;
-        v2  += 8;
-        v3  += 8;
+        v2  += 16;
+        v3  += 16;
     } while(--order);
     res = vec_splat(vec_sums(res, zero_s32v), 3);
     vec_ste(res, 0, &ires);

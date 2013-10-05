@@ -34,13 +34,9 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <sys/stat.h>
-#ifdef _WIN32
-#include <direct.h>
-#define mkdir(a, b) _mkdir(a)
-#endif
 
 #include "libavformat/avformat.h"
+#include "libavformat/os_support.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mathematics.h"
 
@@ -53,7 +49,7 @@ static int usage(const char *argv0, int ret)
 struct MoofOffset {
     int64_t time;
     int64_t offset;
-    int duration;
+    int64_t duration;
 };
 
 struct Track {
@@ -296,8 +292,6 @@ static int handle_file(struct Tracks *tracks, const char *file, int split)
         fprintf(stderr, "No streams found in %s\n", file);
         goto fail;
     }
-    if (!tracks->duration)
-        tracks->duration = ctx->duration;
 
     for (i = 0; i < ctx->nb_streams; i++) {
         struct Track **temp;
@@ -324,8 +318,7 @@ static int handle_file(struct Tracks *tracks, const char *file, int split)
         track->bitrate   = st->codec->bit_rate;
         track->track_id  = st->id;
         track->timescale = st->time_base.den;
-        track->duration  = av_rescale_rnd(ctx->duration, track->timescale,
-                                          AV_TIME_BASE, AV_ROUND_UP);
+        track->duration  = st->duration;
         track->is_audio  = st->codec->codec_type == AVMEDIA_TYPE_AUDIO;
         track->is_video  = st->codec->codec_type == AVMEDIA_TYPE_VIDEO;
 
@@ -336,6 +329,10 @@ static int handle_file(struct Tracks *tracks, const char *file, int split)
             av_freep(&tracks->tracks[tracks->nb_tracks]);
             continue;
         }
+
+        tracks->duration = FFMAX(tracks->duration,
+                                 av_rescale_rnd(track->duration, AV_TIME_BASE,
+                                                track->timescale, AV_ROUND_UP));
 
         if (track->is_audio) {
             if (tracks->audio_track < 0)
@@ -428,7 +425,7 @@ static void print_track_chunks(FILE *out, struct Tracks *tracks, int main,
                 fprintf(stderr, "Mismatched duration of %s chunk %d in %s and %s\n",
                         type, i, track->name, tracks->tracks[j]->name);
         }
-        fprintf(out, "\t\t<c n=\"%d\" d=\"%d\" />\n",
+        fprintf(out, "\t\t<c n=\"%d\" d=\"%"PRId64"\" />\n",
                 i, track->offsets[i].duration);
     }
 }

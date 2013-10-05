@@ -30,6 +30,7 @@
 #include "libavutil/fifo.h"
 #include "libavutil/frame.h"
 #include "libavutil/imgutils.h"
+#include "libavutil/internal.h"
 #include "libavutil/opt.h"
 #include "libavutil/samplefmt.h"
 #include "audio.h"
@@ -73,7 +74,7 @@ typedef struct {
         return AVERROR(EINVAL);\
     }
 
-int av_buffersrc_write_frame(AVFilterContext *ctx, const AVFrame *frame)
+int attribute_align_arg av_buffersrc_write_frame(AVFilterContext *ctx, const AVFrame *frame)
 {
     AVFrame *copy;
     int ret = 0;
@@ -88,7 +89,8 @@ int av_buffersrc_write_frame(AVFilterContext *ctx, const AVFrame *frame)
     return ret;
 }
 
-int av_buffersrc_add_frame(AVFilterContext *ctx, AVFrame *frame)
+int attribute_align_arg av_buffersrc_add_frame(AVFilterContext *ctx,
+                                               AVFrame *frame)
 {
     BufferSourceContext *s = ctx->priv;
     AVFrame *copy;
@@ -132,6 +134,7 @@ int av_buffersrc_add_frame(AVFilterContext *ctx, AVFrame *frame)
 }
 
 #if FF_API_AVFILTERBUFFER
+FF_DISABLE_DEPRECATION_WARNINGS
 static void compat_free_buffer(void *opaque, uint8_t *data)
 {
     AVFilterBufferRef *buf = opaque;
@@ -234,6 +237,7 @@ fail:
 
     return ret;
 }
+FF_ENABLE_DEPRECATION_WARNINGS
 #endif
 
 static av_cold int init_video(AVFilterContext *ctx)

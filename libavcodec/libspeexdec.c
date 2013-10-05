@@ -127,7 +127,7 @@ static int libspeex_decode_frame(AVCodecContext *avctx, void *data,
        current packet, otherwise ignore the current packet and keep decoding
        frames from the libspeex buffer. */
     if (speex_bits_remaining(&s->bits) < 5 ||
-        speex_bits_peek_unsigned(&s->bits, 5) == 0x1F) {
+        speex_bits_peek_unsigned(&s->bits, 5) == 0xF) {
         /* check for flush packet */
         if (!buf || !buf_size) {
             *got_frame_ptr = 0;
@@ -170,6 +170,7 @@ static av_cold void libspeex_decode_flush(AVCodecContext *avctx)
 
 AVCodec ff_libspeex_decoder = {
     .name           = "libspeex",
+    .long_name      = NULL_IF_CONFIG_SMALL("libspeex Speex"),
     .type           = AVMEDIA_TYPE_AUDIO,
     .id             = AV_CODEC_ID_SPEEX,
     .priv_data_size = sizeof(LibSpeexContext),
@@ -178,5 +179,4 @@ AVCodec ff_libspeex_decoder = {
     .decode         = libspeex_decode_frame,
     .flush          = libspeex_decode_flush,
     .capabilities   = CODEC_CAP_SUBFRAMES | CODEC_CAP_DELAY | CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("libspeex Speex"),
 };

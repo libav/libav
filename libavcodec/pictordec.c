@@ -123,7 +123,7 @@ static int decode_frame(AVCodecContext *avctx,
     s->nb_planes   = (tmp >> 4) + 1;
     bpp            = bits_per_plane * s->nb_planes;
     if (bits_per_plane > 8 || bpp < 1 || bpp > 32) {
-        avpriv_request_sample(s, "Unsupported bit depth");
+        avpriv_request_sample(avctx, "Unsupported bit depth");
         return AVERROR_PATCHWELCOME;
     }
 
@@ -226,16 +226,17 @@ static int decode_frame(AVCodecContext *avctx,
                 if (bits_per_plane == 8) {
                     picmemset_8bpp(s, frame, val, run, &x, &y);
                     if (y < 0)
-                        break;
+                        goto finish;
                 } else {
                     picmemset(s, frame, val, run, &x, &y, &plane, bits_per_plane);
                 }
             }
         }
     } else {
-        avpriv_request_sample(s, "Uncompressed image");
+        avpriv_request_sample(avctx, "Uncompressed image");
         return avpkt->size;
     }
+finish:
 
     *got_frame      = 1;
     return avpkt->size;
@@ -243,10 +244,10 @@ static int decode_frame(AVCodecContext *avctx,
 
 AVCodec ff_pictor_decoder = {
     .name           = "pictor",
+    .long_name      = NULL_IF_CONFIG_SMALL("Pictor/PC Paint"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_PICTOR,
     .priv_data_size = sizeof(PicContext),
     .decode         = decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("Pictor/PC Paint"),
 };

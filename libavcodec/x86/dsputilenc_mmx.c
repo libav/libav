@@ -30,7 +30,7 @@
 #include "libavcodec/dsputil.h"
 #include "libavcodec/mpegvideo.h"
 #include "libavcodec/mathops.h"
-#include "dsputil_mmx.h"
+#include "dsputil_x86.h"
 
 void ff_get_pixels_mmx(int16_t *block, const uint8_t *pixels, int line_size);
 void ff_get_pixels_sse2(int16_t *block, const uint8_t *pixels, int line_size);
@@ -945,11 +945,12 @@ hadamard_func(ssse3)
 
 av_cold void ff_dsputilenc_init_mmx(DSPContext *c, AVCodecContext *avctx)
 {
-    int mm_flags = av_get_cpu_flags();
-    int bit_depth = avctx->bits_per_raw_sample;
+    int cpu_flags = av_get_cpu_flags();
 
 #if HAVE_YASM
-    if (EXTERNAL_MMX(mm_flags)) {
+    int bit_depth = avctx->bits_per_raw_sample;
+
+    if (EXTERNAL_MMX(cpu_flags)) {
         if (bit_depth <= 8)
             c->get_pixels = ff_get_pixels_mmx;
         c->diff_pixels = ff_diff_pixels_mmx;
@@ -957,19 +958,19 @@ av_cold void ff_dsputilenc_init_mmx(DSPContext *c, AVCodecContext *avctx)
 
         c->pix_norm1 = ff_pix_norm1_mmx;
     }
-    if (EXTERNAL_SSE2(mm_flags))
+    if (EXTERNAL_SSE2(cpu_flags))
         if (bit_depth <= 8)
             c->get_pixels = ff_get_pixels_sse2;
 #endif /* HAVE_YASM */
 
 #if HAVE_INLINE_ASM
-    if (mm_flags & AV_CPU_FLAG_MMX) {
+    if (INLINE_MMX(cpu_flags)) {
         const int dct_algo = avctx->dct_algo;
         if (avctx->bits_per_raw_sample <= 8 &&
             (dct_algo==FF_DCT_AUTO || dct_algo==FF_DCT_MMX)) {
-            if(mm_flags & AV_CPU_FLAG_SSE2){
+            if (cpu_flags & AV_CPU_FLAG_SSE2) {
                 c->fdct = ff_fdct_sse2;
-            } else if (mm_flags & AV_CPU_FLAG_MMXEXT) {
+            } else if (cpu_flags & AV_CPU_FLAG_MMXEXT) {
                 c->fdct = ff_fdct_mmxext;
             }else{
                 c->fdct = ff_fdct_mmx;
@@ -996,63 +997,63 @@ av_cold void ff_dsputilenc_init_mmx(DSPContext *c, AVCodecContext *avctx)
         c->add_8x8basis= add_8x8basis_mmx;
 
         c->ssd_int8_vs_int16 = ssd_int8_vs_int16_mmx;
+    }
 
-        if (mm_flags & AV_CPU_FLAG_MMXEXT) {
-            c->sum_abs_dctelem = sum_abs_dctelem_mmxext;
-            c->vsad[4]         = vsad_intra16_mmxext;
+    if (INLINE_MMXEXT(cpu_flags)) {
+        c->sum_abs_dctelem = sum_abs_dctelem_mmxext;
+        c->vsad[4]         = vsad_intra16_mmxext;
 
-            if(!(avctx->flags & CODEC_FLAG_BITEXACT)){
-                c->vsad[0] = vsad16_mmxext;
-            }
-
-            c->sub_hfyu_median_prediction = sub_hfyu_median_prediction_mmxext;
+        if (!(avctx->flags & CODEC_FLAG_BITEXACT)){
+            c->vsad[0] = vsad16_mmxext;
         }
 
-        if(mm_flags & AV_CPU_FLAG_SSE2){
-            c->sum_abs_dctelem= sum_abs_dctelem_sse2;
-        }
+        c->sub_hfyu_median_prediction = sub_hfyu_median_prediction_mmxext;
+    }
+
+    if (INLINE_SSE2(cpu_flags)) {
+        c->sum_abs_dctelem= sum_abs_dctelem_sse2;
+    }
 
 #if HAVE_SSSE3_INLINE
-        if(mm_flags & AV_CPU_FLAG_SSSE3){
-            if(!(avctx->flags & CODEC_FLAG_BITEXACT)){
-                c->try_8x8basis= try_8x8basis_ssse3;
-            }
-            c->add_8x8basis= add_8x8basis_ssse3;
-            c->sum_abs_dctelem= sum_abs_dctelem_ssse3;
+    if (INLINE_SSSE3(cpu_flags)) {
+        if (!(avctx->flags & CODEC_FLAG_BITEXACT)) {
+            c->try_8x8basis = try_8x8basis_ssse3;
         }
+        c->add_8x8basis    = add_8x8basis_ssse3;
+        c->sum_abs_dctelem = sum_abs_dctelem_ssse3;
+    }
 #endif
 
-        if(mm_flags & AV_CPU_FLAG_3DNOW){
-            if(!(avctx->flags & CODEC_FLAG_BITEXACT)){
-                c->try_8x8basis= try_8x8basis_3dnow;
-            }
-            c->add_8x8basis= add_8x8basis_3dnow;
+    if (INLINE_AMD3DNOW(cpu_flags)) {
+        if (!(avctx->flags & CODEC_FLAG_BITEXACT)) {
+            c->try_8x8basis = try_8x8basis_3dnow;
         }
+        c->add_8x8basis = add_8x8basis_3dnow;
     }
 #endif /* HAVE_INLINE_ASM */
 
-    if (EXTERNAL_MMX(mm_flags)) {
+    if (EXTERNAL_MMX(cpu_flags)) {
         c->hadamard8_diff[0] = ff_hadamard8_diff16_mmx;
         c->hadamard8_diff[1] = ff_hadamard8_diff_mmx;
+    }
 
-        if (EXTERNAL_MMXEXT(mm_flags)) {
-            c->hadamard8_diff[0] = ff_hadamard8_diff16_mmxext;
-            c->hadamard8_diff[1] = ff_hadamard8_diff_mmxext;
-        }
+    if (EXTERNAL_MMXEXT(cpu_flags)) {
+        c->hadamard8_diff[0] = ff_hadamard8_diff16_mmxext;
+        c->hadamard8_diff[1] = ff_hadamard8_diff_mmxext;
+    }
 
-        if (EXTERNAL_SSE2(mm_flags)) {
-            c->sse[0] = ff_sse16_sse2;
+    if (EXTERNAL_SSE2(cpu_flags)) {
+        c->sse[0] = ff_sse16_sse2;
 
 #if HAVE_ALIGNED_STACK
-            c->hadamard8_diff[0] = ff_hadamard8_diff16_sse2;
-            c->hadamard8_diff[1] = ff_hadamard8_diff_sse2;
+        c->hadamard8_diff[0] = ff_hadamard8_diff16_sse2;
+        c->hadamard8_diff[1] = ff_hadamard8_diff_sse2;
 #endif
-        }
+    }
 
-        if (EXTERNAL_SSSE3(mm_flags) && HAVE_ALIGNED_STACK) {
-            c->hadamard8_diff[0] = ff_hadamard8_diff16_ssse3;
-            c->hadamard8_diff[1] = ff_hadamard8_diff_ssse3;
-        }
+    if (EXTERNAL_SSSE3(cpu_flags) && HAVE_ALIGNED_STACK) {
+        c->hadamard8_diff[0] = ff_hadamard8_diff16_ssse3;
+        c->hadamard8_diff[1] = ff_hadamard8_diff_ssse3;
     }
 
     ff_dsputil_init_pix_mmx(c, avctx);

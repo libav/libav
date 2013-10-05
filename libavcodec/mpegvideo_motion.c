@@ -75,9 +75,9 @@ static void gmc1_motion(MpegEncContext *s,
 
         dxy= ((motion_x>>3)&1) | ((motion_y>>2)&2);
         if (s->no_rounding){
-            s->dsp.put_no_rnd_pixels_tab[0][dxy](dest_y, ptr, linesize, 16);
+            s->hdsp.put_no_rnd_pixels_tab[0][dxy](dest_y, ptr, linesize, 16);
         }else{
-            s->dsp.put_pixels_tab       [0][dxy](dest_y, ptr, linesize, 16);
+            s->hdsp.put_pixels_tab       [0][dxy](dest_y, ptr, linesize, 16);
         }
     }
 
@@ -217,7 +217,8 @@ void mpeg_motion_internal(MpegEncContext *s,
 {
     uint8_t *ptr_y, *ptr_cb, *ptr_cr;
     int dxy, uvdxy, mx, my, src_x, src_y,
-        uvsrc_x, uvsrc_y, v_edge_pos, uvlinesize, linesize;
+        uvsrc_x, uvsrc_y, v_edge_pos;
+    ptrdiff_t uvlinesize, linesize;
 
 #if 0
 if(s->quarter_sample)
@@ -853,7 +854,7 @@ static av_always_inline void MPV_motion_internal(MpegEncContext *s,
                                       s->mv[dir][2*i + j][0],
                                       s->mv[dir][2*i + j][1], 8, mb_y);
                 }
-                pix_op = s->dsp.avg_pixels_tab;
+                pix_op = s->hdsp.avg_pixels_tab;
             }
         }else{
             for(i=0; i<2; i++){
@@ -863,7 +864,7 @@ static av_always_inline void MPV_motion_internal(MpegEncContext *s,
                             s->mv[dir][2*i][0],s->mv[dir][2*i][1],16, mb_y>>1);
 
                 // after put we make avg of the same block
-                pix_op=s->dsp.avg_pixels_tab;
+                pix_op=s->hdsp.avg_pixels_tab;
 
                 //opposite parity is always in the same frame if this is second field
                 if(!s->first_field){

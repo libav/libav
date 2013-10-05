@@ -31,8 +31,6 @@
 
 #include <zlib.h>
 
-//#define DEBUG
-
 typedef struct PNGDecContext {
     PNGDSPContext dsp;
 
@@ -380,6 +378,10 @@ static int png_decode_idat(PNGDecContext *s, int length)
             s->zstream.avail_out = s->crow_size;
             s->zstream.next_out  = s->crow_buf;
         }
+        if (ret == Z_STREAM_END && s->zstream.avail_in > 0) {
+            av_log(NULL, AV_LOG_WARNING, "%d undecompressed bytes left in buffer\n", s->zstream.avail_in);
+            return 0;
+        }
     }
     return 0;
 }
@@ -647,6 +649,7 @@ static av_cold int png_dec_end(AVCodecContext *avctx)
 
 AVCodec ff_png_decoder = {
     .name           = "png",
+    .long_name      = NULL_IF_CONFIG_SMALL("PNG (Portable Network Graphics) image"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_PNG,
     .priv_data_size = sizeof(PNGDecContext),
@@ -654,5 +657,4 @@ AVCodec ff_png_decoder = {
     .close          = png_dec_end,
     .decode         = decode_frame,
     .capabilities   = CODEC_CAP_DR1 /*| CODEC_CAP_DRAW_HORIZ_BAND*/,
-    .long_name      = NULL_IF_CONFIG_SMALL("PNG (Portable Network Graphics) image"),
 };

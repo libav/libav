@@ -126,14 +126,14 @@ static void copy_picture_field(AVFrame *src_frame, AVFrame *dst_frame,
     int plane, i, j;
 
     for (plane = 0; plane < desc->nb_components; plane++) {
-        int lines = (plane == 1 || plane == 2) ? inlink->h >> vsub : inlink->h;
+        int lines = (plane == 1 || plane == 2) ? -(-inlink->h) >> vsub : inlink->h;
         int linesize = av_image_get_linesize(inlink->format, inlink->w, plane);
         uint8_t *dstp = dst_frame->data[plane];
         const uint8_t *srcp = src_frame->data[plane];
 
         av_assert0(linesize >= 0);
 
-        lines /= 2;
+        lines = (lines + (field_type == FIELD_UPPER)) / 2;
         if (field_type == FIELD_LOWER)
             srcp += src_frame->linesize[plane];
         if (field_type == FIELD_LOWER)
@@ -150,7 +150,7 @@ static void copy_picture_field(AVFrame *src_frame, AVFrame *dst_frame,
                     srcp_below = srcp; // there is no line below
                 for (i = 0; i < linesize; i++) {
                     // this calculation is an integer representation of
-                    // '0.5 * current + 0.25 * above + 0.25 + below'
+                    // '0.5 * current + 0.25 * above + 0.25 * below'
                     // '1 +' is for rounding.
                     dstp[i] = (1 + srcp[i] + srcp[i] + srcp_above[i] + srcp_below[i]) >> 2;
                 }
@@ -180,6 +180,16 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
     /* we need at least two frames */
     if (!s->cur || !s->next)
         return 0;
+
+    if (s->cur->interlaced_frame) {
+        av_log(ctx, AV_LOG_WARNING,
+               "video is already interlaced, adjusting framerate only\n");
+        out = av_frame_clone(s->cur);
+        out->pts /= 2;  // adjust pts to new framerate
+        ret = ff_filter_frame(outlink, out);
+        s->got_output = 1;
+        return ret;
+    }
 
     tff = (s->scan == MODE_TFF);
     out = ff_get_video_buffer(outlink, outlink->w, outlink->h);

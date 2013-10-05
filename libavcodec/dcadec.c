@@ -580,6 +580,11 @@ static int dca_parse_frame_header(DCAContext *s)
     s->lfe               = get_bits(&s->gb, 2);
     s->predictor_history = get_bits(&s->gb, 1);
 
+    if (s->lfe > 2) {
+        av_log(s->avctx, AV_LOG_ERROR, "Invalid LFE value: %d\n", s->lfe);
+        return AVERROR_INVALIDDATA;
+    }
+
     /* TODO: check CRC */
     if (s->crc_present)
         s->header_crc    = get_bits(&s->gb, 16);
@@ -807,6 +812,12 @@ static int dca_subframe_header(DCAContext *s, int base_channel, int block_index)
                        "Invalid channel mode %d\n", am);
                 return AVERROR_INVALIDDATA;
             }
+            if (s->prim_channels > FF_ARRAY_ELEMS(dca_default_coeffs[0])) {
+                avpriv_request_sample(s->avctx, "Downmixing %d channels",
+                                      s->prim_channels);
+                return AVERROR_PATCHWELCOME;
+            }
+
             for (j = base_channel; j < s->prim_channels; j++) {
                 s->downmix_coef[j][0] = dca_default_coeffs[am][j][0];
                 s->downmix_coef[j][1] = dca_default_coeffs[am][j][1];
@@ -940,10 +951,8 @@ static void qmf_32_subbands(DCAContext *s, int chans,
                             float scale)
 {
     const float *prCoeff;
-    int i;
 
     int sb_act = s->subband_activity[chans];
-    int subindex;
 
     scale *= sqrt(1 / 8.0);
 
@@ -953,25 +962,11 @@ static void qmf_32_subbands(DCAContext *s, int chans,
     else                        /* Perfect reconstruction */
         prCoeff = fir_32bands_perfect;
 
-    for (i = sb_act; i < 32; i++)
-        s->raXin[i] = 0.0;
-
-    /* Reconstructed channel sample index */
-    for (subindex = 0; subindex < 8; subindex++) {
-        /* Load in one sample from each subband and clear inactive subbands */
-        for (i = 0; i < sb_act; i++) {
-            unsigned sign = (i - 1) & 2;
-            uint32_t v    = AV_RN32A(&samples_in[i][subindex]) ^ sign << 30;
-            AV_WN32A(&s->raXin[i], v);
-        }
-
-        s->synth.synth_filter_float(&s->imdct,
-                                    s->subband_fir_hist[chans],
-                                    &s->hist_index[chans],
-                                    s->subband_fir_noidea[chans], prCoeff,
-                                    samples_out, s->raXin, scale);
-        samples_out += 32;
-    }
+    s->dcadsp.qmf_32_subbands(samples_in, sb_act, &s->synth, &s->imdct,
+                              s->subband_fir_hist[chans],
+                              &s->hist_index[chans],
+                              s->subband_fir_noidea[chans], prCoeff,
+                              samples_out, s->raXin, scale);
 }
 
 static void lfe_interpolation_fir(DCAContext *s, int decimation_select,
@@ -1091,7 +1086,7 @@ static void dca_downmix(float **samples, int srcfmt,
 #ifndef decode_blockcodes
 /* Very compact version of the block code decoder that does not use table
  * look-up but is slightly slower */
-static int decode_blockcode(int code, int levels, int *values)
+static int decode_blockcode(int code, int levels, int32_t *values)
 {
     int i;
     int offset = (levels - 1) >> 1;
@@ -1105,7 +1100,7 @@ static int decode_blockcode(int code, int levels, int *values)
     return code;
 }
 
-static int decode_blockcodes(int code1, int code2, int levels, int *values)
+static int decode_blockcodes(int code1, int code2, int levels, int32_t *values)
 {
     return decode_blockcode(code1, levels, values) |
            decode_blockcode(code2, levels, values + 4);
@@ -1134,7 +1129,7 @@ static int dca_subsubframe(DCAContext *s, int base_channel, int block_index)
 
     /* FIXME */
     float (*subband_samples)[DCA_SUBBANDS][8] = s->subband_samples[block_index];
-    LOCAL_ALIGNED_16(int, block, [8]);
+    LOCAL_ALIGNED_16(int32_t, block, [8 * DCA_SUBBANDS]);
 
     /*
      * Audio data
@@ -1147,6 +1142,8 @@ static int dca_subsubframe(DCAContext *s, int base_channel, int block_index)
         quant_step_table = lossy_quant_d;
 
     for (k = base_channel; k < s->prim_channels; k++) {
+        float rscale[DCA_SUBBANDS];
+
         if (get_bits_left(&s->gb) < 0)
             return AVERROR_INVALIDDATA;
 
@@ -1169,11 +1166,12 @@ static int dca_subsubframe(DCAContext *s, int base_channel, int block_index)
              * Extract bits from the bit stream
              */
             if (!abits) {
-                memset(subband_samples[k][l], 0, 8 * sizeof(subband_samples[0][0][0]));
+                rscale[l] = 0;
+                memset(block + 8 * l, 0, 8 * sizeof(block[0]));
             } else {
                 /* Deal with transients */
                 int sfi = s->transition_mode[k][l] && subsubframe >= s->transition_mode[k][l];
-                float rscale = quant_step_size * s->scale_factor[k][l][sfi] *
+                rscale[l] = quant_step_size * s->scale_factor[k][l][sfi] *
                                s->scalefactor_adj[k][sel];
 
                 if (abits >= 11 || !dca_smpl_bitalloc[abits].vlc[sel].table) {
@@ -1187,7 +1185,7 @@ static int dca_subsubframe(DCAContext *s, int base_channel, int block_index)
                         block_code1 = get_bits(&s->gb, size);
                         block_code2 = get_bits(&s->gb, size);
                         err = decode_blockcodes(block_code1, block_code2,
-                                                levels, block);
+                                                levels, block + 8 * l);
                         if (err) {
                             av_log(s->avctx, AV_LOG_ERROR,
                                    "ERROR: block code look-up failed\n");
@@ -1196,19 +1194,23 @@ static int dca_subsubframe(DCAContext *s, int base_channel, int block_index)
                     } else {
                         /* no coding */
                         for (m = 0; m < 8; m++)
-                            block[m] = get_sbits(&s->gb, abits - 3);
+                            block[8 * l + m] = get_sbits(&s->gb, abits - 3);
                     }
                 } else {
                     /* Huffman coded */
                     for (m = 0; m < 8; m++)
-                        block[m] = get_bitalloc(&s->gb,
+                        block[8 * l + m] = get_bitalloc(&s->gb,
                                                 &dca_smpl_bitalloc[abits], sel);
                 }
 
-                s->fmt_conv.int32_to_float_fmul_scalar(subband_samples[k][l],
-                                                       block, rscale, 8);
             }
+        }
 
+        s->fmt_conv.int32_to_float_fmul_array8(&s->fmt_conv, subband_samples[k][0],
+                                               block, rscale, 8 * s->vq_start_subband[k]);
+
+        for (l = 0; l < s->vq_start_subband[k]; l++) {
+            int m;
             /*
              * Inverse ADPCM if in prediction mode
              */
@@ -1256,6 +1258,7 @@ static int dca_subsubframe(DCAContext *s, int base_channel, int block_index)
 #endif
         } else {
             av_log(s->avctx, AV_LOG_ERROR, "Didn't get subframe DSYNC\n");
+            return AVERROR_INVALIDDATA;
         }
     }
 
@@ -1946,13 +1949,13 @@ static const AVProfile profiles[] = {
 
 AVCodec ff_dca_decoder = {
     .name            = "dca",
+    .long_name       = NULL_IF_CONFIG_SMALL("DCA (DTS Coherent Acoustics)"),
     .type            = AVMEDIA_TYPE_AUDIO,
     .id              = AV_CODEC_ID_DTS,
     .priv_data_size  = sizeof(DCAContext),
     .init            = dca_decode_init,
     .decode          = dca_decode_frame,
     .close           = dca_decode_end,
-    .long_name       = NULL_IF_CONFIG_SMALL("DCA (DTS Coherent Acoustics)"),
     .capabilities    = CODEC_CAP_CHANNEL_CONF | CODEC_CAP_DR1,
     .sample_fmts     = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_FLTP,
                                                        AV_SAMPLE_FMT_NONE },

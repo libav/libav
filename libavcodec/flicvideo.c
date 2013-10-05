@@ -539,7 +539,7 @@ static int flic_decode_frame_15_16BPP(AVCodecContext *avctx,
             break;
 
         case FLI_LC:
-            av_log(avctx, AV_LOG_ERROR, "Unexpected FLI_LC chunk in non-paletised FLC\n");
+            av_log(avctx, AV_LOG_ERROR, "Unexpected FLI_LC chunk in non-palettized FLC\n");
             bytestream2_skip(&g2, chunk_size - 6);
             break;
 
@@ -740,6 +740,7 @@ static av_cold int flic_decode_end(AVCodecContext *avctx)
 
 AVCodec ff_flic_decoder = {
     .name           = "flic",
+    .long_name      = NULL_IF_CONFIG_SMALL("Autodesk Animator Flic video"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_FLIC,
     .priv_data_size = sizeof(FlicDecodeContext),
@@ -747,5 +748,4 @@ AVCodec ff_flic_decoder = {
     .close          = flic_decode_end,
     .decode         = flic_decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("Autodesk Animator Flic video"),
 };

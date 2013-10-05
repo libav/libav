@@ -17,6 +17,7 @@
  */
 
 #include "config.h"
+#include "libavutil/attributes.h"
 #include "libavutil/cpu.h"
 #include "libavutil/samplefmt.h"
 #include "libavutil/x86/cpu.h"
@@ -32,26 +33,26 @@ void ff_scale_samples_s32_ssse3_atom(uint8_t *dst, const uint8_t *src, int len,
 void ff_scale_samples_s32_avx(uint8_t *dst, const uint8_t *src, int len,
                               int volume);
 
-void ff_volume_init_x86(VolumeContext *vol)
+av_cold void ff_volume_init_x86(VolumeContext *vol)
 {
-    int mm_flags = av_get_cpu_flags();
+    int cpu_flags = av_get_cpu_flags();
     enum AVSampleFormat sample_fmt = av_get_packed_sample_fmt(vol->sample_fmt);
 
     if (sample_fmt == AV_SAMPLE_FMT_S16) {
-        if (EXTERNAL_SSE2(mm_flags) && vol->volume_i < 32768) {
+        if (EXTERNAL_SSE2(cpu_flags) && vol->volume_i < 32768) {
             vol->scale_samples = ff_scale_samples_s16_sse2;
             vol->samples_align = 8;
         }
     } else if (sample_fmt == AV_SAMPLE_FMT_S32) {
-        if (EXTERNAL_SSE2(mm_flags)) {
+        if (EXTERNAL_SSE2(cpu_flags)) {
             vol->scale_samples = ff_scale_samples_s32_sse2;
             vol->samples_align = 4;
         }
-        if (EXTERNAL_SSSE3(mm_flags) && mm_flags & AV_CPU_FLAG_ATOM) {
+        if (EXTERNAL_SSSE3(cpu_flags) && cpu_flags & AV_CPU_FLAG_ATOM) {
             vol->scale_samples = ff_scale_samples_s32_ssse3_atom;
             vol->samples_align = 4;
         }
-        if (EXTERNAL_AVX(mm_flags)) {
+        if (EXTERNAL_AVX(cpu_flags)) {
             vol->scale_samples = ff_scale_samples_s32_avx;
             vol->samples_align = 8;
         }

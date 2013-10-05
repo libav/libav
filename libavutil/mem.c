@@ -65,7 +65,7 @@ void *av_malloc(size_t size)
     long diff;
 #endif
 
-    /* let's disallow possible ambiguous cases */
+    /* let's disallow possibly ambiguous cases */
     if (size > (INT_MAX - 32) || !size)
         return NULL;
 
@@ -119,7 +119,7 @@ void *av_realloc(void *ptr, size_t size)
     int diff;
 #endif
 
-    /* let's disallow possible ambiguous cases */
+    /* let's disallow possibly ambiguous cases */
     if (size > (INT_MAX - 16))
         return NULL;
 
@@ -134,6 +134,52 @@ void *av_realloc(void *ptr, size_t size)
 #else
     return realloc(ptr, size);
 #endif
+}
+
+int av_reallocp(void *ptr, size_t size)
+{
+    void **ptrptr = ptr;
+    void *ret;
+
+    if (!size) {
+        av_freep(ptr);
+        return 0;
+    }
+    ret = av_realloc(*ptrptr, size);
+
+    if (!ret) {
+        av_freep(ptr);
+        return AVERROR(ENOMEM);
+    }
+
+    *ptrptr = ret;
+    return 0;
+}
+
+void *av_realloc_array(void *ptr, size_t nmemb, size_t size)
+{
+    if (!size || nmemb >= INT_MAX / size)
+        return NULL;
+    return av_realloc(ptr, nmemb * size);
+}
+
+int av_reallocp_array(void *ptr, size_t nmemb, size_t size)
+{
+    void **ptrptr = ptr;
+    void *ret;
+    if (!size || nmemb >= INT_MAX / size)
+        return AVERROR(ENOMEM);
+    if (!nmemb) {
+        av_freep(ptr);
+        return 0;
+    }
+    ret = av_realloc(*ptrptr, nmemb * size);
+    if (!ret) {
+        av_freep(ptr);
+        return AVERROR(ENOMEM);
+    }
+    *ptrptr = ret;
+    return 0;
 }
 
 void av_free(void *ptr)

@@ -39,8 +39,6 @@
 #include "rv34data.h"
 #include "rv34.h"
 
-//#define DEBUG
-
 static inline void ZERO8x2(void* dst, int stride)
 {
     fill_rectangle(dst,                 1, 2, stride, 0, 4);
@@ -1497,8 +1495,10 @@ av_cold int ff_rv34_decode_init(AVCodecContext *avctx)
         ff_rv40dsp_init(&r->rdsp);
 #endif
 
-    if ((ret = rv34_decoder_alloc(r)) < 0)
+    if ((ret = rv34_decoder_alloc(r)) < 0) {
+        ff_MPV_common_end(&r->s);
         return ret;
+    }
 
     if(!intra_vlcs[0].cbppattern[0].bits)
         rv34_init_tables();
@@ -1519,8 +1519,10 @@ int ff_rv34_decode_init_thread_copy(AVCodecContext *avctx)
         r->tmp_b_block_base = NULL;
         if ((err = ff_MPV_common_init(&r->s)) < 0)
             return err;
-        if ((err = rv34_decoder_alloc(r)) < 0)
+        if ((err = rv34_decoder_alloc(r)) < 0) {
+            ff_MPV_common_end(&r->s);
             return err;
+        }
     }
 
     return 0;

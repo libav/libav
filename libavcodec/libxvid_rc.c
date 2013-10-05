@@ -27,6 +27,8 @@
 #include <fcntl.h>
 #endif
 
+#include "libavutil/attributes.h"
+#include "libavutil/internal.h"
 #include "avcodec.h"
 #include "libxvid.h"
 #include "mpegvideo.h"
@@ -53,7 +55,7 @@ int ff_tempfile(const char *prefix, char **filename) {
         return -1;
     }
 #if !HAVE_MKSTEMP
-    fd = open(*filename, O_RDWR | O_BINARY | O_CREAT, 0444);
+    fd = avpriv_open(*filename, O_RDWR | O_BINARY | O_CREAT, 0444);
 #else
     snprintf(*filename, len, "/tmp/%sXXXXXX", prefix);
     fd = mkstemp(*filename);
@@ -70,7 +72,8 @@ int ff_tempfile(const char *prefix, char **filename) {
     return fd; /* success */
 }
 
-int ff_xvid_rate_control_init(MpegEncContext *s){
+av_cold int ff_xvid_rate_control_init(MpegEncContext *s)
+{
     char *tmp_name;
     int fd, i;
     xvid_plg_create_t xvid_plg_create = { 0 };
@@ -168,7 +171,8 @@ float ff_xvid_rate_estimate_qscale(MpegEncContext *s, int dry_run){
         return xvid_plg_data.quant * FF_QP2LAMBDA;
 }
 
-void ff_xvid_rate_control_uninit(MpegEncContext *s){
+av_cold void ff_xvid_rate_control_uninit(MpegEncContext *s)
+{
     xvid_plg_destroy_t xvid_plg_destroy;
 
     xvid_plugin_2pass2(s->rc_context.non_lavc_opaque, XVID_PLG_DESTROY, &xvid_plg_destroy, NULL);

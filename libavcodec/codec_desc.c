@@ -1207,6 +1207,35 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("MS Windows Media Video V9 Screen"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
+    {
+        .id        = AV_CODEC_ID_AIC,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "aic",
+        .long_name = NULL_IF_CONFIG_SMALL("Apple Intermediate Codec"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_ESCAPE130,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "escape130",
+        .long_name = NULL_IF_CONFIG_SMALL("Escape 130"),
+        .props     = AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_G2M,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "g2m",
+        .long_name = NULL_IF_CONFIG_SMALL("Go2Meeting"),
+        .props     = AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_WEBP,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "webp",
+        .long_name = NULL_IF_CONFIG_SMALL("WebP"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY |
+                     AV_CODEC_PROP_LOSSLESS,
+    },
 
     /* various PCM "codecs" */
     {
@@ -1338,6 +1367,20 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "pcm_s16le_planar",
         .long_name = NULL_IF_CONFIG_SMALL("PCM 16-bit little-endian planar"),
+        .props     = AV_CODEC_PROP_LOSSLESS,
+    },
+    {
+        .id        = AV_CODEC_ID_PCM_S24LE_PLANAR,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "pcm_s24le_planar",
+        .long_name = NULL_IF_CONFIG_SMALL("PCM signed 24-bit little-endian planar"),
+        .props     = AV_CODEC_PROP_LOSSLESS,
+    },
+    {
+        .id        = AV_CODEC_ID_PCM_S32LE_PLANAR,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "pcm_s32le_planar",
+        .long_name = NULL_IF_CONFIG_SMALL("PCM signed 32-bit little-endian planar"),
         .props     = AV_CODEC_PROP_LOSSLESS,
     },
     {
@@ -1899,9 +1942,10 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .id        = AV_CODEC_ID_ATRAC3,
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "atrac3",
-        .long_name = NULL_IF_CONFIG_SMALL("Atrac 3 (Adaptive TRansform Acoustic Coding 3)"),
+        .long_name = NULL_IF_CONFIG_SMALL("ATRAC3 (Adaptive TRansform Acoustic Coding 3)"),
         .props     = AV_CODEC_PROP_LOSSY,
     },
+#if FF_API_VOXWARE
     {
         .id        = AV_CODEC_ID_VOXWARE,
         .type      = AVMEDIA_TYPE_AUDIO,
@@ -1909,6 +1953,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("Voxware RT29 Metasound"),
         .props     = AV_CODEC_PROP_LOSSY,
     },
+#endif
     {
         .id        = AV_CODEC_ID_APE,
         .type      = AVMEDIA_TYPE_AUDIO,
@@ -1962,7 +2007,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .id        = AV_CODEC_ID_ATRAC3P,
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "atrac3p",
-        .long_name = NULL_IF_CONFIG_SMALL("Sony ATRAC3+"),
+        .long_name = NULL_IF_CONFIG_SMALL("ATRAC3+ (Adaptive TRansform Acoustic Coding 3+)"),
         .props     = AV_CODEC_PROP_LOSSY,
     },
     {
@@ -2011,7 +2056,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .id        = AV_CODEC_ID_ATRAC1,
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "atrac1",
-        .long_name = NULL_IF_CONFIG_SMALL("Atrac 1 (Adaptive TRansform Acoustic Coding)"),
+        .long_name = NULL_IF_CONFIG_SMALL("ATRAC1 (Adaptive TRansform Acoustic Coding)"),
         .props     = AV_CODEC_PROP_LOSSY,
     },
     {
@@ -2125,6 +2170,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .name      = "tak",
         .long_name = NULL_IF_CONFIG_SMALL("TAK (Tom's lossless Audio Kompressor)"),
         .props     = AV_CODEC_PROP_LOSSLESS,
+    },
+    {
+        .id        = AV_CODEC_ID_METASOUND,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "metasound",
+        .long_name = NULL_IF_CONFIG_SMALL("Voxware MetaSound"),
+        .props     = AV_CODEC_PROP_LOSSY,
     },
 
     /* subtitle codecs */

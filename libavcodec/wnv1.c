@@ -70,6 +70,11 @@ static int decode_frame(AVCodecContext *avctx,
     int prev_y = 0, prev_u = 0, prev_v = 0;
     uint8_t *rbuf;
 
+    if (buf_size < 8) {
+        av_log(avctx, AV_LOG_ERROR, "Packet is too short\n");
+        return AVERROR_INVALIDDATA;
+    }
+
     rbuf = av_malloc(buf_size + FF_INPUT_BUFFER_PADDING_SIZE);
     if (!rbuf) {
         av_log(avctx, AV_LOG_ERROR, "Cannot allocate temporary buffer\n");
@@ -146,11 +151,11 @@ static av_cold int decode_init(AVCodecContext *avctx)
 
 AVCodec ff_wnv1_decoder = {
     .name           = "wnv1",
+    .long_name      = NULL_IF_CONFIG_SMALL("Winnov WNV1"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_WNV1,
     .priv_data_size = sizeof(WNV1Context),
     .init           = decode_init,
     .decode         = decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("Winnov WNV1"),
 };

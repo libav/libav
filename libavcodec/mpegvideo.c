@@ -27,6 +27,7 @@
  * The simplest mpeg encoder (well, it was the simplest!).
  */
 
+#include "libavutil/attributes.h"
 #include "libavutil/avassert.h"
 #include "libavutil/imgutils.h"
 #include "avcodec.h"
@@ -39,9 +40,6 @@
 #include "xvmc_internal.h"
 #include "thread.h"
 #include <limits.h>
-
-//#undef NDEBUG
-//#include <assert.h>
 
 static void dct_unquantize_mpeg1_intra_c(MpegEncContext *s,
                                    int16_t *block, int n, int qscale);
@@ -57,13 +55,6 @@ static void dct_unquantize_h263_intra_c(MpegEncContext *s,
                                   int16_t *block, int n, int qscale);
 static void dct_unquantize_h263_inter_c(MpegEncContext *s,
                                   int16_t *block, int n, int qscale);
-
-
-/* enable all paranoid tests for rounding, overflows, etc... */
-//#define PARANOID
-
-//#define DEBUG
-
 
 static const uint8_t ff_default_chroma_qscale_table[32] = {
 //   0   1   2   3   4   5   6   7   8   9  10  11  12  13  14  15
@@ -162,6 +153,7 @@ static void mpeg_er_decode_mb(void *opaque, int ref, int mv_dir, int mv_type,
 av_cold int ff_dct_common_init(MpegEncContext *s)
 {
     ff_dsputil_init(&s->dsp, s->avctx);
+    ff_hpeldsp_init(&s->hdsp, s->avctx->flags);
     ff_videodsp_init(&s->vdsp, s->avctx->bits_per_raw_sample);
 
     s->dct_unquantize_h263_intra = dct_unquantize_h263_intra_c;
@@ -173,17 +165,16 @@ av_cold int ff_dct_common_init(MpegEncContext *s)
         s->dct_unquantize_mpeg2_intra = dct_unquantize_mpeg2_intra_bitexact;
     s->dct_unquantize_mpeg2_inter = dct_unquantize_mpeg2_inter_c;
 
-#if ARCH_X86
-    ff_MPV_common_init_x86(s);
-#elif ARCH_ALPHA
-    ff_MPV_common_init_axp(s);
-#elif ARCH_ARM
-    ff_MPV_common_init_arm(s);
-#elif HAVE_ALTIVEC
-    ff_MPV_common_init_altivec(s);
-#elif ARCH_BFIN
-    ff_MPV_common_init_bfin(s);
-#endif
+    if (ARCH_ALPHA)
+        ff_MPV_common_init_axp(s);
+    if (ARCH_ARM)
+        ff_MPV_common_init_arm(s);
+    if (ARCH_BFIN)
+        ff_MPV_common_init_bfin(s);
+    if (ARCH_PPC)
+        ff_MPV_common_init_ppc(s);
+    if (ARCH_X86)
+        ff_MPV_common_init_x86(s);
 
     /* load & permutate scantables
      * note: only wmv uses different ones
@@ -213,7 +204,7 @@ int ff_mpv_frame_size_alloc(MpegEncContext *s, int linesize)
     FF_ALLOCZ_OR_GOTO(s->avctx, s->edge_emu_buffer, alloc_size * 2 * 24,
                       fail);
 
-    FF_ALLOCZ_OR_GOTO(s->avctx, s->me.scratchpad, alloc_size * 2 * 16 * 2,
+    FF_ALLOCZ_OR_GOTO(s->avctx, s->me.scratchpad, alloc_size * 2 * 16 * 3,
                       fail)
     s->me.temp         = s->me.scratchpad;
     s->rd_scratchpad   = s->me.scratchpad;
@@ -442,6 +433,9 @@ void ff_mpeg_unref_picture(MpegEncContext *s, Picture *pic)
         av_frame_unref(&pic->f);
 
     av_buffer_unref(&pic->hwaccel_priv_buf);
+
+    if (pic->needs_realloc)
+        free_picture_tables(pic);
 
     memset((uint8_t*)pic + off, 0, sizeof(*pic) - off);
 }
@@ -1025,17 +1019,17 @@ av_cold int ff_MPV_common_init(MpegEncContext *s)
     s->flags  = s->avctx->flags;
     s->flags2 = s->avctx->flags2;
 
+    /* set chroma shifts */
+    av_pix_fmt_get_chroma_sub_sample(s->avctx->pix_fmt,
+                                     &s->chroma_x_shift,
+                                     &s->chroma_y_shift);
+
+    /* convert fourcc to upper case */
+    s->codec_tag          = avpriv_toupper4(s->avctx->codec_tag);
+
+    s->stream_codec_tag   = avpriv_toupper4(s->avctx->stream_codec_tag);
+
     if (s->width && s->height) {
-        /* set chroma shifts */
-        av_pix_fmt_get_chroma_sub_sample(s->avctx->pix_fmt,
-                                         &s->chroma_x_shift,
-                                         &s->chroma_y_shift);
-
-        /* convert fourcc to upper case */
-        s->codec_tag          = avpriv_toupper4(s->avctx->codec_tag);
-
-        s->stream_codec_tag   = avpriv_toupper4(s->avctx->stream_codec_tag);
-
         s->avctx->coded_frame = &s->current_picture.f;
 
         if (s->encoding) {
@@ -1302,8 +1296,8 @@ void ff_MPV_common_end(MpegEncContext *s)
     s->linesize = s->uvlinesize = 0;
 }
 
-void ff_init_rl(RLTable *rl,
-                uint8_t static_store[2][2 * MAX_RUN + MAX_LEVEL + 3])
+av_cold void ff_init_rl(RLTable *rl,
+                        uint8_t static_store[2][2 * MAX_RUN + MAX_LEVEL + 3])
 {
     int8_t  max_level[MAX_RUN + 1], max_run[MAX_LEVEL + 1];
     uint8_t index_run[MAX_RUN + 1];
@@ -1354,7 +1348,7 @@ void ff_init_rl(RLTable *rl,
     }
 }
 
-void ff_init_vlc_rl(RLTable *rl)
+av_cold void ff_init_vlc_rl(RLTable *rl)
 {
     int i, q;
 
@@ -1503,6 +1497,8 @@ int ff_MPV_frame_start(MpegEncContext *s, AVCodecContext *avctx)
         }
     }
 
+    ff_mpeg_unref_picture(s, &s->current_picture);
+
     if (!s->encoding) {
         ff_release_unused_pictures(s, 1);
 
@@ -1550,7 +1546,6 @@ int ff_MPV_frame_start(MpegEncContext *s, AVCodecContext *avctx)
     //     s->current_picture_ptr->quality = s->new_picture_ptr->quality;
     s->current_picture_ptr->f.key_frame = s->pict_type == AV_PICTURE_TYPE_I;
 
-    ff_mpeg_unref_picture(s, &s->current_picture);
     if ((ret = ff_mpeg_ref_picture(s, &s->current_picture,
                                    s->current_picture_ptr)) < 0)
         return ret;
@@ -1692,7 +1687,6 @@ void ff_MPV_frame_end(MpegEncContext *s)
         ff_xvmc_field_end(s);
    } else if ((s->er.error_count || s->encoding) &&
               !s->avctx->hwaccel &&
-              !(s->avctx->codec->capabilities & CODEC_CAP_HWACCEL_VDPAU) &&
               s->unrestricted_mv &&
               s->current_picture.reference &&
               !s->intra_only &&
@@ -2056,13 +2050,13 @@ void MPV_decode_mb_internal(MpegEncContext *s, int16_t block[12][64],
 
                 op_qpix= s->me.qpel_put;
                 if ((!s->no_rounding) || s->pict_type==AV_PICTURE_TYPE_B){
-                    op_pix = s->dsp.put_pixels_tab;
+                    op_pix = s->hdsp.put_pixels_tab;
                 }else{
-                    op_pix = s->dsp.put_no_rnd_pixels_tab;
+                    op_pix = s->hdsp.put_no_rnd_pixels_tab;
                 }
                 if (s->mv_dir & MV_DIR_FORWARD) {
                     ff_MPV_motion(s, dest_y, dest_cb, dest_cr, 0, s->last_picture.f.data, op_pix, op_qpix);
-                    op_pix = s->dsp.avg_pixels_tab;
+                    op_pix = s->hdsp.avg_pixels_tab;
                     op_qpix= s->me.qpel_avg;
                 }
                 if (s->mv_dir & MV_DIR_BACKWARD) {
@@ -2182,9 +2176,9 @@ void MPV_decode_mb_internal(MpegEncContext *s, int16_t block[12][64],
         }
 skip_idct:
         if(!readable){
-            s->dsp.put_pixels_tab[0][0](s->dest[0], dest_y ,   linesize,16);
-            s->dsp.put_pixels_tab[s->chroma_x_shift][0](s->dest[1], dest_cb, uvlinesize,16 >> s->chroma_y_shift);
-            s->dsp.put_pixels_tab[s->chroma_x_shift][0](s->dest[2], dest_cr, uvlinesize,16 >> s->chroma_y_shift);
+            s->hdsp.put_pixels_tab[0][0](s->dest[0], dest_y ,   linesize,16);
+            s->hdsp.put_pixels_tab[s->chroma_x_shift][0](s->dest[1], dest_cb, uvlinesize,16 >> s->chroma_y_shift);
+            s->hdsp.put_pixels_tab[s->chroma_x_shift][0](s->dest[2], dest_cr, uvlinesize,16 >> s->chroma_y_shift);
         }
     }
 }
@@ -2216,7 +2210,6 @@ void ff_draw_horiz_band(AVCodecContext *avctx, DSPContext *dsp, Picture *cur,
     }
 
     if (!avctx->hwaccel &&
-        !(avctx->codec->capabilities & CODEC_CAP_HWACCEL_VDPAU) &&
         draw_edges &&
         cur->reference &&
         !(avctx->flags & CODEC_FLAG_EMU_EDGE)) {
@@ -2356,6 +2349,10 @@ void ff_mpeg_flush(AVCodecContext *avctx){
     for (i = 0; i < MAX_PICTURE_COUNT; i++)
         ff_mpeg_unref_picture(s, &s->picture[i]);
     s->current_picture_ptr = s->last_picture_ptr = s->next_picture_ptr = NULL;
+
+    ff_mpeg_unref_picture(s, &s->current_picture);
+    ff_mpeg_unref_picture(s, &s->last_picture);
+    ff_mpeg_unref_picture(s, &s->next_picture);
 
     s->mb_x= s->mb_y= 0;
 

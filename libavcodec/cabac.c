@@ -73,8 +73,6 @@ static const uint8_t lps_range[64][4]= {
 {  6,  8,  9, 11}, {  6,  7,  9, 10}, {  6,  7,  8,  9}, {  2,  2,  2,  2},
 };
 
-static uint8_t h264_mps_state[2 * 64];
-
 static const uint8_t mps_state[64]= {
   1, 2, 3, 4, 5, 6, 7, 8,
   9,10,11,12,13,14,15,16,
@@ -139,6 +137,10 @@ void ff_init_cabac_decoder(CABACContext *c, const uint8_t *buf, int buf_size){
 void ff_init_cabac_states(void)
 {
     int i, j;
+    static int initialized = 0;
+
+    if (initialized)
+        return;
 
     for(i=0; i<64; i++){
         for(j=0; j<4; j++){ //FIXME check if this is worth the 1 shift we save
@@ -146,10 +148,8 @@ void ff_init_cabac_states(void)
             ff_h264_lps_range[j*2*64+2*i+1]= lps_range[i][j];
         }
 
-        ff_h264_mlps_state[128+2*i+0]=
-        h264_mps_state[2 * i + 0] = 2 * mps_state[i] + 0;
-        ff_h264_mlps_state[128+2*i+1]=
-        h264_mps_state[2 * i + 1] = 2 * mps_state[i] + 1;
+        ff_h264_mlps_state[128 + 2 * i + 0] = 2 * mps_state[i] + 0;
+        ff_h264_mlps_state[128 + 2 * i + 1] = 2 * mps_state[i] + 1;
 
         if( i ){
             ff_h264_mlps_state[128-2*i-1]= 2*lps_state[i]+0;
@@ -162,4 +162,6 @@ void ff_init_cabac_states(void)
     for(i=0; i< 63; i++){
       ff_h264_last_coeff_flag_offset_8x8[i] = last_coeff_flag_offset_8x8[i];
     }
+
+    initialized = 1;
 }

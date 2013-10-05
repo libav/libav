@@ -35,7 +35,24 @@ typedef struct FmtConvertContext {
      * @param len number of elements to convert.
      *            constraints: multiple of 8
      */
-    void (*int32_to_float_fmul_scalar)(float *dst, const int *src, float mul, int len);
+    void (*int32_to_float_fmul_scalar)(float *dst, const int32_t *src,
+                                       float mul, int len);
+
+    /**
+     * Convert an array of int32_t to float and multiply by a float value from another array,
+     * stepping along the float array once for each 8 integers.
+     * @param c   pointer to FmtConvertContext.
+     * @param dst destination array of float.
+     *            constraints: 16-byte aligned
+     * @param src source array of int32_t.
+     *            constraints: 16-byte aligned
+     * @param mul source array of float multipliers.
+     * @param len number of elements to convert.
+     *            constraints: multiple of 8
+     */
+    void (*int32_to_float_fmul_array8)(struct FmtConvertContext *c,
+                                       float *dst, const int32_t *src,
+                                       const float *mul, int len);
 
     /**
      * Convert an array of float to an array of int16_t.
@@ -90,7 +107,7 @@ void ff_float_interleave_c(float *dst, const float **src, unsigned int len,
 void ff_fmt_convert_init(FmtConvertContext *c, AVCodecContext *avctx);
 
 void ff_fmt_convert_init_arm(FmtConvertContext *c, AVCodecContext *avctx);
-void ff_fmt_convert_init_altivec(FmtConvertContext *c, AVCodecContext *avctx);
+void ff_fmt_convert_init_ppc(FmtConvertContext *c, AVCodecContext *avctx);
 void ff_fmt_convert_init_x86(FmtConvertContext *c, AVCodecContext *avctx);
 
 #endif /* AVCODEC_FMTCONVERT_H */

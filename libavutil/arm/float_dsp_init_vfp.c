@@ -18,6 +18,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/attributes.h"
 #include "libavutil/float_dsp.h"
 #include "cpu.h"
 #include "float_dsp_arm.h"
@@ -28,10 +29,8 @@ void ff_vector_fmul_vfp(float *dst, const float *src0, const float *src1,
 void ff_vector_fmul_reverse_vfp(float *dst, const float *src0,
                                 const float *src1, int len);
 
-void ff_float_dsp_init_vfp(AVFloatDSPContext *fdsp)
+av_cold void ff_float_dsp_init_vfp(AVFloatDSPContext *fdsp, int cpu_flags)
 {
-    int cpu_flags = av_get_cpu_flags();
-
     if (!have_vfpv3(cpu_flags))
         fdsp->vector_fmul = ff_vector_fmul_vfp;
     fdsp->vector_fmul_reverse = ff_vector_fmul_reverse_vfp;

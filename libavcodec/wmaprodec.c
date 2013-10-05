@@ -106,6 +106,7 @@
 
 #define WMAPRO_BLOCK_MIN_BITS  6                                           ///< log2 of min block size
 #define WMAPRO_BLOCK_MAX_BITS 13                                           ///< log2 of max block size
+#define WMAPRO_BLOCK_MIN_SIZE (1 << WMAPRO_BLOCK_MIN_BITS)                 ///< minimum block size
 #define WMAPRO_BLOCK_MAX_SIZE (1 << WMAPRO_BLOCK_MAX_BITS)                 ///< maximum block size
 #define WMAPRO_BLOCK_SIZES    (WMAPRO_BLOCK_MAX_BITS - WMAPRO_BLOCK_MIN_BITS + 1) ///< possible block sizes
 
@@ -124,7 +125,7 @@ static VLC              vec4_vlc;         ///< 4 coefficients per symbol
 static VLC              vec2_vlc;         ///< 2 coefficients per symbol
 static VLC              vec1_vlc;         ///< 1 coefficient per symbol
 static VLC              coef_vlc[2];      ///< coefficient run length vlc codes
-static float            sin64[33];        ///< sinus table for decorrelation
+static float            sin64[33];        ///< sine table for decorrelation
 
 /**
  * @brief frame specific decoder context for a single channel
@@ -336,6 +337,12 @@ static av_cold int decode_init(AVCodecContext *avctx)
         return AVERROR_INVALIDDATA;
     }
 
+    if (s->min_samples_per_subframe < WMAPRO_BLOCK_MIN_SIZE) {
+        av_log(avctx, AV_LOG_ERROR, "Invalid minimum block size %i\n",
+               s->max_num_subframes);
+        return AVERROR_INVALIDDATA;
+    }
+
     if (s->avctx->sample_rate <= 0) {
         av_log(avctx, AV_LOG_ERROR, "invalid sample rate\n");
         return AVERROR_INVALIDDATA;
@@ -429,7 +436,8 @@ static av_cold int decode_init(AVCodecContext *avctx)
             for (x = 0; x < num_possible_block_sizes; x++) {
                 int v = 0;
                 while (s->sfb_offsets[x][v + 1] << x < offset)
-                    ++v;
+                    if (++v >= MAX_BANDS)
+                        return AVERROR_INVALIDDATA;
                 s->sf_offsets[i][x][b] = v;
             }
         }
@@ -441,7 +449,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
                      1.0 / (1 << (WMAPRO_BLOCK_MIN_BITS + i - 1))
                      / (1 << (s->bits_per_sample - 1)));
 
-    /** init MDCT windows: simple sinus window */
+    /** init MDCT windows: simple sine window */
     for (i = 0; i < WMAPRO_BLOCK_SIZES; i++) {
         const int win_idx = WMAPRO_BLOCK_MAX_BITS - i;
         ff_init_ff_sine_windows(win_idx);
@@ -716,6 +724,7 @@ static int decode_channel_transform(WMAProDecodeCtx* s)
                     if (get_bits1(&s->gb)) {
                         avpriv_request_sample(s->avctx,
                                               "Unknown channel transform type");
+                        return AVERROR_PATCHWELCOME;
                     }
                 } else {
                     chgroup->transform = 1;
@@ -1118,11 +1127,12 @@ static int decode_subframe(WMAProDecodeCtx *s)
     cur_subwoofer_cutoff = s->subwoofer_cutoffs[s->table_idx];
 
     /** configure the decoder for the current subframe */
+    offset += s->samples_per_frame >> 1;
+
     for (i = 0; i < s->channels_for_cur_subframe; i++) {
         int c = s->channel_indexes_for_cur_subframe[i];
 
-        s->channel[c].coeffs = &s->channel[c].out[(s->samples_per_frame >> 1)
-                                                  + offset];
+        s->channel[c].coeffs = &s->channel[c].out[offset];
     }
 
     s->subframe_len = subframe_len;
@@ -1173,7 +1183,7 @@ static int decode_subframe(WMAProDecodeCtx *s)
             for (i = 0; i < s->channels_for_cur_subframe; i++) {
                 int c = s->channel_indexes_for_cur_subframe[i];
                 int num_vec_coeffs = get_bits(&s->gb, num_bits) << 2;
-                if (num_vec_coeffs > WMAPRO_BLOCK_MAX_SIZE) {
+                if (num_vec_coeffs + offset > FF_ARRAY_ELEMS(s->channel[c].out)) {
                     av_log(s->avctx, AV_LOG_ERROR, "num_vec_coeffs %d is too large\n", num_vec_coeffs);
                     return AVERROR_INVALIDDATA;
                 }
@@ -1459,6 +1469,14 @@ static void save_bits(WMAProDecodeCtx *s, GetBitContext* gb, int len,
         return;
     }
 
+    if (len > put_bits_left(&s->pb)) {
+        av_log(s->avctx, AV_LOG_ERROR,
+               "Cannot append %d bits, only %d bits available.\n",
+               len, put_bits_left(&s->pb));
+        s->packet_loss = 1;
+        return;
+    }
+
     s->num_saved_bits += len;
     if (!append) {
         avpriv_copy_bits(&s->pb, gb->buffer + (get_bits_count(gb) >> 3),
@@ -1622,6 +1640,7 @@ static void flush(AVCodecContext *avctx)
  */
 AVCodec ff_wmapro_decoder = {
     .name           = "wmapro",
+    .long_name      = NULL_IF_CONFIG_SMALL("Windows Media Audio 9 Professional"),
     .type           = AVMEDIA_TYPE_AUDIO,
     .id             = AV_CODEC_ID_WMAPRO,
     .priv_data_size = sizeof(WMAProDecodeCtx),
@@ -1630,7 +1649,6 @@ AVCodec ff_wmapro_decoder = {
     .decode         = decode_packet,
     .capabilities   = CODEC_CAP_SUBFRAMES | CODEC_CAP_DR1,
     .flush          = flush,
-    .long_name      = NULL_IF_CONFIG_SMALL("Windows Media Audio 9 Professional"),
     .sample_fmts    = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_FLTP,
                                                       AV_SAMPLE_FMT_NONE },
 };

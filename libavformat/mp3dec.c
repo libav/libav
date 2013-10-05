@@ -35,6 +35,10 @@
 
 #define XING_TOC_COUNT 100
 
+typedef struct MP3DecContext {
+    int xing_toc;
+} MP3DecContext;
+
 /* mp3 read */
 
 static int mp3_read_probe(AVProbeData *p)
@@ -69,7 +73,7 @@ static int mp3_read_probe(AVProbeData *p)
     }
     // keep this in sync with ac3 probe, both need to avoid
     // issues with MPEG-files!
-    if (first_frames >= 4) return AVPROBE_SCORE_MAX / 2 + 1;
+    if (first_frames >= 4) return AVPROBE_SCORE_EXTENSION + 1;
 
     if (max_frames) {
         int pes = 0, i;
@@ -90,8 +94,8 @@ static int mp3_read_probe(AVProbeData *p)
         if (pes)
             max_frames = (max_frames + pes - 1) / pes;
     }
-    if      (max_frames >  500) return AVPROBE_SCORE_MAX / 2;
-    else if (max_frames >= 4)   return AVPROBE_SCORE_MAX / 4;
+    if      (max_frames >  500) return AVPROBE_SCORE_EXTENSION;
+    else if (max_frames >= 4)   return AVPROBE_SCORE_EXTENSION / 2;
     else if (max_frames >= 1)   return 1;
     else                        return 0;
 //mpegps_mp3_unrecognized_format.mpg has max_frames=3
@@ -100,6 +104,7 @@ static int mp3_read_probe(AVProbeData *p)
 static void read_xing_toc(AVFormatContext *s, int64_t filesize, int64_t duration)
 {
     int i;
+    MP3DecContext *mp3 = s->priv_data;
 
     if (!filesize &&
         !(filesize = avio_size(s->pb))) {
@@ -115,6 +120,7 @@ static void read_xing_toc(AVFormatContext *s, int64_t filesize, int64_t duration
                            av_rescale(i, duration, XING_TOC_COUNT),
                            0, 0, AVINDEX_KEYFRAME);
     }
+    mp3->xing_toc = 1;
 }
 
 /**
@@ -238,10 +244,14 @@ static int mp3_read_packet(AVFormatContext *s, AVPacket *pkt)
 static int mp3_seek(AVFormatContext *s, int stream_index, int64_t timestamp,
                     int flags)
 {
+    MP3DecContext *mp3 = s->priv_data;
     AVIndexEntry *ie;
     AVStream *st = s->streams[0];
     int64_t ret  = av_index_search_timestamp(st, timestamp, flags);
     uint32_t header = 0;
+
+    if (!mp3->xing_toc)
+        return AVERROR(ENOSYS);
 
     if (ret < 0)
         return ret;
@@ -270,6 +280,7 @@ AVInputFormat ff_mp3_demuxer = {
     .read_header    = mp3_read_header,
     .read_packet    = mp3_read_packet,
     .read_seek      = mp3_seek,
+    .priv_data_size = sizeof(MP3DecContext),
     .flags          = AVFMT_GENERIC_INDEX,
-    .extensions     = "mp2,mp3,m2a", /* XXX: use probe */
+    .extensions     = "mp2,mp3,m2a,mpa", /* XXX: use probe */
 };

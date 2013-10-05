@@ -23,13 +23,14 @@
 
 /**
  * @file
+ * @ingroup lavfi
  * Libavfilter version macros
  */
 
 #include "libavutil/avutil.h"
 
 #define LIBAVFILTER_VERSION_MAJOR  3
-#define LIBAVFILTER_VERSION_MINOR  8
+#define LIBAVFILTER_VERSION_MINOR  11
 #define LIBAVFILTER_VERSION_MICRO  0
 
 #define LIBAVFILTER_VERSION_INT AV_VERSION_INT(LIBAVFILTER_VERSION_MAJOR, \

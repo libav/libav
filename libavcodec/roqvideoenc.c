@@ -56,6 +56,7 @@
 
 #include <string.h>
 
+#include "libavutil/attributes.h"
 #include "roqvideo.h"
 #include "bytestream.h"
 #include "elbg.h"
@@ -936,7 +937,7 @@ static void roq_encode_video(RoqContext *enc)
     enc->framesSinceKeyframe++;
 }
 
-static int roq_encode_end(AVCodecContext *avctx)
+static av_cold int roq_encode_end(AVCodecContext *avctx)
 {
     RoqContext *enc = avctx->priv_data;
 
@@ -952,7 +953,7 @@ static int roq_encode_end(AVCodecContext *avctx)
     return 0;
 }
 
-static int roq_encode_init(AVCodecContext *avctx)
+static av_cold int roq_encode_init(AVCodecContext *avctx)
 {
     RoqContext *enc = avctx->priv_data;
 
@@ -1078,6 +1079,7 @@ static int roq_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
 
 AVCodec ff_roq_encoder = {
     .name                 = "roqvideo",
+    .long_name            = NULL_IF_CONFIG_SMALL("id RoQ video"),
     .type                 = AVMEDIA_TYPE_VIDEO,
     .id                   = AV_CODEC_ID_ROQ,
     .priv_data_size       = sizeof(RoqContext),
@@ -1087,5 +1089,4 @@ AVCodec ff_roq_encoder = {
     .supported_framerates = (const AVRational[]){ {30,1}, {0,0} },
     .pix_fmts             = (const enum AVPixelFormat[]){ AV_PIX_FMT_YUV444P,
                                                         AV_PIX_FMT_NONE },
-    .long_name            = NULL_IF_CONFIG_SMALL("id RoQ video"),
 };

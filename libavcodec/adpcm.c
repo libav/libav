@@ -770,7 +770,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, void *data,
                 return AVERROR_INVALIDDATA;
             }
         }
-        for (n = nb_samples >> (1 - st); n > 0; n--) {
+        for (n = (nb_samples >> (1 - st)) - 1; n > 0; n--) {
             int v = bytestream2_get_byteu(&gb);
             *samples++ = adpcm_ima_expand_nibble(&c->status[0 ], v >> 4  , 3);
             *samples++ = adpcm_ima_expand_nibble(&c->status[st], v & 0x0F, 3);
@@ -1292,13 +1292,13 @@ static const enum AVSampleFormat sample_fmts_both[] = { AV_SAMPLE_FMT_S16,
 #define ADPCM_DECODER(id_, sample_fmts_, name_, long_name_) \
 AVCodec ff_ ## name_ ## _decoder = {                        \
     .name           = #name_,                               \
+    .long_name      = NULL_IF_CONFIG_SMALL(long_name_),     \
     .type           = AVMEDIA_TYPE_AUDIO,                   \
     .id             = id_,                                  \
     .priv_data_size = sizeof(ADPCMDecodeContext),           \
     .init           = adpcm_decode_init,                    \
     .decode         = adpcm_decode_frame,                   \
     .capabilities   = CODEC_CAP_DR1,                        \
-    .long_name      = NULL_IF_CONFIG_SMALL(long_name_),     \
     .sample_fmts    = sample_fmts_,                         \
 }
 

@@ -39,6 +39,8 @@
  * correctly decodes this file:
  *  http://samples.libav.org/V-codecs/SVQ3/Vertical400kbit.sorenson3.mov
  */
+
+#include "libavutil/attributes.h"
 #include "internal.h"
 #include "avcodec.h"
 #include "mpegvideo.h"
@@ -48,8 +50,8 @@
 
 #include "h264_mvpred.h"
 #include "golomb.h"
+#include "hpeldsp.h"
 #include "rectangle.h"
-#include "vdpau_internal.h"
 
 #if CONFIG_ZLIB
 #include <zlib.h>
@@ -65,6 +67,7 @@
 
 typedef struct {
     H264Context h;
+    HpelDSPContext hdsp;
     Picture *cur_pic;
     Picture *next_pic;
     Picture *last_pic;
@@ -99,6 +102,13 @@ static const uint8_t svq3_scan[16] = {
     2 + 2 * 4, 3 + 0 * 4, 3 + 1 * 4, 3 + 2 * 4,
     0 + 1 * 4, 0 + 2 * 4, 1 + 1 * 4, 1 + 2 * 4,
     0 + 3 * 4, 1 + 3 * 4, 2 + 3 * 4, 3 + 3 * 4,
+};
+
+static const uint8_t luma_dc_zigzag_scan[16] = {
+    0 * 16 + 0 * 64, 1 * 16 + 0 * 64, 2 * 16 + 0 * 64, 0 * 16 + 2 * 64,
+    3 * 16 + 0 * 64, 0 * 16 + 1 * 64, 1 * 16 + 1 * 64, 2 * 16 + 1 * 64,
+    1 * 16 + 2 * 64, 2 * 16 + 2 * 64, 3 * 16 + 2 * 64, 0 * 16 + 3 * 64,
+    3 * 16 + 1 * 64, 1 * 16 + 3 * 64, 2 * 16 + 3 * 64, 3 * 16 + 3 * 64,
 };
 
 static const uint8_t svq3_pred_0[25][2] = {
@@ -312,9 +322,9 @@ static inline void svq3_mc_dir_part(SVQ3Context *s,
              : h->dsp.put_tpel_pixels_tab)[dxy](dest, src, h->linesize,
                                                 width, height);
     else
-        (avg ? h->dsp.avg_pixels_tab
-             : h->dsp.put_pixels_tab)[blocksize][dxy](dest, src, h->linesize,
-                                                      height);
+        (avg ? s->hdsp.avg_pixels_tab
+             : s->hdsp.put_pixels_tab)[blocksize][dxy](dest, src, h->linesize,
+                                                       height);
 
     if (!(h->flags & CODEC_FLAG_GRAY)) {
         mx     = mx + (mx < (int) x) >> 1;
@@ -340,10 +350,10 @@ static inline void svq3_mc_dir_part(SVQ3Context *s,
                                                         h->uvlinesize,
                                                         width, height);
             else
-                (avg ? h->dsp.avg_pixels_tab
-                     : h->dsp.put_pixels_tab)[blocksize][dxy](dest, src,
-                                                              h->uvlinesize,
-                                                              height);
+                (avg ? s->hdsp.avg_pixels_tab
+                     : s->hdsp.put_pixels_tab)[blocksize][dxy](dest, src,
+                                                               h->uvlinesize,
+                                                               height);
         }
     }
 }
@@ -642,9 +652,9 @@ static int svq3_decode_mb(SVQ3Context *s, unsigned int mb_type)
         dir = i_mb_type_info[mb_type - 8].pred_mode;
         dir = (dir >> 1) ^ 3 * (dir & 1) ^ 1;
 
-        if ((h->intra16x16_pred_mode = ff_h264_check_intra_pred_mode(h, dir, 0)) == -1) {
-            av_log(h->avctx, AV_LOG_ERROR, "check_intra_pred_mode = -1\n");
-            return -1;
+        if ((h->intra16x16_pred_mode = ff_h264_check_intra_pred_mode(h, dir, 0)) < 0) {
+            av_log(h->avctx, AV_LOG_ERROR, "ff_h264_check_intra_pred_mode < 0\n");
+            return h->intra16x16_pred_mode;
         }
 
         cbp     = i_mb_type_info[mb_type - 8].cbp;
@@ -865,6 +875,7 @@ static av_cold int svq3_decode_init(AVCodecContext *avctx)
     if (ff_h264_decode_init(avctx) < 0)
         return -1;
 
+    ff_hpeldsp_init(&s->hdsp, avctx->flags);
     h->flags           = avctx->flags;
     h->is_complex      = 1;
     h->picture_structure = PICT_FRAME;
@@ -969,7 +980,8 @@ static av_cold int svq3_decode_init(AVCodecContext *avctx)
             int offset                = get_bits_count(&gb) + 7 >> 3;
             uint8_t *buf;
 
-            if ((uint64_t)watermark_width * 4 > UINT_MAX / watermark_height)
+            if (watermark_height > 0 &&
+                (uint64_t)watermark_width * 4 > UINT_MAX / watermark_height)
                 return -1;
 
             buf = av_malloc(buf_len);
@@ -1278,7 +1290,7 @@ static int svq3_decode_frame(AVCodecContext *avctx, void *data,
     return buf_size;
 }
 
-static int svq3_decode_end(AVCodecContext *avctx)
+static av_cold int svq3_decode_end(AVCodecContext *avctx)
 {
     SVQ3Context *s = avctx->priv_data;
     H264Context *h = &s->h;
@@ -1299,6 +1311,7 @@ static int svq3_decode_end(AVCodecContext *avctx)
 
 AVCodec ff_svq3_decoder = {
     .name           = "svq3",
+    .long_name      = NULL_IF_CONFIG_SMALL("Sorenson Vector Quantizer 3 / Sorenson Video 3 / SVQ3"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_SVQ3,
     .priv_data_size = sizeof(SVQ3Context),
@@ -1308,7 +1321,6 @@ AVCodec ff_svq3_decoder = {
     .capabilities   = CODEC_CAP_DRAW_HORIZ_BAND |
                       CODEC_CAP_DR1             |
                       CODEC_CAP_DELAY,
-    .long_name      = NULL_IF_CONFIG_SMALL("Sorenson Vector Quantizer 3 / Sorenson Video 3 / SVQ3"),
     .pix_fmts       = (const enum AVPixelFormat[]) { AV_PIX_FMT_YUVJ420P,
                                                      AV_PIX_FMT_NONE},
 };

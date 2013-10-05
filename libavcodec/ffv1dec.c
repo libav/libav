@@ -335,7 +335,7 @@ static int decode_slice(AVCodecContext *c, void *arg)
     FFV1Context *fs = *(void **)arg;
     FFV1Context *f  = fs->avctx->priv_data;
     int width, height, x, y, ret;
-    const int ps = (av_pix_fmt_desc_get(c->pix_fmt)->flags & PIX_FMT_PLANAR)
+    const int ps = (av_pix_fmt_desc_get(c->pix_fmt)->flags & AV_PIX_FMT_FLAG_PLANAR)
                    ? (c->bits_per_raw_sample > 8) + 1
                    : 4;
     AVFrame *const p = f->cur;
@@ -908,6 +908,7 @@ static int ffv1_decode_frame(AVCodecContext *avctx, void *data,
 
 AVCodec ff_ffv1_decoder = {
     .name           = "ffv1",
+    .long_name      = NULL_IF_CONFIG_SMALL("FFmpeg video codec #1"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_FFV1,
     .priv_data_size = sizeof(FFV1Context),
@@ -916,5 +917,4 @@ AVCodec ff_ffv1_decoder = {
     .decode         = ffv1_decode_frame,
     .capabilities   = CODEC_CAP_DR1 /*| CODEC_CAP_DRAW_HORIZ_BAND*/ |
                       CODEC_CAP_SLICE_THREADS,
-    .long_name      = NULL_IF_CONFIG_SMALL("FFmpeg video codec #1"),
 };

@@ -49,6 +49,7 @@ typedef struct HLSContext {
     int has_video;
     int64_t start_pts;
     int64_t end_pts;
+    int64_t duration;      // last segment duration computed so far, in seconds
     int nb_entries;
     ListEntry *list;
     ListEntry *end_list;
@@ -163,12 +164,10 @@ static int hls_start(AVFormatContext *s)
     AVFormatContext *oc = c->avf;
     int err = 0;
 
-    if (c->wrap)
-        c->number %= c->wrap;
-
     if (av_get_frame_filename(oc->filename, sizeof(oc->filename),
-                              c->basename, c->number++) < 0)
+                              c->basename, c->wrap ? c->number % c->wrap : c->number) < 0)
         return AVERROR(EINVAL);
+    c->number++;
 
     if ((err = avio_open2(&oc->pb, oc->filename, AVIO_FLAG_WRITE,
                           &s->interrupt_callback, NULL)) < 0)
@@ -250,25 +249,31 @@ static int hls_write_packet(AVFormatContext *s, AVPacket *pkt)
     AVFormatContext *oc = hls->avf;
     AVStream *st = s->streams[pkt->stream_index];
     int64_t end_pts = hls->recording_time * hls->number;
-    int ret;
+    int ret, can_split = 1;
 
     if (hls->start_pts == AV_NOPTS_VALUE) {
         hls->start_pts = pkt->pts;
         hls->end_pts   = pkt->pts;
     }
 
-    if ((hls->has_video && st->codec->codec_type == AVMEDIA_TYPE_VIDEO)      &&
-        av_compare_ts(pkt->pts - hls->start_pts, st->time_base,
-                      end_pts, AV_TIME_BASE_Q) >= 0 &&
-        pkt->flags & AV_PKT_FLAG_KEY) {
+    if (hls->has_video) {
+        can_split = st->codec->codec_type == AVMEDIA_TYPE_VIDEO &&
+                    pkt->flags & AV_PKT_FLAG_KEY;
+    }
+    if (pkt->pts == AV_NOPTS_VALUE)
+        can_split = 0;
+    else
+        hls->duration = av_rescale(pkt->pts - hls->end_pts,
+                                   st->time_base.num, st->time_base.den);
 
-        ret = append_entry(hls, av_rescale(pkt->pts - hls->end_pts,
-                                           st->time_base.num,
-                                           st->time_base.den));
+    if (can_split && av_compare_ts(pkt->pts - hls->start_pts, st->time_base,
+                                   end_pts, AV_TIME_BASE_Q) >= 0) {
+        ret = append_entry(hls, hls->duration);
         if (ret)
             return ret;
 
         hls->end_pts = pkt->pts;
+        hls->duration = 0;
 
         av_write_frame(oc, NULL); /* Flush any buffered data */
         avio_close(oc->pb);
@@ -298,6 +303,7 @@ static int hls_write_trailer(struct AVFormatContext *s)
     avio_closep(&oc->pb);
     avformat_free_context(oc);
     av_free(hls->basename);
+    append_entry(hls, hls->duration);
     hls_window(s, 1);
 
     free_entries(hls);

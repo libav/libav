@@ -24,6 +24,8 @@
 #include "libavutil/arm/cpu.h"
 #include "libavcodec/h264dsp.h"
 
+int ff_h264_find_start_code_candidate_armv6(const uint8_t *buf, int size);
+
 void ff_h264_v_loop_filter_luma_neon(uint8_t *pix, int stride, int alpha,
                                      int beta, int8_t *tc0);
 void ff_h264_h_loop_filter_luma_neon(uint8_t *pix, int stride, int alpha,
@@ -68,8 +70,8 @@ void ff_h264_idct8_add4_neon(uint8_t *dst, const int *block_offset,
                              int16_t *block, int stride,
                              const uint8_t nnzc[6*8]);
 
-static av_cold void ff_h264dsp_init_neon(H264DSPContext *c, const int bit_depth,
-                                         const int chroma_format_idc)
+static av_cold void h264dsp_init_neon(H264DSPContext *c, const int bit_depth,
+                                      const int chroma_format_idc)
 {
     if (bit_depth == 8) {
     c->h264_v_loop_filter_luma   = ff_h264_v_loop_filter_luma_neon;
@@ -102,6 +104,8 @@ av_cold void ff_h264dsp_init_arm(H264DSPContext *c, const int bit_depth,
 {
     int cpu_flags = av_get_cpu_flags();
 
+    if (have_armv6(cpu_flags))
+        c->h264_find_start_code_candidate = ff_h264_find_start_code_candidate_armv6;
     if (have_neon(cpu_flags))
-        ff_h264dsp_init_neon(c, bit_depth, chroma_format_idc);
+        h264dsp_init_neon(c, bit_depth, chroma_format_idc);
 }

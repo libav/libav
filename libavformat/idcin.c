@@ -136,8 +136,8 @@ static int idcin_probe(AVProbeData *p)
     if (number > 2)
         return 0;
 
-    /* return half certainly since this check is a bit sketchy */
-    return AVPROBE_SCORE_MAX / 2;
+    /* return half certainty since this check is a bit sketchy */
+    return AVPROBE_SCORE_EXTENSION;
 }
 
 static int idcin_read_header(AVFormatContext *s)

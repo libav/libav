@@ -29,6 +29,10 @@
 #include "url.h"
 #include "libavutil/opt.h"
 
+#if CONFIG_ZLIB
+#include <zlib.h>
+#endif
+
 /* XXX: POST protocol is not completely implemented because avconv uses
    only a subset of it. */
 
@@ -58,6 +62,12 @@ typedef struct {
     int multiple_requests;  /**< A flag which indicates if we use persistent connections. */
     uint8_t *post_data;
     int post_datalen;
+#if CONFIG_ZLIB
+    int compressed;
+    z_stream inflate_stream;
+    uint8_t *inflate_buffer;
+#endif
+    AVDictionary *chained_options;
 } HTTPContext;
 
 #define OFFSET(x) offsetof(HTTPContext, x)
@@ -95,7 +105,7 @@ void ff_http_init_auth_state(URLContext *dest, const URLContext *src)
 }
 
 /* return non zero if error */
-static int http_open_cnx(URLContext *h)
+static int http_open_cnx(URLContext *h, AVDictionary **options)
 {
     const char *path, *proxy_path, *lower_proto = "tcp", *local_path;
     char hostname[1024], hoststr[1024], proto[10];
@@ -146,7 +156,7 @@ static int http_open_cnx(URLContext *h)
 
     if (!s->hd) {
         err = ffurl_open(&s->hd, buf, AVIO_FLAG_READ_WRITE,
-                         &h->interrupt_callback, NULL);
+                         &h->interrupt_callback, options);
         if (err < 0)
             goto fail;
     }
@@ -199,21 +209,30 @@ static int http_open_cnx(URLContext *h)
 int ff_http_do_new_request(URLContext *h, const char *uri)
 {
     HTTPContext *s = h->priv_data;
+    AVDictionary *options = NULL;
+    int ret;
 
     s->off = 0;
     av_strlcpy(s->location, uri, sizeof(s->location));
 
-    return http_open_cnx(h);
+    av_dict_copy(&options, s->chained_options, 0);
+    ret = http_open_cnx(h, &options);
+    av_dict_free(&options);
+    return ret;
 }
 
-static int http_open(URLContext *h, const char *uri, int flags)
+static int http_open(URLContext *h, const char *uri, int flags,
+                     AVDictionary **options)
 {
     HTTPContext *s = h->priv_data;
+    int ret;
 
     h->is_streamed = 1;
 
     s->filesize = -1;
     av_strlcpy(s->location, uri, sizeof(s->location));
+    if (options)
+        av_dict_copy(&s->chained_options, *options, 0);
 
     if (s->headers) {
         int len = strlen(s->headers);
@@ -221,7 +240,10 @@ static int http_open(URLContext *h, const char *uri, int flags)
             av_log(h, AV_LOG_WARNING, "No trailing CRLF found in HTTP header.\n");
     }
 
-    return http_open_cnx(h);
+    ret = http_open_cnx(h, options);
+    if (ret < 0)
+        av_dict_free(&s->chained_options);
+    return ret;
 }
 static int http_getc(HTTPContext *s)
 {
@@ -336,6 +358,31 @@ static int process_line(URLContext *h, char *line, int line_count,
         } else if (!av_strcasecmp (tag, "Connection")) {
             if (!strcmp(p, "close"))
                 s->willclose = 1;
+        } else if (!av_strcasecmp (tag, "Content-Encoding")) {
+            if (!av_strncasecmp(p, "gzip", 4) || !av_strncasecmp(p, "deflate", 7)) {
+#if CONFIG_ZLIB
+                s->compressed = 1;
+                inflateEnd(&s->inflate_stream);
+                if (inflateInit2(&s->inflate_stream, 32 + 15) != Z_OK) {
+                    av_log(h, AV_LOG_WARNING, "Error during zlib initialisation: %s\n",
+                           s->inflate_stream.msg);
+                    return AVERROR(ENOSYS);
+                }
+                if (zlibCompileFlags() & (1 << 17)) {
+                    av_log(h, AV_LOG_WARNING, "Your zlib was compiled without gzip support.\n");
+                    return AVERROR(ENOSYS);
+                }
+#else
+                av_log(h, AV_LOG_WARNING, "Compressed (%s) content, need zlib with gzip support\n", p);
+                return AVERROR(ENOSYS);
+#endif
+            } else if (!av_strncasecmp(p, "identity", 8)) {
+                // The normal, no-encoding case (although servers shouldn't include
+                // the header at all if this is the case).
+            } else {
+                av_log(h, AV_LOG_WARNING, "Unknown content coding: %s\n", p);
+                return AVERROR(ENOSYS);
+            }
         }
     }
     return 1;
@@ -508,6 +555,38 @@ static int http_buf_read(URLContext *h, uint8_t *buf, int size)
     return len;
 }
 
+#if CONFIG_ZLIB
+#define DECOMPRESS_BUF_SIZE (256 * 1024)
+static int http_buf_read_compressed(URLContext *h, uint8_t *buf, int size)
+{
+    HTTPContext *s = h->priv_data;
+    int ret;
+
+    if (!s->inflate_buffer) {
+        s->inflate_buffer = av_malloc(DECOMPRESS_BUF_SIZE);
+        if (!s->inflate_buffer)
+            return AVERROR(ENOMEM);
+    }
+
+    if (s->inflate_stream.avail_in == 0) {
+        int read = http_buf_read(h, s->inflate_buffer, DECOMPRESS_BUF_SIZE);
+        if (read <= 0)
+            return read;
+        s->inflate_stream.next_in  = s->inflate_buffer;
+        s->inflate_stream.avail_in = read;
+    }
+
+    s->inflate_stream.avail_out = size;
+    s->inflate_stream.next_out  = buf;
+
+    ret = inflate(&s->inflate_stream, Z_SYNC_FLUSH);
+    if (ret != Z_OK && ret != Z_STREAM_END)
+        av_log(h, AV_LOG_WARNING, "inflate return value: %d, %s\n", ret, s->inflate_stream.msg);
+
+    return size - s->inflate_stream.avail_out;
+}
+#endif
+
 static int http_read(URLContext *h, uint8_t *buf, int size)
 {
     HTTPContext *s = h->priv_data;
@@ -543,6 +622,10 @@ static int http_read(URLContext *h, uint8_t *buf, int size)
         }
         size = FFMIN(size, s->chunksize);
     }
+#if CONFIG_ZLIB
+    if (s->compressed)
+        return http_buf_read_compressed(h, buf, size);
+#endif
     return http_buf_read(h, buf, size);
 }
 
@@ -594,6 +677,11 @@ static int http_close(URLContext *h)
     int ret = 0;
     HTTPContext *s = h->priv_data;
 
+#if CONFIG_ZLIB
+    inflateEnd(&s->inflate_stream);
+    av_freep(&s->inflate_buffer);
+#endif
+
     if (!s->end_chunked_post) {
         /* Close the write direction by sending the end of chunked encoding. */
         ret = http_shutdown(h, h->flags);
@@ -601,6 +689,7 @@ static int http_close(URLContext *h)
 
     if (s->hd)
         ffurl_close(s->hd);
+    av_dict_free(&s->chained_options);
     return ret;
 }
 
@@ -611,6 +700,7 @@ static int64_t http_seek(URLContext *h, int64_t off, int whence)
     int64_t old_off = s->off;
     uint8_t old_buf[BUFFER_SIZE];
     int old_buf_size;
+    AVDictionary *options = NULL;
 
     if (whence == AVSEEK_SIZE)
         return s->filesize;
@@ -628,7 +718,9 @@ static int64_t http_seek(URLContext *h, int64_t off, int whence)
     s->off = off;
 
     /* if it fails, continue on old connection */
-    if (http_open_cnx(h) < 0) {
+    av_dict_copy(&options, s->chained_options, 0);
+    if (http_open_cnx(h, &options) < 0) {
+        av_dict_free(&options);
         memcpy(s->buffer, old_buf, old_buf_size);
         s->buf_ptr = s->buffer;
         s->buf_end = s->buffer + old_buf_size;
@@ -636,6 +728,7 @@ static int64_t http_seek(URLContext *h, int64_t off, int whence)
         s->off = old_off;
         return -1;
     }
+    av_dict_free(&options);
     ffurl_close(old_hd);
     return off;
 }
@@ -650,7 +743,7 @@ http_get_file_handle(URLContext *h)
 #if CONFIG_HTTP_PROTOCOL
 URLProtocol ff_http_protocol = {
     .name                = "http",
-    .url_open            = http_open,
+    .url_open2           = http_open,
     .url_read            = http_read,
     .url_write           = http_write,
     .url_seek            = http_seek,
@@ -665,7 +758,7 @@ URLProtocol ff_http_protocol = {
 #if CONFIG_HTTPS_PROTOCOL
 URLProtocol ff_https_protocol = {
     .name                = "https",
-    .url_open            = http_open,
+    .url_open2           = http_open,
     .url_read            = http_read,
     .url_write           = http_write,
     .url_seek            = http_seek,

@@ -597,7 +597,7 @@ static int aac_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
                 coeffs[ch] = cpe->ch[ch].coeffs;
             s->psy.model->analyze(&s->psy, start_ch, coeffs, wi);
             for (ch = 0; ch < chans; ch++) {
-                s->cur_channel = start_ch * 2 + ch;
+                s->cur_channel = start_ch + ch;
                 s->coder->search_for_quantizers(avctx, s, &cpe->ch[ch], s->lambda);
             }
             cpe->common_window = 0;
@@ -613,7 +613,7 @@ static int aac_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
                     }
                 }
             }
-            s->cur_channel = start_ch * 2;
+            s->cur_channel = start_ch;
             if (s->options.stereo_mode && cpe->common_window) {
                 if (s->options.stereo_mode > 0) {
                     IndividualChannelStream *ics = &cpe->ch[0].ics;
@@ -804,6 +804,7 @@ static const AVClass aacenc_class = {
 
 AVCodec ff_aac_encoder = {
     .name           = "aac",
+    .long_name      = NULL_IF_CONFIG_SMALL("AAC (Advanced Audio Coding)"),
     .type           = AVMEDIA_TYPE_AUDIO,
     .id             = AV_CODEC_ID_AAC,
     .priv_data_size = sizeof(AACEncContext),
@@ -814,6 +815,5 @@ AVCodec ff_aac_encoder = {
                       CODEC_CAP_EXPERIMENTAL,
     .sample_fmts    = (const enum AVSampleFormat[]){ AV_SAMPLE_FMT_FLTP,
                                                      AV_SAMPLE_FMT_NONE },
-    .long_name      = NULL_IF_CONFIG_SMALL("AAC (Advanced Audio Coding)"),
     .priv_class     = &aacenc_class,
 };

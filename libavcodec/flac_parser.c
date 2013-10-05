@@ -27,11 +27,12 @@
  * Each time it finds and verifies a CRC-8 header it sees which of the
  * FLAC_MAX_SEQUENTIAL_HEADERS that came before it have a valid CRC-16 footer
  * that ends at the newly found header.
- * Headers are scored by FLAC_HEADER_BASE_SCORE plus the max of it's crc-verified
+ * Headers are scored by FLAC_HEADER_BASE_SCORE plus the max of its crc-verified
  * children, penalized by changes in sample rate, frame number, etc.
  * The parser returns the frame with the highest score.
  **/
 
+#include "libavutil/attributes.h"
 #include "libavutil/crc.h"
 #include "libavutil/fifo.h"
 #include "bytestream.h"
@@ -653,7 +654,7 @@ handle_error:
     return read_end - buf;
 }
 
-static int flac_parse_init(AVCodecParserContext *c)
+static av_cold int flac_parse_init(AVCodecParserContext *c)
 {
     FLACParseContext *fpc = c->priv_data;
     fpc->pc = c;

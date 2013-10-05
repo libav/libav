@@ -298,8 +298,11 @@ typedef struct VC1Context{
     int dmb_is_raw;                 ///< direct mb plane is raw
     int fmb_is_raw;                 ///< forward mb plane is raw
     int skip_is_raw;                ///< skip mb plane is not coded
-    uint8_t luty[256], lutuv[256];  ///< lookup tables used for intensity compensation
-    int use_ic;                     ///< use intensity compensation in B-frames
+    uint8_t last_luty[2][256], last_lutuv[2][256];  ///< lookup tables used for intensity compensation
+    uint8_t  aux_luty[2][256],  aux_lutuv[2][256];  ///< lookup tables used for intensity compensation
+    uint8_t next_luty[2][256], next_lutuv[2][256];  ///< lookup tables used for intensity compensation
+    uint8_t (*curr_luty)[256]  ,(*curr_lutuv)[256];
+    int last_use_ic, curr_use_ic, next_use_ic, aux_use_ic;
     int rnd;                        ///< rounding control
 
     /** Frame decoding info for S/M profiles only */
@@ -342,7 +345,6 @@ typedef struct VC1Context{
     int intcomp;
     uint8_t lumscale2;  ///< for interlaced field P picture
     uint8_t lumshift2;
-    uint8_t luty2[256], lutuv2[256]; // lookup tables used for intensity compensation
     VLC* mbmode_vlc;
     VLC* imv_vlc;
     VLC* twomvbp_vlc;
@@ -354,7 +356,6 @@ typedef struct VC1Context{
     int8_t zzi_8x8[64];
     uint8_t *blk_mv_type_base, *blk_mv_type;    ///< 0: frame MV, 1: field MV (interlaced frame)
     uint8_t *mv_f_base, *mv_f[2];               ///< 0: MV obtained from same field, 1: opposite field
-    uint8_t *mv_f_last_base, *mv_f_last[2];
     uint8_t *mv_f_next_base, *mv_f_next[2];
     int field_mode;         ///< 1 for interlaced field pictures
     int fptype;
@@ -372,6 +373,7 @@ typedef struct VC1Context{
     int qs_last;            ///< if qpel has been used in the previous (tr.) picture
     int bmvtype;
     int frfd, brfd;         ///< reference frame distance (forward or backward)
+    int first_pic_header_flag;
     int pic_header_flag;
 
     /** Frame decoding info for sprite modes */
@@ -399,8 +401,6 @@ typedef struct VC1Context{
     int end_mb_x;                ///< Horizontal macroblock limit (used only by mss2)
 
     int parse_only;              ///< Context is used within parser
-
-    int warn_interlaced;
 } VC1Context;
 
 /** Find VC-1 marker in buffer

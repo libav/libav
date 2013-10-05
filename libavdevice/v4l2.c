@@ -45,6 +45,7 @@
 #include "libavutil/atomic.h"
 #include "libavutil/avassert.h"
 #include "libavutil/imgutils.h"
+#include "libavutil/internal.h"
 #include "libavutil/log.h"
 #include "libavutil/opt.h"
 #include "libavutil/parseutils.h"
@@ -123,7 +124,7 @@ static int device_open(AVFormatContext *ctx)
         flags |= O_NONBLOCK;
     }
 
-    fd = open(ctx->filename, flags, 0);
+    fd = avpriv_open(ctx->filename, flags);
     if (fd < 0) {
         err = errno;
 
@@ -485,7 +486,7 @@ static int mmap_read_frame(AVFormatContext *ctx, AVPacket *pkt)
 
     /* Image is at s->buff_start[buf.index] */
     if (avpriv_atomic_int_get(&s->buffers_queued) == FFMAX(s->buffers / 8, 1)) {
-        /* when we start getting low on queued buffers, fallback to copying data */
+        /* when we start getting low on queued buffers, fall back on copying data */
         res = av_new_packet(pkt, buf.bytesused);
         if (res < 0) {
             av_log(ctx, AV_LOG_ERROR, "Error allocating a packet.\n");
@@ -506,7 +507,9 @@ static int mmap_read_frame(AVFormatContext *ctx, AVPacket *pkt)
         pkt->data     = s->buf_start[buf.index];
         pkt->size     = buf.bytesused;
 #if FF_API_DESTRUCT_PACKET
+FF_DISABLE_DEPRECATION_WARNINGS
         pkt->destruct = dummy_release_buffer;
+FF_ENABLE_DEPRECATION_WARNINGS
 #endif
 
         buf_descriptor = av_malloc(sizeof(struct buff_data));

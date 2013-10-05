@@ -21,11 +21,10 @@
 #include "avcodec.h"
 #include "get_bits.h"
 #include "dsputil.h"
+#include "libavutil/attributes.h"
 #include "libavutil/colorspace.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/avstring.h"
-
-//#define DEBUG
 
 typedef struct DVDSubContext {
     uint32_t palette[16];
@@ -501,7 +500,7 @@ static int dvdsub_decode(AVCodecContext *avctx,
     return buf_size;
 }
 
-static int dvdsub_init(AVCodecContext *avctx)
+static av_cold int dvdsub_init(AVCodecContext *avctx)
 {
     DVDSubContext *ctx = avctx->priv_data;
     char *data, *cur;
@@ -541,10 +540,10 @@ static int dvdsub_init(AVCodecContext *avctx)
 
 AVCodec ff_dvdsub_decoder = {
     .name           = "dvdsub",
+    .long_name      = NULL_IF_CONFIG_SMALL("DVD subtitles"),
     .type           = AVMEDIA_TYPE_SUBTITLE,
     .id             = AV_CODEC_ID_DVD_SUBTITLE,
     .priv_data_size = sizeof(DVDSubContext),
     .init           = dvdsub_init,
     .decode         = dvdsub_decode,
-    .long_name      = NULL_IF_CONFIG_SMALL("DVD subtitles"),
 };

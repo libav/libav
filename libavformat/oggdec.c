@@ -84,7 +84,7 @@ static int ogg_restore(AVFormatContext *s, int discard)
     struct ogg *ogg = s->priv_data;
     AVIOContext *bc = s->pb;
     struct ogg_state *ost = ogg->state;
-    int i;
+    int i, err;
 
     if (!ost)
         return 0;
@@ -92,7 +92,6 @@ static int ogg_restore(AVFormatContext *s, int discard)
     ogg->state = ost->next;
 
     if (!discard) {
-        struct ogg_stream *old_streams = ogg->streams;
 
         for (i = 0; i < ogg->nstreams; i++)
             av_free(ogg->streams[i].buf);
@@ -100,16 +99,13 @@ static int ogg_restore(AVFormatContext *s, int discard)
         avio_seek(bc, ost->pos, SEEK_SET);
         ogg->curidx   = ost->curidx;
         ogg->nstreams = ost->nstreams;
-        ogg->streams  = av_realloc(ogg->streams,
-                                   ogg->nstreams * sizeof(*ogg->streams));
-
-        if (ogg->streams) {
+        if ((err = av_reallocp_array(&ogg->streams, ogg->nstreams,
+                                     sizeof(*ogg->streams))) < 0) {
+            ogg->nstreams = 0;
+            return err;
+        } else
             memcpy(ogg->streams, ost->streams,
                    ost->nstreams * sizeof(*ogg->streams));
-        } else {
-            av_free(old_streams);
-            ogg->nstreams = 0;
-        }
     }
 
     av_free(ost);
@@ -384,7 +380,11 @@ static int ogg_packet(AVFormatContext *s, int *str, int *dstart, int *dsize,
 
         if (!complete && os->segp == os->nsegs) {
             ogg->curidx    = -1;
-            os->incomplete = 1;
+            // Do not set incomplete for empty packets.
+            // Together with the code in ogg_read_page
+            // that discards all continuation of empty packets
+            // we would get an infinite loop.
+            os->incomplete = !!os->psize;
         }
     } while (!complete);
 
@@ -478,8 +478,11 @@ static int ogg_get_headers(AVFormatContext *s)
         if (os->codec && os->codec->nb_header &&
             os->nb_header < os->codec->nb_header) {
             av_log(s, AV_LOG_ERROR,
-                   "Headers mismatch for stream %d\n", i);
-            return AVERROR_INVALIDDATA;
+                   "Headers mismatch for stream %d: "
+                   "expected %d received %d.\n",
+                   i, os->codec->nb_header, os->nb_header);
+            if (s->error_recognition & AV_EF_EXPLODE)
+                return AVERROR_INVALIDDATA;
         }
         if (os->start_granule != OGG_NOGRANULE_VALUE)
             os->lastpts = s->streams[i]->start_time =
@@ -701,5 +704,5 @@ AVInputFormat ff_ogg_demuxer = {
     .read_seek      = ogg_read_seek,
     .read_timestamp = ogg_read_timestamp,
     .extensions     = "ogg",
-    .flags          = AVFMT_GENERIC_INDEX,
+    .flags          = AVFMT_GENERIC_INDEX | AVFMT_NOBINSEARCH,
 };

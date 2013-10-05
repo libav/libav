@@ -23,6 +23,5 @@
 #include "libavcodec/dsputil.h"
 
 void ff_idct_sh4(int16_t *block);
-void ff_dsputil_init_align(DSPContext* c, AVCodecContext *avctx);
 
 #endif /* AVCODEC_SH4_DSPUTIL_SH4_H */

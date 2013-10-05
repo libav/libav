@@ -38,6 +38,23 @@ int ffio_init_context(AVIOContext *s,
 
 
 /**
+ * Read size bytes from AVIOContext, returning a pointer.
+ * Note that the data pointed at by the returned pointer is only
+ * valid until the next call that references the same IO context.
+ * @param s IO context
+ * @param buf pointer to buffer into which to assemble the requested
+ *    data if it is not available in contiguous addresses in the
+ *    underlying buffer
+ * @param size number of bytes requested
+ * @param data address at which to store pointer: this will be a
+ *    a direct pointer into the underlying buffer if the requested
+ *    number of bytes are available at contiguous addresses, otherwise
+ *    will be a copy of buf
+ * @return number of bytes read or AVERROR
+ */
+int ffio_read_indirect(AVIOContext *s, unsigned char *buf, int size, const unsigned char **data);
+
+/**
  * Read size bytes from AVIOContext into buf.
  * This reads at most 1 packet. If that is not enough fewer bytes will be
  * returned.
@@ -101,5 +118,23 @@ int ffio_open_dyn_packet_buf(AVIOContext **s, int max_packet_size);
  * AVERROR code in case of failure
  */
 int ffio_fdopen(AVIOContext **s, URLContext *h);
+
+/**
+ * Open a write-only fake memory stream. The written data is not stored
+ * anywhere - this is only used for measuring the amount of data
+ * written.
+ *
+ * @param s new IO context
+ * @return zero if no error.
+ */
+int ffio_open_null_buf(AVIOContext **s);
+
+/**
+ * Close a null buffer.
+ *
+ * @param s an IO context opened by ffio_open_null_buf
+ * @return the number of bytes written to the null buffer
+ */
+int ffio_close_null_buf(AVIOContext *s);
 
 #endif /* AVFORMAT_AVIO_INTERNAL_H */

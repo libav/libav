@@ -197,6 +197,7 @@ static av_cold int aac_encode_init(AVCodecContext *avctx)
             avctx->bit_rate = (96*sce + 128*cpe) * avctx->sample_rate / 44;
             if (avctx->profile == FF_PROFILE_AAC_HE ||
                 avctx->profile == FF_PROFILE_AAC_HE_V2 ||
+                avctx->profile == FF_PROFILE_MPEG2_AAC_HE ||
                 s->eld_sbr)
                 avctx->bit_rate /= 2;
         }
@@ -395,6 +396,7 @@ static const int aac_sample_rates[] = {
 
 AVCodec ff_libfdk_aac_encoder = {
     .name                  = "libfdk_aac",
+    .long_name             = NULL_IF_CONFIG_SMALL("Fraunhofer FDK AAC"),
     .type                  = AVMEDIA_TYPE_AUDIO,
     .id                    = AV_CODEC_ID_AAC,
     .priv_data_size        = sizeof(AACContext),
@@ -404,7 +406,6 @@ AVCodec ff_libfdk_aac_encoder = {
     .capabilities          = CODEC_CAP_SMALL_LAST_FRAME | CODEC_CAP_DELAY,
     .sample_fmts           = (const enum AVSampleFormat[]){ AV_SAMPLE_FMT_S16,
                                                             AV_SAMPLE_FMT_NONE },
-    .long_name             = NULL_IF_CONFIG_SMALL("Fraunhofer FDK AAC"),
     .priv_class            = &aac_enc_class,
     .defaults              = aac_encode_defaults,
     .profiles              = profiles,

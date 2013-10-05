@@ -34,13 +34,9 @@
 #include "h263_parser.h"
 #include "mpeg4video_parser.h"
 #include "msmpeg4.h"
-#include "vdpau_internal.h"
 #include "thread.h"
 #include "flv.h"
 #include "mpeg4video.h"
-
-//#define DEBUG
-//#define PRINT_FRAME_TIME
 
 av_cold int ff_h263_decode_init(AVCodecContext *avctx)
 {
@@ -349,9 +345,6 @@ int ff_h263_decode_frame(AVCodecContext *avctx,
     int ret;
     AVFrame *pict = data;
 
-#ifdef PRINT_FRAME_TIME
-uint64_t time= rdtsc();
-#endif
     s->flags= avctx->flags;
     s->flags2= avctx->flags2;
 
@@ -385,8 +378,6 @@ uint64_t time= rdtsc();
             return buf_size;
     }
 
-
-retry:
 
     if(s->bitstream_buffer_size && (s->divx_packed || buf_size<20)){ //divx 5.01+/xvid frame reorder
         init_get_bits(&s->gb, s->bitstream_buffer, s->bitstream_buffer_size*8);
@@ -570,17 +561,6 @@ retry:
         /* FIXME: By the way H263 decoder is evolving it should have */
         /* an H263EncContext                                         */
 
-    if (!avctx->coded_width || !avctx->coded_height) {
-        ParseContext pc= s->parse_context; //FIXME move these demuxng hack to avformat
-
-        s->parse_context.buffer=0;
-        ff_MPV_common_end(s);
-        s->parse_context= pc;
-        avcodec_set_dimensions(avctx, s->width, s->height);
-
-        goto retry;
-    }
-
     if (s->width  != avctx->coded_width  ||
         s->height != avctx->coded_height ||
         s->context_reinit) {
@@ -630,11 +610,6 @@ retry:
     if (!s->divx_packed && !avctx->hwaccel)
         ff_thread_finish_setup(avctx);
 
-    if (CONFIG_MPEG4_VDPAU_DECODER && (s->avctx->codec->capabilities & CODEC_CAP_HWACCEL_VDPAU)) {
-        ff_vdpau_mpeg4_decode_picture(s, s->gb.buffer, s->gb.buffer_end - s->gb.buffer);
-        goto frame_end;
-    }
-
     if (avctx->hwaccel) {
         if (avctx->hwaccel->start_frame(avctx, s->gb.buffer, s->gb.buffer_end - s->gb.buffer) < 0)
             return -1;
@@ -679,7 +654,6 @@ retry:
         }
 
     assert(s->bitstream_buffer_size==0);
-frame_end:
     /* divx 5.01+ bistream reorder stuff */
     if(s->codec_id==AV_CODEC_ID_MPEG4 && s->divx_packed){
         int current_pos= get_bits_count(&s->gb)>>3;
@@ -740,10 +714,6 @@ intrax8_decoded:
         *got_frame = 1;
     }
 
-#ifdef PRINT_FRAME_TIME
-av_log(avctx, AV_LOG_DEBUG, "%"PRId64"\n", rdtsc()-time);
-#endif
-
     return (ret && (avctx->err_recognition & AV_EF_EXPLODE))?ret:get_consumed_bytes(s, buf_size);
 }
 
@@ -760,6 +730,7 @@ const enum AVPixelFormat ff_h263_hwaccel_pixfmt_list_420[] = {
 
 AVCodec ff_h263_decoder = {
     .name           = "h263",
+    .long_name      = NULL_IF_CONFIG_SMALL("H.263 / H.263-1996, H.263+ / H.263-1998 / H.263 version 2"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_H263,
     .priv_data_size = sizeof(MpegEncContext),
@@ -769,6 +740,5 @@ AVCodec ff_h263_decoder = {
     .capabilities   = CODEC_CAP_DRAW_HORIZ_BAND | CODEC_CAP_DR1 |
                       CODEC_CAP_TRUNCATED | CODEC_CAP_DELAY,
     .flush          = ff_mpeg_flush,
-    .long_name      = NULL_IF_CONFIG_SMALL("H.263 / H.263-1996, H.263+ / H.263-1998 / H.263 version 2"),
     .pix_fmts       = ff_h263_hwaccel_pixfmt_list_420,
 };

@@ -147,7 +147,7 @@ static int h261_decode_gob_header(H261Context *h)
  * Decode the group of blocks / video packet header.
  * @return <0 if no resync found
  */
-static int ff_h261_resync(H261Context *h)
+static int h261_resync(H261Context *h)
 {
     MpegEncContext *const s = &h->s;
     int left, ret;
@@ -376,6 +376,11 @@ static int h261_decode_mb(H261Context *h)
 
     // Read mtype
     h->mtype = get_vlc2(&s->gb, h261_mtype_vlc.table, H261_MTYPE_VLC_BITS, 2);
+    if (h->mtype < 0 || h->mtype >= FF_ARRAY_ELEMS(ff_h261_mtype_map)) {
+        av_log(s->avctx, AV_LOG_ERROR, "Invalid mtype index %d\n",
+               h->mtype);
+        return SLICE_ERROR;
+    }
     h->mtype = ff_h261_mtype_map[h->mtype];
 
     // Read mquant
@@ -627,7 +632,7 @@ retry:
     s->mb_y = 0;
 
     while (h->gob_number < (s->mb_height == 18 ? 12 : 5)) {
-        if (ff_h261_resync(h) < 0)
+        if (h261_resync(h) < 0)
             break;
         h261_decode_gob(h);
     }
@@ -656,6 +661,7 @@ static av_cold int h261_decode_end(AVCodecContext *avctx)
 
 AVCodec ff_h261_decoder = {
     .name           = "h261",
+    .long_name      = NULL_IF_CONFIG_SMALL("H.261"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_H261,
     .priv_data_size = sizeof(H261Context),
@@ -663,5 +669,4 @@ AVCodec ff_h261_decoder = {
     .close          = h261_decode_end,
     .decode         = h261_decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("H.261"),
 };

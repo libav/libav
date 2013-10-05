@@ -24,7 +24,6 @@
 #include "libavutil/mem.h"
 #include "libavutil/x86/asm.h"
 #include "libavutil/x86/cpu.h"
-#include "libavcodec/x86/dsputil_mmx.h"
 #include "libavfilter/yadif.h"
 
 void ff_yadif_filter_line_mmxext(void *dst, void *prev, void *cur,
@@ -39,22 +38,16 @@ void ff_yadif_filter_line_ssse3(void *dst, void *prev, void *cur,
 
 av_cold void ff_yadif_init_x86(YADIFContext *yadif)
 {
+#if HAVE_YASM
     int cpu_flags = av_get_cpu_flags();
 
-#if HAVE_YASM
 #if ARCH_X86_32
-    if (EXTERNAL_MMXEXT(cpu_flags)) {
+    if (EXTERNAL_MMXEXT(cpu_flags))
         yadif->filter_line = ff_yadif_filter_line_mmxext;
-        yadif->req_align   = 8;
-    }
 #endif /* ARCH_X86_32 */
-    if (EXTERNAL_SSE2(cpu_flags)) {
+    if (EXTERNAL_SSE2(cpu_flags))
         yadif->filter_line = ff_yadif_filter_line_sse2;
-        yadif->req_align   = 16;
-    }
-    if (EXTERNAL_SSSE3(cpu_flags)) {
+    if (EXTERNAL_SSSE3(cpu_flags))
         yadif->filter_line = ff_yadif_filter_line_ssse3;
-        yadif->req_align   = 16;
-    }
 #endif /* HAVE_YASM */
 }

@@ -50,6 +50,10 @@ static av_cold int xan_decode_init(AVCodecContext *avctx)
         av_log(avctx, AV_LOG_ERROR, "Invalid frame height: %d.\n", avctx->height);
         return AVERROR(EINVAL);
     }
+    if (avctx->width & 1) {
+        av_log(avctx, AV_LOG_ERROR, "Invalid frame width: %d.\n", avctx->width);
+        return AVERROR(EINVAL);
+    }
 
     s->buffer_size = avctx->width * avctx->height;
     s->y_buffer = av_malloc(s->buffer_size);
@@ -423,6 +427,7 @@ static av_cold int xan_decode_end(AVCodecContext *avctx)
 
 AVCodec ff_xan_wc4_decoder = {
     .name           = "xan_wc4",
+    .long_name      = NULL_IF_CONFIG_SMALL("Wing Commander IV / Xxan"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_XAN_WC4,
     .priv_data_size = sizeof(XanContext),
@@ -430,5 +435,4 @@ AVCodec ff_xan_wc4_decoder = {
     .close          = xan_decode_end,
     .decode         = xan_decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("Wing Commander IV / Xxan"),
 };

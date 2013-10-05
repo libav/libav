@@ -1,6 +1,6 @@
 /*
  * RTMP packet utilities
- * Copyright (c) 2009 Kostya Shishkov
+ * Copyright (c) 2009 Konstantin Shishkov
  *
  * This file is part of Libav.
  *
@@ -36,9 +36,9 @@
 enum RTMPChannel {
     RTMP_NETWORK_CHANNEL = 2,   ///< channel for network-related messages (bandwidth report, ping, etc)
     RTMP_SYSTEM_CHANNEL,        ///< channel for sending server control messages
-    RTMP_SOURCE_CHANNEL,        ///< channel for sending a/v to server
-    RTMP_VIDEO_CHANNEL = 8,     ///< channel for video data
     RTMP_AUDIO_CHANNEL,         ///< channel for audio data
+    RTMP_VIDEO_CHANNEL   = 6,   ///< channel for video data
+    RTMP_SOURCE_CHANNEL  = 8,   ///< channel for a/v invokes
 };
 
 /**
@@ -81,7 +81,9 @@ typedef struct RTMPPacket {
     uint32_t       ts_delta;   ///< timestamp increment to the previous one in milliseconds (latter only for media packets)
     uint32_t       extra;      ///< probably an additional channel ID used during streaming data
     uint8_t        *data;      ///< packet payload
-    int            data_size;  ///< packet payload size
+    int            size;       ///< packet payload size
+    int            offset;     ///< amount of data read so far
+    int            read;       ///< amount read, including headers
 } RTMPPacket;
 
 /**
@@ -282,6 +284,13 @@ int ff_amf_read_string(GetByteContext *gbc, uint8_t *str,
 */
 int ff_amf_read_null(GetByteContext *gbc);
 
+/**
+ * Match AMF string with a NULL-terminated string.
+ *
+ * @return 0 if the strings do not match.
+ */
+
+int ff_amf_match_string(const uint8_t *data, int size, const char *str);
 
 /** @} */ // AMF funcs
 

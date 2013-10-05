@@ -929,14 +929,14 @@ static av_cold int decode_init(AVCodecContext *avctx)
     if (!l->Y1_base || !l->Y2_base || !l->U1_base ||
         !l->V1_base || !l->U2_base || !l->V2_base ||
         !l->last    || !l->clast) {
-        av_freep(l->Y1_base);
-        av_freep(l->Y2_base);
-        av_freep(l->U1_base);
-        av_freep(l->U2_base);
-        av_freep(l->V1_base);
-        av_freep(l->V2_base);
-        av_freep(l->last);
-        av_freep(l->clast);
+        av_freep(&l->Y1_base);
+        av_freep(&l->Y2_base);
+        av_freep(&l->U1_base);
+        av_freep(&l->U2_base);
+        av_freep(&l->V1_base);
+        av_freep(&l->V2_base);
+        av_freep(&l->last);
+        av_freep(&l->clast);
         return AVERROR(ENOMEM);
     }
     l->Y1 = l->Y1_base + l->y_stride  * 4 + 4;
@@ -975,6 +975,7 @@ static av_cold int decode_end(AVCodecContext *avctx)
 
 AVCodec ff_truemotion2_decoder = {
     .name           = "truemotion2",
+    .long_name      = NULL_IF_CONFIG_SMALL("Duck TrueMotion 2.0"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_TRUEMOTION2,
     .priv_data_size = sizeof(TM2Context),
@@ -982,5 +983,4 @@ AVCodec ff_truemotion2_decoder = {
     .close          = decode_end,
     .decode         = decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("Duck TrueMotion 2.0"),
 };

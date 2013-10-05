@@ -32,6 +32,7 @@
 #include "libavformat/network.h"
 #include "libavformat/os_support.h"
 #include "libavformat/rtpdec.h"
+#include "libavformat/rtpproto.h"
 #include "libavformat/rtsp.h"
 #include "libavformat/avio_internal.h"
 #include "libavformat/internal.h"
@@ -58,9 +59,6 @@
 #include <time.h>
 #include <sys/wait.h>
 #include <signal.h>
-#if HAVE_DLFCN_H
-#include <dlfcn.h>
-#endif
 
 #include "cmdutils.h"
 
@@ -303,7 +301,7 @@ static int rtp_new_av_stream(HTTPContext *c,
 
 static const char *my_program_name;
 
-static const char *config_filename = "/etc/avserver.conf";
+static const char *config_filename;
 
 static int avserver_debug;
 static int no_launch;
@@ -3914,32 +3912,6 @@ static enum AVCodecID opt_video_codec(const char *arg)
     return p->id;
 }
 
-/* simplistic plugin support */
-
-#if HAVE_DLOPEN
-static void load_module(const char *filename)
-{
-    void *dll;
-    void (*init_func)(void);
-    dll = dlopen(filename, RTLD_NOW);
-    if (!dll) {
-        fprintf(stderr, "Could not load module '%s' - %s\n",
-                filename, dlerror());
-        return;
-    }
-
-    init_func = dlsym(dll, "avserver_module_init");
-    if (!init_func) {
-        fprintf(stderr,
-                "%s: init function 'avserver_module_init()' not found\n",
-                filename);
-        dlclose(dll);
-    }
-
-    init_func();
-}
-#endif
-
 static int avserver_opt_default(const char *opt, const char *arg,
                        AVCodecContext *avctx, int type)
 {
@@ -4596,12 +4568,7 @@ static int parse_ffconfig(const char *filename)
                 redirect = NULL;
             }
         } else if (!av_strcasecmp(cmd, "LoadModule")) {
-            get_arg(arg, sizeof(arg), &p);
-#if HAVE_DLOPEN
-            load_module(arg);
-#else
-            ERROR("Module support not compiled into this version: '%s'\n", arg);
-#endif
+            ERROR("Loadable modules no longer supported\n");
         } else {
             ERROR("Incorrect keyword: '%s'\n", cmd);
         }
@@ -4665,6 +4632,8 @@ static const OptionDef options[] = {
 int main(int argc, char **argv)
 {
     struct sigaction sigact = { { 0 } };
+
+    config_filename = av_strdup("/etc/avserver.conf");
 
     parse_loglevel(argc, argv, options);
     av_register_all();

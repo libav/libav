@@ -147,9 +147,13 @@ static int return_audio_frame(AVFilterContext *ctx)
 {
     AVFilterLink *link = ctx->outputs[0];
     FifoContext *s = ctx->priv;
-    AVFrame *head = s->root.next->frame;
+    AVFrame *head = s->root.next ? s->root.next->frame : NULL;
     AVFrame *out;
     int ret;
+
+    /* if head is NULL then we're flushing the remaining samples in out */
+    if (!head && !s->out)
+        return AVERROR_EOF;
 
     if (!s->out &&
         head->nb_samples >= link->request_samples &&
@@ -183,8 +187,25 @@ static int return_audio_frame(AVFilterContext *ctx)
         }
 
         while (s->out->nb_samples < s->allocated_samples) {
-            int len = FFMIN(s->allocated_samples - s->out->nb_samples,
-                            head->nb_samples);
+            int len;
+
+            if (!s->root.next) {
+                ret = ff_request_frame(ctx->inputs[0]);
+                if (ret == AVERROR_EOF) {
+                    av_samples_set_silence(s->out->extended_data,
+                                           s->out->nb_samples,
+                                           s->allocated_samples -
+                                           s->out->nb_samples,
+                                           nb_channels, link->format);
+                    s->out->nb_samples = s->allocated_samples;
+                    break;
+                } else if (ret < 0)
+                    return ret;
+            }
+            head = s->root.next->frame;
+
+            len = FFMIN(s->allocated_samples - s->out->nb_samples,
+                        head->nb_samples);
 
             av_samples_copy(s->out->extended_data, head->extended_data,
                             s->out->nb_samples, 0, len, nb_channels,
@@ -194,21 +215,6 @@ static int return_audio_frame(AVFilterContext *ctx)
             if (len == head->nb_samples) {
                 av_frame_free(&head);
                 queue_pop(s);
-
-                if (!s->root.next &&
-                    (ret = ff_request_frame(ctx->inputs[0])) < 0) {
-                    if (ret == AVERROR_EOF) {
-                        av_samples_set_silence(s->out->extended_data,
-                                               s->out->nb_samples,
-                                               s->allocated_samples -
-                                               s->out->nb_samples,
-                                               nb_channels, link->format);
-                        s->out->nb_samples = s->allocated_samples;
-                        break;
-                    }
-                    return ret;
-                }
-                head = s->root.next->frame;
             } else {
                 buffer_offset(link, head, len);
             }
@@ -225,8 +231,11 @@ static int request_frame(AVFilterLink *outlink)
     int ret = 0;
 
     if (!fifo->root.next) {
-        if ((ret = ff_request_frame(outlink->src->inputs[0])) < 0)
+        if ((ret = ff_request_frame(outlink->src->inputs[0])) < 0) {
+            if (ret == AVERROR_EOF && outlink->request_samples)
+                return return_audio_frame(outlink->src);
             return ret;
+        }
     }
 
     if (outlink->request_samples) {

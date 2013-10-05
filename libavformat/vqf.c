@@ -43,7 +43,7 @@ static int vqf_probe(AVProbeData *probe_packet)
     if (!memcmp(probe_packet->buf + 4, "00052200", 8))
         return AVPROBE_SCORE_MAX;
 
-    return AVPROBE_SCORE_MAX/2;
+    return AVPROBE_SCORE_EXTENSION;
 }
 
 static void add_metadata(AVFormatContext *s, uint32_t tag,
@@ -174,8 +174,19 @@ static int vqf_read_header(AVFormatContext *s)
         st->codec->sample_rate = 11025;
         break;
     default:
+        if (rate_flag < 8 || rate_flag > 44) {
+            av_log(s, AV_LOG_ERROR, "Invalid rate flag %d\n", rate_flag);
+            return AVERROR_INVALIDDATA;
+        }
         st->codec->sample_rate = rate_flag*1000;
         break;
+    }
+
+    if (read_bitrate / st->codec->channels <  8 ||
+        read_bitrate / st->codec->channels > 48) {
+        av_log(s, AV_LOG_ERROR, "Invalid bitrate per channel %d\n",
+               read_bitrate / st->codec->channels);
+        return AVERROR_INVALIDDATA;
     }
 
     switch (((st->codec->sample_rate/1000) << 8) +

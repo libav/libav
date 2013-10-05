@@ -91,31 +91,6 @@ void ff_read_frame_flush(AVFormatContext *s);
 uint64_t ff_ntp_time(void);
 
 /**
- * Assemble a URL string from components. This is the reverse operation
- * of av_url_split.
- *
- * Note, this requires networking to be initialized, so the caller must
- * ensure ff_network_init has been called.
- *
- * @see av_url_split
- *
- * @param str the buffer to fill with the url
- * @param size the size of the str buffer
- * @param proto the protocol identifier, if null, the separator
- *              after the identifier is left out, too
- * @param authorization an optional authorization string, may be null.
- *                      An empty string is treated the same as a null string.
- * @param hostname the host name string
- * @param port the port number, left out from the string if negative
- * @param fmt a generic format string for everything to add after the
- *            host/port, may be null
- * @return the number of characters written to the destination buffer
- */
-int ff_url_join(char *str, int size, const char *proto,
-                const char *authorization, const char *hostname,
-                int port, const char *fmt, ...) av_printf_format(7, 8);
-
-/**
  * Append the media-specific SDP fragment for the media stream c
  * to the buffer buff.
  *
@@ -241,17 +216,6 @@ AVChapter *avpriv_new_chapter(AVFormatContext *s, int id, AVRational time_base,
  */
 void ff_reduce_index(AVFormatContext *s, int stream_index);
 
-/*
- * Convert a relative url into an absolute url, given a base url.
- *
- * @param buf the buffer where output absolute url is written
- * @param size the size of buf
- * @param base the base url, may be equal to buf.
- * @param rel the new url, which is interpreted relative to base
- */
-void ff_make_absolute_url(char *buf, int size, const char *base,
-                          const char *rel);
-
 enum AVCodecID ff_guess_image2_codec(const char *filename);
 
 /**
@@ -374,7 +338,5 @@ enum AVCodecID ff_codec_get_id(const AVCodecTag *tags, unsigned int tag);
  * @return        a PCM codec id or AV_CODEC_ID_NONE
  */
 enum AVCodecID ff_get_pcm_codec_id(int bps, int flt, int be, int sflags);
-
-int ff_http_match_no_proxy(const char *no_proxy, const char *hostname);
 
 #endif /* AVFORMAT_INTERNAL_H */

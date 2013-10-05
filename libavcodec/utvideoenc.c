@@ -24,6 +24,7 @@
  * Ut Video encoder
  */
 
+#include "libavutil/imgutils.h"
 #include "libavutil/intreadwrite.h"
 #include "avcodec.h"
 #include "internal.h"
@@ -230,20 +231,6 @@ static void mangle_rgb_planes(uint8_t *dst[4], int dst_stride, uint8_t *src,
     }
 }
 
-/* Write data to a plane, no prediction applied */
-static void write_plane(uint8_t *src, uint8_t *dst, int stride,
-                        int width, int height)
-{
-    int i, j;
-
-    for (j = 0; j < height; j++) {
-        for (i = 0; i < width; i++)
-            *dst++ = src[i];
-
-        src += stride;
-    }
-}
-
 /* Write data to a plane with left prediction */
 static void left_predict(uint8_t *src, uint8_t *dst, int stride,
                          int width, int height)
@@ -383,8 +370,9 @@ static int encode_plane(AVCodecContext *avctx, uint8_t *src,
         for (i = 0; i < c->slices; i++) {
             sstart = send;
             send   = height * (i + 1) / c->slices;
-            write_plane(src + sstart * stride, dst + sstart * width,
-                        stride, width, send - sstart);
+            av_image_copy_plane(dst + sstart * width, width,
+                                src + sstart * stride, stride,
+                                width, send - sstart);
         }
         break;
     case PRED_LEFT:
@@ -612,6 +600,7 @@ static int utvideo_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
 
 AVCodec ff_utvideo_encoder = {
     .name           = "utvideo",
+    .long_name      = NULL_IF_CONFIG_SMALL("Ut Video"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_UTVIDEO,
     .priv_data_size = sizeof(UtvideoContext),
@@ -622,5 +611,4 @@ AVCodec ff_utvideo_encoder = {
                           AV_PIX_FMT_RGB24, AV_PIX_FMT_RGBA, AV_PIX_FMT_YUV422P,
                           AV_PIX_FMT_YUV420P, AV_PIX_FMT_NONE
                       },
-    .long_name      = NULL_IF_CONFIG_SMALL("Ut Video"),
 };

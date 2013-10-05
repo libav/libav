@@ -60,7 +60,7 @@ static const char unit_hertz_str[]          = "Hz"   ;
 static const char unit_byte_str[]           = "byte" ;
 static const char unit_bit_per_second_str[] = "bit/s";
 
-static void exit_program(void)
+static void avprobe_cleanup(int ret)
 {
     av_dict_free(&fmt_entries_to_show);
 }
@@ -82,17 +82,17 @@ static void exit_program(void)
 typedef enum {
     ARRAY,
     OBJECT
-} ProbeElementType;
+} PrintElementType;
 
 typedef struct {
     const char *name;
-    ProbeElementType type;
+    PrintElementType type;
     int64_t index;
     int64_t nb_elems;
-} ProbeElement;
+} PrintElement;
 
 typedef struct {
-    ProbeElement *prefix;
+    PrintElement *prefix;
     int level;
     void (*print_header)(void);
     void (*print_footer)(void);
@@ -104,10 +104,10 @@ typedef struct {
 
     void (*print_integer) (const char *key, int64_t value);
     void (*print_string)  (const char *key, const char *value);
-} OutputContext;
+} PrintContext;
 
 static AVIOContext *probe_out = NULL;
-static OutputContext octx;
+static PrintContext octx;
 #define AVP_INDENT() avio_printf(probe_out, "%*c", octx.level * 2, ' ')
 
 /*
@@ -166,7 +166,7 @@ static void ini_print_array_header(const char *name)
 static void ini_print_object_header(const char *name)
 {
     int i;
-    ProbeElement *el = octx.prefix + octx.level -1;
+    PrintElement *el = octx.prefix + octx.level -1;
 
     if (el->nb_elems)
         avio_printf(probe_out, "\n");
@@ -362,21 +362,21 @@ static void probe_group_enter(const char *name, int type)
     int64_t count = -1;
 
     octx.prefix =
-        av_realloc(octx.prefix, sizeof(ProbeElement) * (octx.level + 1));
+        av_realloc(octx.prefix, sizeof(PrintElement) * (octx.level + 1));
 
     if (!octx.prefix || !name) {
         fprintf(stderr, "Out of memory\n");
-        exit(1);
+        exit_program(1);
     }
 
     if (octx.level) {
-        ProbeElement *parent = octx.prefix + octx.level -1;
+        PrintElement *parent = octx.prefix + octx.level -1;
         if (parent->type == ARRAY)
             count = parent->nb_elems;
         parent->nb_elems++;
     }
 
-    octx.prefix[octx.level++] = (ProbeElement){name, type, count, 0};
+    octx.prefix[octx.level++] = (PrintElement){name, type, count, 0};
 }
 
 static void probe_group_leave(void)
@@ -854,7 +854,7 @@ static void opt_input_file(void *optctx, const char *arg)
         fprintf(stderr,
                 "Argument '%s' provided as input filename, but '%s' was already specified.\n",
                 arg, input_filename);
-        exit(1);
+        exit_program(1);
     }
     if (!strcmp(arg, "-"))
         arg = "pipe:";
@@ -919,7 +919,7 @@ int main(int argc, char **argv)
     if (!buffer)
         exit(1);
 
-    atexit(exit_program);
+    register_exit(avprobe_cleanup);
 
     options = real_options;
     parse_loglevel(argc, argv, options);
@@ -949,13 +949,13 @@ int main(int argc, char **argv)
         fprintf(stderr,
                 "Use -h to get full help or, even better, run 'man %s'.\n",
                 program_name);
-        exit(1);
+        exit_program(1);
     }
 
     probe_out = avio_alloc_context(buffer, AVP_BUFFSIZE, 1, NULL, NULL,
                                  probe_buf_write, NULL);
     if (!probe_out)
-        exit(1);
+        exit_program(1);
 
     probe_header();
     ret = probe_file(input_filename);

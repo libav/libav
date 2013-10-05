@@ -29,14 +29,13 @@
 #include "libavutil/buffer.h"
 
 #include "vp56.h"
-#include "vp56data.h"
 #include "vp8dsp.h"
 #include "h264pred.h"
 #include "thread.h"
 #if HAVE_PTHREADS
 #include <pthread.h>
 #elif HAVE_W32THREADS
-#include "w32pthreads.h"
+#include "compat/w32pthreads.h"
 #endif
 
 #define VP8_MAX_QUANT 127
@@ -269,5 +268,12 @@ typedef struct VP8Context {
      */
     int mb_layout;
 } VP8Context;
+
+int ff_vp8_decode_init(AVCodecContext *avctx);
+
+int ff_vp8_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
+                        AVPacket *avpkt);
+
+int ff_vp8_decode_free(AVCodecContext *avctx);
 
 #endif /* AVCODEC_VP8_H */

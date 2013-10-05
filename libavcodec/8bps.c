@@ -64,7 +64,7 @@ static int decode_frame(AVCodecContext *avctx, void *data,
     unsigned char *pixptr, *pixptr_end;
     unsigned int height = avctx->height; // Real image height
     unsigned int dlen, p, row;
-    const unsigned char *lp, *dp;
+    const unsigned char *lp, *dp, *ep;
     unsigned char count;
     unsigned int px_inc;
     unsigned int planes     = c->planes;
@@ -75,6 +75,8 @@ static int decode_frame(AVCodecContext *avctx, void *data,
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }
+
+    ep = encoded + buf_size;
 
     /* Set data pointer after line lengths */
     dp = encoded + planes * (height << 1);
@@ -93,17 +95,19 @@ static int decode_frame(AVCodecContext *avctx, void *data,
         for (row = 0; row < height; row++) {
             pixptr = frame->data[0] + row * frame->linesize[0] + planemap[p];
             pixptr_end = pixptr + frame->linesize[0];
+            if (ep - lp < row * 2 + 2)
+                return AVERROR_INVALIDDATA;
             dlen = av_be2ne16(*(const unsigned short *)(lp + row * 2));
             /* Decode a row of this plane */
             while (dlen > 0) {
-                if (dp + 1 >= buf + buf_size)
+                if (ep - dp <= 1)
                     return AVERROR_INVALIDDATA;
                 if ((count = *dp++) <= 127) {
                     count++;
                     dlen -= count + 1;
-                    if (pixptr + count * px_inc > pixptr_end)
+                    if (pixptr_end - pixptr < count * px_inc)
                         break;
-                    if (dp + count > buf + buf_size)
+                    if (ep - dp < count)
                         return AVERROR_INVALIDDATA;
                     while (count--) {
                         *pixptr = *dp++;
@@ -111,7 +115,7 @@ static int decode_frame(AVCodecContext *avctx, void *data,
                     }
                 } else {
                     count = 257 - count;
-                    if (pixptr + count * px_inc > pixptr_end)
+                    if (pixptr_end - pixptr < count * px_inc)
                         break;
                     while (count--) {
                         *pixptr = *dp;
@@ -164,17 +168,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
     case 32:
         avctx->pix_fmt = AV_PIX_FMT_RGB32;
         c->planes      = 4;
-#if HAVE_BIGENDIAN
-        c->planemap[0] = 1; // 1st plane is red
-        c->planemap[1] = 2; // 2nd plane is green
-        c->planemap[2] = 3; // 3rd plane is blue
-        c->planemap[3] = 0; // 4th plane is alpha???
-#else
-        c->planemap[0] = 2; // 1st plane is red
-        c->planemap[1] = 1; // 2nd plane is green
-        c->planemap[2] = 0; // 3rd plane is blue
-        c->planemap[3] = 3; // 4th plane is alpha???
-#endif
+        /* handle planemap setup later for decoding rgb24 data as rbg32 */
         break;
     default:
         av_log(avctx, AV_LOG_ERROR, "Error: Unsupported color depth: %u.\n",
@@ -182,16 +176,22 @@ static av_cold int decode_init(AVCodecContext *avctx)
         return AVERROR_INVALIDDATA;
     }
 
+    if (avctx->pix_fmt == AV_PIX_FMT_RGB32) {
+        c->planemap[0] = HAVE_BIGENDIAN ? 1 : 2; // 1st plane is red
+        c->planemap[1] = HAVE_BIGENDIAN ? 2 : 1; // 2nd plane is green
+        c->planemap[2] = HAVE_BIGENDIAN ? 3 : 0; // 3rd plane is blue
+        c->planemap[3] = HAVE_BIGENDIAN ? 0 : 3; // 4th plane is alpha???
+    }
     return 0;
 }
 
 AVCodec ff_eightbps_decoder = {
     .name           = "8bps",
+    .long_name      = NULL_IF_CONFIG_SMALL("QuickTime 8BPS video"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_8BPS,
     .priv_data_size = sizeof(EightBpsContext),
     .init           = decode_init,
     .decode         = decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("QuickTime 8BPS video"),
 };

@@ -84,6 +84,9 @@ typedef struct AVFrame {
      *
      * For audio, only linesize[0] may be set. For planar audio, each channel
      * plane must be the same size.
+     *
+     * @note The linesize may be larger than the size of usable data -- there
+     * may be extra padding present for performance reasons.
      */
     int linesize[AV_NUM_DATA_POINTERS];
 
@@ -485,7 +488,7 @@ AVFrameSideData *av_frame_new_side_data(AVFrame *frame,
  * @return a pointer to the side data of a given type on success, NULL if there
  * is no side data with such type in this frame.
  */
-AVFrameSideData *av_frame_get_side_data(AVFrame *frame,
+AVFrameSideData *av_frame_get_side_data(const AVFrame *frame,
                                         enum AVFrameSideDataType type);
 
 #endif /* AVUTIL_FRAME_H */

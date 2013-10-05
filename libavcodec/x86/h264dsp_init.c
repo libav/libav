@@ -23,7 +23,7 @@
 #include "libavutil/x86/asm.h"
 #include "libavutil/x86/cpu.h"
 #include "libavcodec/h264dsp.h"
-#include "dsputil_mmx.h"
+#include "dsputil_x86.h"
 
 /***********************************/
 /* IDCT */
@@ -132,8 +132,8 @@ LF_FUNCS(uint16_t, 10)
 
 #if ARCH_X86_32 && HAVE_MMXEXT_EXTERNAL
 LF_FUNC(v8, luma, 8, mmxext)
-static void ff_deblock_v_luma_8_mmxext(uint8_t *pix, int stride, int alpha,
-                                       int beta, int8_t *tc0)
+static void deblock_v_luma_8_mmxext(uint8_t *pix, int stride, int alpha,
+                                    int beta, int8_t *tc0)
 {
     if ((tc0[0] & tc0[1]) >= 0)
         ff_deblock_v8_luma_8_mmxext(pix + 0, stride, alpha, beta, tc0);
@@ -141,8 +141,8 @@ static void ff_deblock_v_luma_8_mmxext(uint8_t *pix, int stride, int alpha,
         ff_deblock_v8_luma_8_mmxext(pix + 8, stride, alpha, beta, tc0 + 2);
 }
 LF_IFUNC(v8, luma_intra, 8, mmxext)
-static void ff_deblock_v_luma_intra_8_mmxext(uint8_t *pix, int stride,
-                                             int alpha, int beta)
+static void deblock_v_luma_intra_8_mmxext(uint8_t *pix, int stride,
+                                          int alpha, int beta)
 {
     ff_deblock_v8_luma_intra_8_mmxext(pix + 0, stride, alpha, beta);
     ff_deblock_v8_luma_intra_8_mmxext(pix + 8, stride, alpha, beta);
@@ -211,13 +211,13 @@ H264_BIWEIGHT_10_SSE(4,  10)
 av_cold void ff_h264dsp_init_x86(H264DSPContext *c, const int bit_depth,
                                  const int chroma_format_idc)
 {
-    int mm_flags = av_get_cpu_flags();
+    int cpu_flags = av_get_cpu_flags();
 
-    if (chroma_format_idc == 1 && EXTERNAL_MMXEXT(mm_flags))
+    if (chroma_format_idc == 1 && EXTERNAL_MMXEXT(cpu_flags))
         c->h264_loop_filter_strength = ff_h264_loop_filter_strength_mmxext;
 
     if (bit_depth == 8) {
-        if (EXTERNAL_MMX(mm_flags)) {
+        if (EXTERNAL_MMX(cpu_flags)) {
             c->h264_idct_dc_add   =
             c->h264_idct_add      = ff_h264_idct_add_8_mmx;
             c->h264_idct8_dc_add  =
@@ -228,146 +228,142 @@ av_cold void ff_h264dsp_init_x86(H264DSPContext *c, const int bit_depth,
             if (chroma_format_idc == 1)
                 c->h264_idct_add8 = ff_h264_idct_add8_8_mmx;
             c->h264_idct_add16intra = ff_h264_idct_add16intra_8_mmx;
-            if (mm_flags & AV_CPU_FLAG_CMOV)
+            if (cpu_flags & AV_CPU_FLAG_CMOV)
                 c->h264_luma_dc_dequant_idct = ff_h264_luma_dc_dequant_idct_mmx;
+        }
+        if (EXTERNAL_MMXEXT(cpu_flags)) {
+            c->h264_idct_dc_add  = ff_h264_idct_dc_add_8_mmxext;
+            c->h264_idct8_dc_add = ff_h264_idct8_dc_add_8_mmxext;
+            c->h264_idct_add16   = ff_h264_idct_add16_8_mmxext;
+            c->h264_idct8_add4   = ff_h264_idct8_add4_8_mmxext;
+            if (chroma_format_idc == 1)
+                c->h264_idct_add8 = ff_h264_idct_add8_8_mmxext;
+            c->h264_idct_add16intra = ff_h264_idct_add16intra_8_mmxext;
 
-            if (EXTERNAL_MMXEXT(mm_flags)) {
-                c->h264_idct_dc_add  = ff_h264_idct_dc_add_8_mmxext;
-                c->h264_idct8_dc_add = ff_h264_idct8_dc_add_8_mmxext;
-                c->h264_idct_add16   = ff_h264_idct_add16_8_mmxext;
-                c->h264_idct8_add4   = ff_h264_idct8_add4_8_mmxext;
-                if (chroma_format_idc == 1)
-                    c->h264_idct_add8 = ff_h264_idct_add8_8_mmxext;
-                c->h264_idct_add16intra = ff_h264_idct_add16intra_8_mmxext;
-
-                c->h264_v_loop_filter_chroma       = ff_deblock_v_chroma_8_mmxext;
-                c->h264_v_loop_filter_chroma_intra = ff_deblock_v_chroma_intra_8_mmxext;
-                if (chroma_format_idc == 1) {
-                    c->h264_h_loop_filter_chroma       = ff_deblock_h_chroma_8_mmxext;
-                    c->h264_h_loop_filter_chroma_intra = ff_deblock_h_chroma_intra_8_mmxext;
-                }
-#if ARCH_X86_32 && HAVE_MMXEXT_EXTERNAL
-                c->h264_v_loop_filter_luma       = ff_deblock_v_luma_8_mmxext;
-                c->h264_h_loop_filter_luma       = ff_deblock_h_luma_8_mmxext;
-                c->h264_v_loop_filter_luma_intra = ff_deblock_v_luma_intra_8_mmxext;
-                c->h264_h_loop_filter_luma_intra = ff_deblock_h_luma_intra_8_mmxext;
-#endif /* ARCH_X86_32 && HAVE_MMXEXT_EXTERNAL */
-                c->weight_h264_pixels_tab[0] = ff_h264_weight_16_mmxext;
-                c->weight_h264_pixels_tab[1] = ff_h264_weight_8_mmxext;
-                c->weight_h264_pixels_tab[2] = ff_h264_weight_4_mmxext;
-
-                c->biweight_h264_pixels_tab[0] = ff_h264_biweight_16_mmxext;
-                c->biweight_h264_pixels_tab[1] = ff_h264_biweight_8_mmxext;
-                c->biweight_h264_pixels_tab[2] = ff_h264_biweight_4_mmxext;
-
-                if (EXTERNAL_SSE2(mm_flags)) {
-                    c->h264_idct8_add  = ff_h264_idct8_add_8_sse2;
-
-                    c->h264_idct_add16 = ff_h264_idct_add16_8_sse2;
-                    c->h264_idct8_add4 = ff_h264_idct8_add4_8_sse2;
-                    if (chroma_format_idc == 1)
-                        c->h264_idct_add8 = ff_h264_idct_add8_8_sse2;
-                    c->h264_idct_add16intra      = ff_h264_idct_add16intra_8_sse2;
-                    c->h264_luma_dc_dequant_idct = ff_h264_luma_dc_dequant_idct_sse2;
-
-                    c->weight_h264_pixels_tab[0] = ff_h264_weight_16_sse2;
-                    c->weight_h264_pixels_tab[1] = ff_h264_weight_8_sse2;
-
-                    c->biweight_h264_pixels_tab[0] = ff_h264_biweight_16_sse2;
-                    c->biweight_h264_pixels_tab[1] = ff_h264_biweight_8_sse2;
-
-                    c->h264_v_loop_filter_luma       = ff_deblock_v_luma_8_sse2;
-                    c->h264_h_loop_filter_luma       = ff_deblock_h_luma_8_sse2;
-                    c->h264_v_loop_filter_luma_intra = ff_deblock_v_luma_intra_8_sse2;
-                    c->h264_h_loop_filter_luma_intra = ff_deblock_h_luma_intra_8_sse2;
-                }
-                if (EXTERNAL_SSSE3(mm_flags)) {
-                    c->biweight_h264_pixels_tab[0] = ff_h264_biweight_16_ssse3;
-                    c->biweight_h264_pixels_tab[1] = ff_h264_biweight_8_ssse3;
-                }
-                if (EXTERNAL_AVX(mm_flags)) {
-                    c->h264_v_loop_filter_luma       = ff_deblock_v_luma_8_avx;
-                    c->h264_h_loop_filter_luma       = ff_deblock_h_luma_8_avx;
-                    c->h264_v_loop_filter_luma_intra = ff_deblock_v_luma_intra_8_avx;
-                    c->h264_h_loop_filter_luma_intra = ff_deblock_h_luma_intra_8_avx;
-                }
+            c->h264_v_loop_filter_chroma       = ff_deblock_v_chroma_8_mmxext;
+            c->h264_v_loop_filter_chroma_intra = ff_deblock_v_chroma_intra_8_mmxext;
+            if (chroma_format_idc == 1) {
+                c->h264_h_loop_filter_chroma       = ff_deblock_h_chroma_8_mmxext;
+                c->h264_h_loop_filter_chroma_intra = ff_deblock_h_chroma_intra_8_mmxext;
             }
+#if ARCH_X86_32 && HAVE_MMXEXT_EXTERNAL
+            c->h264_v_loop_filter_luma       = deblock_v_luma_8_mmxext;
+            c->h264_h_loop_filter_luma       = ff_deblock_h_luma_8_mmxext;
+            c->h264_v_loop_filter_luma_intra = deblock_v_luma_intra_8_mmxext;
+            c->h264_h_loop_filter_luma_intra = ff_deblock_h_luma_intra_8_mmxext;
+#endif /* ARCH_X86_32 && HAVE_MMXEXT_EXTERNAL */
+            c->weight_h264_pixels_tab[0] = ff_h264_weight_16_mmxext;
+            c->weight_h264_pixels_tab[1] = ff_h264_weight_8_mmxext;
+            c->weight_h264_pixels_tab[2] = ff_h264_weight_4_mmxext;
+
+            c->biweight_h264_pixels_tab[0] = ff_h264_biweight_16_mmxext;
+            c->biweight_h264_pixels_tab[1] = ff_h264_biweight_8_mmxext;
+            c->biweight_h264_pixels_tab[2] = ff_h264_biweight_4_mmxext;
+        }
+        if (EXTERNAL_SSE2(cpu_flags)) {
+            c->h264_idct8_add  = ff_h264_idct8_add_8_sse2;
+
+            c->h264_idct_add16 = ff_h264_idct_add16_8_sse2;
+            c->h264_idct8_add4 = ff_h264_idct8_add4_8_sse2;
+            if (chroma_format_idc == 1)
+                c->h264_idct_add8 = ff_h264_idct_add8_8_sse2;
+            c->h264_idct_add16intra      = ff_h264_idct_add16intra_8_sse2;
+            c->h264_luma_dc_dequant_idct = ff_h264_luma_dc_dequant_idct_sse2;
+
+            c->weight_h264_pixels_tab[0] = ff_h264_weight_16_sse2;
+            c->weight_h264_pixels_tab[1] = ff_h264_weight_8_sse2;
+
+            c->biweight_h264_pixels_tab[0] = ff_h264_biweight_16_sse2;
+            c->biweight_h264_pixels_tab[1] = ff_h264_biweight_8_sse2;
+
+            c->h264_v_loop_filter_luma       = ff_deblock_v_luma_8_sse2;
+            c->h264_h_loop_filter_luma       = ff_deblock_h_luma_8_sse2;
+            c->h264_v_loop_filter_luma_intra = ff_deblock_v_luma_intra_8_sse2;
+            c->h264_h_loop_filter_luma_intra = ff_deblock_h_luma_intra_8_sse2;
+        }
+        if (EXTERNAL_SSSE3(cpu_flags)) {
+            c->biweight_h264_pixels_tab[0] = ff_h264_biweight_16_ssse3;
+            c->biweight_h264_pixels_tab[1] = ff_h264_biweight_8_ssse3;
+        }
+        if (EXTERNAL_AVX(cpu_flags)) {
+            c->h264_v_loop_filter_luma       = ff_deblock_v_luma_8_avx;
+            c->h264_h_loop_filter_luma       = ff_deblock_h_luma_8_avx;
+            c->h264_v_loop_filter_luma_intra = ff_deblock_v_luma_intra_8_avx;
+            c->h264_h_loop_filter_luma_intra = ff_deblock_h_luma_intra_8_avx;
         }
     } else if (bit_depth == 10) {
-        if (EXTERNAL_MMX(mm_flags)) {
-            if (EXTERNAL_MMXEXT(mm_flags)) {
+        if (EXTERNAL_MMXEXT(cpu_flags)) {
 #if ARCH_X86_32
-                c->h264_v_loop_filter_chroma       = ff_deblock_v_chroma_10_mmxext;
-                c->h264_v_loop_filter_chroma_intra = ff_deblock_v_chroma_intra_10_mmxext;
-                c->h264_v_loop_filter_luma         = ff_deblock_v_luma_10_mmxext;
-                c->h264_h_loop_filter_luma         = ff_deblock_h_luma_10_mmxext;
-                c->h264_v_loop_filter_luma_intra   = ff_deblock_v_luma_intra_10_mmxext;
-                c->h264_h_loop_filter_luma_intra   = ff_deblock_h_luma_intra_10_mmxext;
+            c->h264_v_loop_filter_chroma       = ff_deblock_v_chroma_10_mmxext;
+            c->h264_v_loop_filter_chroma_intra = ff_deblock_v_chroma_intra_10_mmxext;
+            c->h264_v_loop_filter_luma         = ff_deblock_v_luma_10_mmxext;
+            c->h264_h_loop_filter_luma         = ff_deblock_h_luma_10_mmxext;
+            c->h264_v_loop_filter_luma_intra   = ff_deblock_v_luma_intra_10_mmxext;
+            c->h264_h_loop_filter_luma_intra   = ff_deblock_h_luma_intra_10_mmxext;
 #endif /* ARCH_X86_32 */
-                c->h264_idct_dc_add = ff_h264_idct_dc_add_10_mmxext;
-                if (EXTERNAL_SSE2(mm_flags)) {
-                    c->h264_idct_add     = ff_h264_idct_add_10_sse2;
-                    c->h264_idct8_dc_add = ff_h264_idct8_dc_add_10_sse2;
+            c->h264_idct_dc_add = ff_h264_idct_dc_add_10_mmxext;
+        }
+        if (EXTERNAL_SSE2(cpu_flags)) {
+            c->h264_idct_add     = ff_h264_idct_add_10_sse2;
+            c->h264_idct8_dc_add = ff_h264_idct8_dc_add_10_sse2;
 
-                    c->h264_idct_add16 = ff_h264_idct_add16_10_sse2;
-                    if (chroma_format_idc == 1)
-                        c->h264_idct_add8 = ff_h264_idct_add8_10_sse2;
-                    c->h264_idct_add16intra = ff_h264_idct_add16intra_10_sse2;
+            c->h264_idct_add16 = ff_h264_idct_add16_10_sse2;
+            if (chroma_format_idc == 1)
+                c->h264_idct_add8 = ff_h264_idct_add8_10_sse2;
+            c->h264_idct_add16intra = ff_h264_idct_add16intra_10_sse2;
 #if HAVE_ALIGNED_STACK
-                    c->h264_idct8_add  = ff_h264_idct8_add_10_sse2;
-                    c->h264_idct8_add4 = ff_h264_idct8_add4_10_sse2;
+            c->h264_idct8_add  = ff_h264_idct8_add_10_sse2;
+            c->h264_idct8_add4 = ff_h264_idct8_add4_10_sse2;
 #endif /* HAVE_ALIGNED_STACK */
 
-                    c->weight_h264_pixels_tab[0] = ff_h264_weight_16_10_sse2;
-                    c->weight_h264_pixels_tab[1] = ff_h264_weight_8_10_sse2;
-                    c->weight_h264_pixels_tab[2] = ff_h264_weight_4_10_sse2;
+            c->weight_h264_pixels_tab[0] = ff_h264_weight_16_10_sse2;
+            c->weight_h264_pixels_tab[1] = ff_h264_weight_8_10_sse2;
+            c->weight_h264_pixels_tab[2] = ff_h264_weight_4_10_sse2;
 
-                    c->biweight_h264_pixels_tab[0] = ff_h264_biweight_16_10_sse2;
-                    c->biweight_h264_pixels_tab[1] = ff_h264_biweight_8_10_sse2;
-                    c->biweight_h264_pixels_tab[2] = ff_h264_biweight_4_10_sse2;
+            c->biweight_h264_pixels_tab[0] = ff_h264_biweight_16_10_sse2;
+            c->biweight_h264_pixels_tab[1] = ff_h264_biweight_8_10_sse2;
+            c->biweight_h264_pixels_tab[2] = ff_h264_biweight_4_10_sse2;
 
-                    c->h264_v_loop_filter_chroma       = ff_deblock_v_chroma_10_sse2;
-                    c->h264_v_loop_filter_chroma_intra = ff_deblock_v_chroma_intra_10_sse2;
+            c->h264_v_loop_filter_chroma       = ff_deblock_v_chroma_10_sse2;
+            c->h264_v_loop_filter_chroma_intra = ff_deblock_v_chroma_intra_10_sse2;
 #if HAVE_ALIGNED_STACK
-                    c->h264_v_loop_filter_luma       = ff_deblock_v_luma_10_sse2;
-                    c->h264_h_loop_filter_luma       = ff_deblock_h_luma_10_sse2;
-                    c->h264_v_loop_filter_luma_intra = ff_deblock_v_luma_intra_10_sse2;
-                    c->h264_h_loop_filter_luma_intra = ff_deblock_h_luma_intra_10_sse2;
+            c->h264_v_loop_filter_luma       = ff_deblock_v_luma_10_sse2;
+            c->h264_h_loop_filter_luma       = ff_deblock_h_luma_10_sse2;
+            c->h264_v_loop_filter_luma_intra = ff_deblock_v_luma_intra_10_sse2;
+            c->h264_h_loop_filter_luma_intra = ff_deblock_h_luma_intra_10_sse2;
 #endif /* HAVE_ALIGNED_STACK */
-                }
-                if (EXTERNAL_SSE4(mm_flags)) {
-                    c->weight_h264_pixels_tab[0] = ff_h264_weight_16_10_sse4;
-                    c->weight_h264_pixels_tab[1] = ff_h264_weight_8_10_sse4;
-                    c->weight_h264_pixels_tab[2] = ff_h264_weight_4_10_sse4;
+        }
+        if (EXTERNAL_SSE4(cpu_flags)) {
+            c->weight_h264_pixels_tab[0] = ff_h264_weight_16_10_sse4;
+            c->weight_h264_pixels_tab[1] = ff_h264_weight_8_10_sse4;
+            c->weight_h264_pixels_tab[2] = ff_h264_weight_4_10_sse4;
 
-                    c->biweight_h264_pixels_tab[0] = ff_h264_biweight_16_10_sse4;
-                    c->biweight_h264_pixels_tab[1] = ff_h264_biweight_8_10_sse4;
-                    c->biweight_h264_pixels_tab[2] = ff_h264_biweight_4_10_sse4;
-                }
-                if (EXTERNAL_AVX(mm_flags)) {
-                    c->h264_idct_dc_add  =
-                    c->h264_idct_add     = ff_h264_idct_add_10_avx;
-                    c->h264_idct8_dc_add = ff_h264_idct8_dc_add_10_avx;
+            c->biweight_h264_pixels_tab[0] = ff_h264_biweight_16_10_sse4;
+            c->biweight_h264_pixels_tab[1] = ff_h264_biweight_8_10_sse4;
+            c->biweight_h264_pixels_tab[2] = ff_h264_biweight_4_10_sse4;
+        }
+        if (EXTERNAL_AVX(cpu_flags)) {
+            c->h264_idct_dc_add  =
+            c->h264_idct_add     = ff_h264_idct_add_10_avx;
+            c->h264_idct8_dc_add = ff_h264_idct8_dc_add_10_avx;
 
-                    c->h264_idct_add16 = ff_h264_idct_add16_10_avx;
-                    if (chroma_format_idc == 1)
-                        c->h264_idct_add8 = ff_h264_idct_add8_10_avx;
-                    c->h264_idct_add16intra = ff_h264_idct_add16intra_10_avx;
+            c->h264_idct_add16 = ff_h264_idct_add16_10_avx;
+            if (chroma_format_idc == 1)
+                c->h264_idct_add8 = ff_h264_idct_add8_10_avx;
+            c->h264_idct_add16intra = ff_h264_idct_add16intra_10_avx;
 #if HAVE_ALIGNED_STACK
-                    c->h264_idct8_add  = ff_h264_idct8_add_10_avx;
-                    c->h264_idct8_add4 = ff_h264_idct8_add4_10_avx;
+            c->h264_idct8_add  = ff_h264_idct8_add_10_avx;
+            c->h264_idct8_add4 = ff_h264_idct8_add4_10_avx;
 #endif /* HAVE_ALIGNED_STACK */
 
-                    c->h264_v_loop_filter_chroma       = ff_deblock_v_chroma_10_avx;
-                    c->h264_v_loop_filter_chroma_intra = ff_deblock_v_chroma_intra_10_avx;
+            c->h264_v_loop_filter_chroma       = ff_deblock_v_chroma_10_avx;
+            c->h264_v_loop_filter_chroma_intra = ff_deblock_v_chroma_intra_10_avx;
 #if HAVE_ALIGNED_STACK
-                    c->h264_v_loop_filter_luma         = ff_deblock_v_luma_10_avx;
-                    c->h264_h_loop_filter_luma         = ff_deblock_h_luma_10_avx;
-                    c->h264_v_loop_filter_luma_intra   = ff_deblock_v_luma_intra_10_avx;
-                    c->h264_h_loop_filter_luma_intra   = ff_deblock_h_luma_intra_10_avx;
+            c->h264_v_loop_filter_luma         = ff_deblock_v_luma_10_avx;
+            c->h264_h_loop_filter_luma         = ff_deblock_h_luma_10_avx;
+            c->h264_v_loop_filter_luma_intra   = ff_deblock_v_luma_intra_10_avx;
+            c->h264_h_loop_filter_luma_intra   = ff_deblock_h_luma_intra_10_avx;
 #endif /* HAVE_ALIGNED_STACK */
-                }
-            }
         }
     }
 }

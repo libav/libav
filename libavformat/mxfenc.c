@@ -30,8 +30,7 @@
  * SMPTE RP224: Registry of SMPTE Universal Labels
  */
 
-//#define DEBUG
-
+#include <inttypes.h>
 #include <math.h>
 #include <time.h>
 
@@ -1183,7 +1182,7 @@ static void mxf_write_klv_fill(AVFormatContext *s)
     }
 }
 
-static void mxf_write_partition(AVFormatContext *s, int bodysid,
+static int mxf_write_partition(AVFormatContext *s, int bodysid,
                                 int indexsid,
                                 const uint8_t *key, int write_metadata)
 {
@@ -1192,6 +1191,7 @@ static void mxf_write_partition(AVFormatContext *s, int bodysid,
     int64_t header_byte_count_offset;
     unsigned index_byte_count = 0;
     uint64_t partition_offset = avio_tell(pb);
+    int err;
 
     if (!mxf->edit_unit_byte_count && mxf->edit_units_count)
         index_byte_count = 85 + 12+(s->nb_streams+1)*6 +
@@ -1206,10 +1206,11 @@ static void mxf_write_partition(AVFormatContext *s, int bodysid,
     }
 
     if (!memcmp(key, body_partition_key, 16)) {
-        mxf->body_partition_offset =
-            av_realloc(mxf->body_partition_offset,
-                       (mxf->body_partitions_count+1)*
-                       sizeof(*mxf->body_partition_offset));
+        if ((err = av_reallocp_array(&mxf->body_partition_offset, mxf->body_partitions_count + 1,
+                                     sizeof(*mxf->body_partition_offset))) < 0) {
+            mxf->body_partitions_count = 0;
+            return err;
+        }
         mxf->body_partition_offset[mxf->body_partitions_count++] = partition_offset;
     }
 
@@ -1274,6 +1275,8 @@ static void mxf_write_partition(AVFormatContext *s, int bodysid,
     }
 
     avio_flush(pb);
+
+    return 0;
 }
 
 static const UID mxf_mpeg2_codec_uls[] = {
@@ -1545,7 +1548,7 @@ static int mxf_write_header(AVFormatContext *s)
 static const uint8_t system_metadata_pack_key[]        = { 0x06,0x0E,0x2B,0x34,0x02,0x05,0x01,0x01,0x0D,0x01,0x03,0x01,0x04,0x01,0x01,0x00 };
 static const uint8_t system_metadata_package_set_key[] = { 0x06,0x0E,0x2B,0x34,0x02,0x43,0x01,0x01,0x0D,0x01,0x03,0x01,0x04,0x01,0x02,0x01 };
 
-static uint32_t ff_framenum_to_12m_time_code(unsigned frame, int drop, int fps)
+static uint32_t framenum_to_12m_time_code(unsigned frame, int drop, int fps)
 {
     return (0                                    << 31) | // color frame flag
            (drop                                 << 30) | // drop  frame flag
@@ -1591,7 +1594,8 @@ static void mxf_write_system_item(AVFormatContext *s)
     avio_wb64(pb, 0); // creation date/time stamp
 
     avio_w8(pb, 0x81); // SMPTE 12M time code
-    time_code = ff_framenum_to_12m_time_code(frame, mxf->timecode_drop_frame, mxf->timecode_base);
+    time_code = framenum_to_12m_time_code(frame, mxf->timecode_drop_frame,
+                                          mxf->timecode_base);
     avio_wb32(pb, time_code);
     avio_wb32(pb, 0); // binary group data
     avio_wb64(pb, 0);
@@ -1673,13 +1677,14 @@ static int mxf_write_packet(AVFormatContext *s, AVPacket *pkt)
     AVStream *st = s->streams[pkt->stream_index];
     MXFStreamContext *sc = st->priv_data;
     MXFIndexEntry ie = {0};
+    int err;
 
     if (!mxf->edit_unit_byte_count && !(mxf->edit_units_count % EDIT_UNITS_PER_BODY)) {
-        mxf->index_entries = av_realloc(mxf->index_entries,
-            (mxf->edit_units_count + EDIT_UNITS_PER_BODY)*sizeof(*mxf->index_entries));
-        if (!mxf->index_entries) {
+        if ((err = av_reallocp_array(&mxf->index_entries, mxf->edit_units_count
+                                     + EDIT_UNITS_PER_BODY, sizeof(*mxf->index_entries))) < 0) {
+            mxf->edit_units_count = 0;
             av_log(s, AV_LOG_ERROR, "could not allocate index entries\n");
-            return -1;
+            return err;
         }
     }
 
@@ -1692,11 +1697,13 @@ static int mxf_write_packet(AVFormatContext *s, AVPacket *pkt)
 
     if (!mxf->header_written) {
         if (mxf->edit_unit_byte_count) {
-            mxf_write_partition(s, 1, 2, header_open_partition_key, 1);
+            if ((err = mxf_write_partition(s, 1, 2, header_open_partition_key, 1)) < 0)
+                return err;
             mxf_write_klv_fill(s);
             mxf_write_index_table_segment(s);
         } else {
-            mxf_write_partition(s, 0, 0, header_open_partition_key, 1);
+            if ((err = mxf_write_partition(s, 0, 0, header_open_partition_key, 1)) < 0)
+                return err;
         }
         mxf->header_written = 1;
     }
@@ -1706,8 +1713,8 @@ static int mxf_write_packet(AVFormatContext *s, AVPacket *pkt)
             (!mxf->edit_units_count || mxf->edit_units_count > EDIT_UNITS_PER_BODY) &&
             !(ie.flags & 0x33)) { // I frame, Gop start
             mxf_write_klv_fill(s);
-            mxf_write_partition(s, 1, 2, body_partition_key, 0);
-
+            if ((err = mxf_write_partition(s, 1, 2, body_partition_key, 0)) < 0)
+                return err;
             mxf_write_klv_fill(s);
             mxf_write_index_table_segment(s);
         }
@@ -1776,16 +1783,18 @@ static int mxf_write_footer(AVFormatContext *s)
 {
     MXFContext *mxf = s->priv_data;
     AVIOContext *pb = s->pb;
+    int err;
 
     mxf->duration = mxf->last_indexed_edit_unit + mxf->edit_units_count;
 
     mxf_write_klv_fill(s);
     mxf->footer_partition_offset = avio_tell(pb);
     if (mxf->edit_unit_byte_count) { // no need to repeat index
-        mxf_write_partition(s, 0, 0, footer_partition_key, 0);
+        if ((err = mxf_write_partition(s, 0, 0, footer_partition_key, 0)) < 0)
+            return err;
     } else {
-        mxf_write_partition(s, 0, 2, footer_partition_key, 0);
-
+        if ((err = mxf_write_partition(s, 0, 2, footer_partition_key, 0)) < 0)
+            return err;
         mxf_write_klv_fill(s);
         mxf_write_index_table_segment(s);
     }
@@ -1796,11 +1805,13 @@ static int mxf_write_footer(AVFormatContext *s)
     if (s->pb->seekable) {
         avio_seek(pb, 0, SEEK_SET);
         if (mxf->edit_unit_byte_count) {
-            mxf_write_partition(s, 1, 2, header_closed_partition_key, 1);
+            if ((err = mxf_write_partition(s, 1, 2, header_closed_partition_key, 1)) < 0)
+                return err;
             mxf_write_klv_fill(s);
             mxf_write_index_table_segment(s);
         } else {
-            mxf_write_partition(s, 0, 0, header_closed_partition_key, 1);
+            if ((err = mxf_write_partition(s, 0, 0, header_closed_partition_key, 1)) < 0)
+                return err;
         }
     }
 
@@ -1856,7 +1867,7 @@ static int mxf_interleave_get_packet(AVFormatContext *s, AVPacket *out, AVPacket
         }
 
         *out = pktl->pkt;
-        av_dlog(s, "out st:%d dts:%lld\n", (*out).stream_index, (*out).dts);
+        av_dlog(s, "out st:%d dts:%"PRId64"\n", (*out).stream_index, (*out).dts);
         s->packet_buffer = pktl->next;
         if(s->streams[pktl->pkt.stream_index]->last_in_packet_buffer == pktl)
             s->streams[pktl->pkt.stream_index]->last_in_packet_buffer= NULL;

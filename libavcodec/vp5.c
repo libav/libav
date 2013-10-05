@@ -173,7 +173,7 @@ static void vp5_parse_coeff(VP56Context *s)
 {
     VP56RangeCoder *c = &s->c;
     VP56Model *model = s->modelp;
-    uint8_t *permute = s->scantable.permutated;
+    uint8_t *permute = s->idct_scantable;
     uint8_t *model1, *model2;
     int coeff, sign, coeff_idx;
     int b, i, cg, idx, ctx, ctx_last;
@@ -281,6 +281,7 @@ static av_cold int vp5_decode_init(AVCodecContext *avctx)
 
 AVCodec ff_vp5_decoder = {
     .name           = "vp5",
+    .long_name      = NULL_IF_CONFIG_SMALL("On2 VP5"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_VP5,
     .priv_data_size = sizeof(VP56Context),
@@ -288,5 +289,4 @@ AVCodec ff_vp5_decoder = {
     .close          = ff_vp56_free,
     .decode         = ff_vp56_decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("On2 VP5"),
 };

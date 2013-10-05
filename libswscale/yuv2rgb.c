@@ -35,11 +35,6 @@
 #include "swscale.h"
 #include "swscale_internal.h"
 
-extern const uint8_t dither_4x4_16[4][8];
-extern const uint8_t dither_8x8_32[8][8];
-extern const uint8_t dither_8x8_73[8][8];
-extern const uint8_t dither_8x8_220[8][8];
-
 const int32_t ff_yuv2rgb_coeffs[8][4] = {
     { 117504, 138453, 13954, 34903 }, /* no sequence_display_extension */
     { 117504, 138453, 13954, 34903 }, /* ITU-R Rec. 709 (1990) */
@@ -264,28 +259,28 @@ YUV2RGBFUNC(yuva2rgba_c, uint32_t, 1)
     PUTRGBA(dst_2, py_2, pa_2, 0, 24);
 
     LOADCHROMA(1);
-    PUTRGBA(dst_2, py_2, pa_1, 1, 24);
-    PUTRGBA(dst_1, py_1, pa_2, 1, 24);
+    PUTRGBA(dst_2, py_2, pa_2, 1, 24);
+    PUTRGBA(dst_1, py_1, pa_1, 1, 24);
 
     LOADCHROMA(2);
     PUTRGBA(dst_1, py_1, pa_1, 2, 24);
     PUTRGBA(dst_2, py_2, pa_2, 2, 24);
 
     LOADCHROMA(3);
-    PUTRGBA(dst_2, py_2, pa_1, 3, 24);
-    PUTRGBA(dst_1, py_1, pa_2, 3, 24);
-    pa_1 += 8; \
-    pa_2 += 8; \
+    PUTRGBA(dst_2, py_2, pa_2, 3, 24);
+    PUTRGBA(dst_1, py_1, pa_1, 3, 24);
+    pa_1 += 8;
+    pa_2 += 8;
 ENDYUV2RGBLINE(8, 0)
     LOADCHROMA(0);
     PUTRGBA(dst_1, py_1, pa_1, 0, 24);
     PUTRGBA(dst_2, py_2, pa_2, 0, 24);
 
     LOADCHROMA(1);
-    PUTRGBA(dst_2, py_2, pa_1, 1, 24);
-    PUTRGBA(dst_1, py_1, pa_2, 1, 24);
-    pa_1 += 4; \
-    pa_2 += 4; \
+    PUTRGBA(dst_2, py_2, pa_2, 1, 24);
+    PUTRGBA(dst_1, py_1, pa_1, 1, 24);
+    pa_1 += 4;
+    pa_2 += 4;
 ENDYUV2RGBLINE(8, 1)
     LOADCHROMA(0);
     PUTRGBA(dst_1, py_1, pa_1, 0, 24);
@@ -308,8 +303,8 @@ YUV2RGBFUNC(yuva2argb_c, uint32_t, 1)
     LOADCHROMA(3);
     PUTRGBA(dst_2, py_2, pa_2, 3, 0);
     PUTRGBA(dst_1, py_1, pa_1, 3, 0);
-    pa_1 += 8; \
-    pa_2 += 8; \
+    pa_1 += 8;
+    pa_2 += 8;
 ENDYUV2RGBLINE(8, 0)
     LOADCHROMA(0);
     PUTRGBA(dst_1, py_1, pa_1, 0, 0);
@@ -318,8 +313,8 @@ ENDYUV2RGBLINE(8, 0)
     LOADCHROMA(1);
     PUTRGBA(dst_2, py_2, pa_2, 1, 0);
     PUTRGBA(dst_1, py_1, pa_1, 1, 0);
-    pa_1 += 4; \
-    pa_2 += 4; \
+    pa_1 += 4;
+    pa_2 += 4;
 ENDYUV2RGBLINE(8, 1)
     LOADCHROMA(0);
     PUTRGBA(dst_1, py_1, pa_1, 0, 0);
@@ -409,7 +404,7 @@ CLOSEYUV2RGBFUNC(8)
 
 // r, g, b, dst_1, dst_2
 YUV2RGBFUNC(yuv2rgb_c_12_ordered_dither, uint16_t, 0)
-    const uint8_t *d16 = dither_4x4_16[y & 3];
+    const uint8_t *d16 = ff_dither_4x4_16[y & 3];
 
 #define PUTRGB12(dst, src, i, o)                    \
     Y              = src[2 * i];                    \
@@ -440,8 +435,8 @@ CLOSEYUV2RGBFUNC(8)
 
 // r, g, b, dst_1, dst_2
 YUV2RGBFUNC(yuv2rgb_c_8_ordered_dither, uint8_t, 0)
-    const uint8_t *d32 = dither_8x8_32[y & 7];
-    const uint8_t *d64 = dither_8x8_73[y & 7];
+    const uint8_t *d32 = ff_dither_8x8_32[y & 7];
+    const uint8_t *d64 = ff_dither_8x8_73[y & 7];
 
 #define PUTRGB8(dst, src, i, o)                     \
     Y              = src[2 * i];                    \
@@ -471,8 +466,8 @@ YUV2RGBFUNC(yuv2rgb_c_8_ordered_dither, uint8_t, 0)
 CLOSEYUV2RGBFUNC(8)
 
 YUV2RGBFUNC(yuv2rgb_c_4_ordered_dither, uint8_t, 0)
-    const uint8_t * d64 = dither_8x8_73[y & 7];
-    const uint8_t *d128 = dither_8x8_220[y & 7];
+    const uint8_t * d64 = ff_dither_8x8_73[y & 7];
+    const uint8_t *d128 = ff_dither_8x8_220[y & 7];
     int acc;
 
 #define PUTRGB4D(dst, src, i, o)                    \
@@ -504,8 +499,8 @@ YUV2RGBFUNC(yuv2rgb_c_4_ordered_dither, uint8_t, 0)
 CLOSEYUV2RGBFUNC(4)
 
 YUV2RGBFUNC(yuv2rgb_c_4b_ordered_dither, uint8_t, 0)
-    const uint8_t *d64  = dither_8x8_73[y & 7];
-    const uint8_t *d128 = dither_8x8_220[y & 7];
+    const uint8_t *d64  = ff_dither_8x8_73[y & 7];
+    const uint8_t *d128 = ff_dither_8x8_220[y & 7];
 
 #define PUTRGB4DB(dst, src, i, o)                   \
     Y              = src[2 * i];                    \
@@ -535,7 +530,7 @@ YUV2RGBFUNC(yuv2rgb_c_4b_ordered_dither, uint8_t, 0)
 CLOSEYUV2RGBFUNC(8)
 
 YUV2RGBFUNC(yuv2rgb_c_1_ordered_dither, uint8_t, 0)
-    const uint8_t *d128 = dither_8x8_220[y & 7];
+    const uint8_t *d128 = ff_dither_8x8_220[y & 7];
     char out_1 = 0, out_2 = 0;
     g = c->table_gU[128] + c->table_gV[128];
 
@@ -565,14 +560,14 @@ SwsFunc ff_yuv2rgb_get_func_ptr(SwsContext *c)
 {
     SwsFunc t = NULL;
 
-    if (HAVE_MMX)
-        t = ff_yuv2rgb_init_mmx(c);
-    else if (HAVE_VIS)
+    if (ARCH_BFIN)
+        t = ff_yuv2rgb_init_bfin(c);
+    if (ARCH_PPC)
+        t = ff_yuv2rgb_init_ppc(c);
+    if (HAVE_VIS)
         t = ff_yuv2rgb_init_vis(c);
-    else if (HAVE_ALTIVEC)
-        t = ff_yuv2rgb_init_altivec(c);
-    else if (ARCH_BFIN)
-        t = ff_yuv2rgb_get_func_ptr_bfin(c);
+    if (ARCH_X86)
+        t = ff_yuv2rgb_init_x86(c);
 
     if (t)
         return t;

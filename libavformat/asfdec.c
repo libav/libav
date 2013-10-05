@@ -19,14 +19,13 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-//#define DEBUG
-
 #include "libavutil/attributes.h"
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
 #include "libavutil/bswap.h"
 #include "libavutil/common.h"
 #include "libavutil/dict.h"
+#include "libavutil/internal.h"
 #include "libavutil/mathematics.h"
 #include "libavutil/opt.h"
 #include "avformat.h"
@@ -151,12 +150,6 @@ static void print_guid(ff_asf_guid *g)
 #else
 #define print_guid(g)
 #endif
-
-void ff_get_guid(AVIOContext *s, ff_asf_guid *g)
-{
-    assert(sizeof(*g) == 16);
-    avio_read(s, *g, sizeof(*g));
-}
 
 static int asf_probe(AVProbeData *pd)
 {
@@ -679,6 +672,7 @@ static int asf_read_metadata(AVFormatContext *s, int64_t size)
 static int asf_read_marker(AVFormatContext *s, int64_t size)
 {
     AVIOContext *pb = s->pb;
+    ASFContext *asf = s->priv_data;
     int i, count, name_len, ret;
     char name[1024];
 
@@ -696,6 +690,7 @@ static int asf_read_marker(AVFormatContext *s, int64_t size)
 
         avio_rl64(pb);             // offset, 8 bytes
         pres_time = avio_rl64(pb); // presentation time
+        pres_time -= asf->hdr.preroll * 10000;
         avio_rl16(pb);             // entry length
         avio_rl32(pb);             // send time
         avio_rl32(pb);             // flags
@@ -748,7 +743,9 @@ static int asf_read_header(AVFormatContext *s)
             if (ret < 0)
                 return ret;
         } else if (!ff_guidcmp(&g, &ff_asf_stream_header)) {
-            asf_read_stream_properties(s, gsize);
+            int ret = asf_read_stream_properties(s, gsize);
+            if (ret < 0)
+                return ret;
         } else if (!ff_guidcmp(&g, &ff_asf_comment_header)) {
             asf_read_content_desc(s, gsize);
         } else if (!ff_guidcmp(&g, &ff_asf_language_guid)) {
@@ -867,7 +864,7 @@ static int asf_read_header(AVFormatContext *s)
  * @param pb context to read data from
  * @return 0 on success, <0 on error
  */
-static int ff_asf_get_packet(AVFormatContext *s, AVIOContext *pb)
+static int asf_get_packet(AVFormatContext *s, AVIOContext *pb)
 {
     ASFContext *asf = s->priv_data;
     uint32_t packet_length, padsize;
@@ -1059,7 +1056,7 @@ static int asf_read_frame_header(AVFormatContext *s, AVIOContext *pb)
  * @return 0 if data was stored in pkt, <0 on error or 1 if more ASF
  *          packets need to be loaded (through asf_get_packet())
  */
-static int ff_asf_parse_packet(AVFormatContext *s, AVIOContext *pb, AVPacket *pkt)
+static int asf_parse_packet(AVFormatContext *s, AVIOContext *pb, AVPacket *pkt)
 {
     ASFContext *asf   = s->priv_data;
     ASFStream *asf_st = 0;
@@ -1260,7 +1257,9 @@ static int ff_asf_parse_packet(AVFormatContext *s, AVIOContext *pb, AVPacket *pk
             asf_st->frag_offset         = 0;
             *pkt                        = asf_st->pkt;
 #if FF_API_DESTRUCT_PACKET
+FF_DISABLE_DEPRECATION_WARNINGS
             asf_st->pkt.destruct        = NULL;
+FF_ENABLE_DEPRECATION_WARNINGS
 #endif
             asf_st->pkt.buf             = 0;
             asf_st->pkt.size            = 0;
@@ -1281,9 +1280,9 @@ static int asf_read_packet(AVFormatContext *s, AVPacket *pkt)
         int ret;
 
         /* parse cached packets, if any */
-        if ((ret = ff_asf_parse_packet(s, s->pb, pkt)) <= 0)
+        if ((ret = asf_parse_packet(s, s->pb, pkt)) <= 0)
             return ret;
-        if ((ret = ff_asf_get_packet(s, s->pb)) < 0)
+        if ((ret = asf_get_packet(s, s->pb)) < 0)
             assert(asf->packet_size_left < FRAME_HEADER_SIZE ||
                    asf->packet_segments < 1);
         asf->packet_time_start = 0;

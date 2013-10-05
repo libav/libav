@@ -1,5 +1,5 @@
 /*
- * Atrac 3 compatible decoder
+ * ATRAC3 compatible decoder
  * Copyright (c) 2006-2008 Maxim Poliakovski
  * Copyright (c) 2006-2008 Benjamin Larsson
  *
@@ -22,10 +22,10 @@
 
 /**
  * @file
- * Atrac 3 compatible decoder.
+ * ATRAC3 compatible decoder.
  * This decoder handles Sony's ATRAC3 data.
  *
- * Container formats used to store atrac 3 data:
+ * Container formats used to store ATRAC3 data:
  * RealMedia (.rm), RIFF WAV (.wav, .at3), Sony OpenMG (.oma, .aa3).
  *
  * To use this decoder, a calling application must supply the extradata
@@ -36,6 +36,7 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#include "libavutil/attributes.h"
 #include "libavutil/float_dsp.h"
 #include "avcodec.h"
 #include "bytestream.h"
@@ -53,14 +54,8 @@
 #define SAMPLES_PER_FRAME 1024
 #define MDCT_SIZE          512
 
-typedef struct GainInfo {
-    int num_gain_data;
-    int lev_code[8];
-    int loc_code[8];
-} GainInfo;
-
 typedef struct GainBlock {
-    GainInfo g_block[4];
+    AtracGainInfo g_block[4];
 } GainBlock;
 
 typedef struct TonalComponent {
@@ -110,6 +105,7 @@ typedef struct ATRAC3Context {
     int scrambled_stream;
     //@}
 
+    AtracGCContext  gainc_ctx;
     FFTContext mdct_ctx;
     FmtConvertContext fmt_conv;
     AVFloatDSPContext fdsp;
@@ -122,7 +118,7 @@ static float gain_tab1[16];
 static float gain_tab2[31];
 
 
-/*
+/**
  * Regular 512 points IMDCT without overlapping, with the exception of the
  * swapping of odd bands caused by the reverse spectra of the QMF.
  *
@@ -204,7 +200,7 @@ static av_cold int atrac3_decode_close(AVCodecContext *avctx)
     return 0;
 }
 
-/*
+/**
  * Mantissa decoding
  *
  * @param selector     which table the output values are coded with
@@ -266,7 +262,7 @@ static void read_quant_spectral_coeffs(GetBitContext *gb, int selector,
     }
 }
 
-/*
+/**
  * Restore the quantized band spectrum coefficients
  *
  * @return subband count, fix for broken specification/files
@@ -323,7 +319,7 @@ static int decode_spectrum(GetBitContext *gb, float *output)
     return num_subbands;
 }
 
-/*
+/**
  * Restore the quantized tonal components
  *
  * @param components tonal components
@@ -407,7 +403,7 @@ static int decode_tonal_components(GetBitContext *gb,
     return component_count;
 }
 
-/*
+/**
  * Decode gain parameters for the coded bands
  *
  * @param block      the gainblock for the current band
@@ -416,90 +412,32 @@ static int decode_tonal_components(GetBitContext *gb,
 static int decode_gain_control(GetBitContext *gb, GainBlock *block,
                                int num_bands)
 {
-    int i, cf, num_data;
+    int i, j;
     int *level, *loc;
 
-    GainInfo *gain = block->g_block;
+    AtracGainInfo *gain = block->g_block;
 
     for (i = 0; i <= num_bands; i++) {
-        num_data              = get_bits(gb, 3);
-        gain[i].num_gain_data = num_data;
+        gain[i].num_points    = get_bits(gb, 3);
         level                 = gain[i].lev_code;
         loc                   = gain[i].loc_code;
 
-        for (cf = 0; cf < gain[i].num_gain_data; cf++) {
-            level[cf] = get_bits(gb, 4);
-            loc  [cf] = get_bits(gb, 5);
-            if (cf && loc[cf] <= loc[cf - 1])
+        for (j = 0; j < gain[i].num_points; j++) {
+            level[j] = get_bits(gb, 4);
+            loc[j]   = get_bits(gb, 5);
+            if (j && loc[j] <= loc[j - 1])
                 return AVERROR_INVALIDDATA;
         }
     }
 
     /* Clear the unused blocks. */
     for (; i < 4 ; i++)
-        gain[i].num_gain_data = 0;
+        gain[i].num_points = 0;
 
     return 0;
 }
 
-/*
- * Apply gain parameters and perform the MDCT overlapping part
- *
- * @param input   input buffer
- * @param prev    previous buffer to perform overlap against
- * @param output  output buffer
- * @param gain1   current band gain info
- * @param gain2   next band gain info
- */
-static void gain_compensate_and_overlap(float *input, float *prev,
-                                        float *output, GainInfo *gain1,
-                                        GainInfo *gain2)
-{
-    float g1, g2, gain_inc;
-    int i, j, num_data, start_loc, end_loc;
-
-
-    if (gain2->num_gain_data == 0)
-        g1 = 1.0;
-    else
-        g1 = gain_tab1[gain2->lev_code[0]];
-
-    if (gain1->num_gain_data == 0) {
-        for (i = 0; i < 256; i++)
-            output[i] = input[i] * g1 + prev[i];
-    } else {
-        num_data = gain1->num_gain_data;
-        gain1->loc_code[num_data] = 32;
-        gain1->lev_code[num_data] = 4;
-
-        for (i = 0, j = 0; i < num_data; i++) {
-            start_loc = gain1->loc_code[i] * 8;
-            end_loc   = start_loc + 8;
-
-            g2       = gain_tab1[gain1->lev_code[i]];
-            gain_inc = gain_tab2[gain1->lev_code[i + 1] -
-                                 gain1->lev_code[i    ] + 15];
-
-            /* interpolate */
-            for (; j < start_loc; j++)
-                output[j] = (input[j] * g1 + prev[j]) * g2;
-
-            /* interpolation is done over eight samples */
-            for (; j < end_loc; j++) {
-                output[j] = (input[j] * g1 + prev[j]) * g2;
-                g2 *= gain_inc;
-            }
-        }
-
-        for (; j < 256; j++)
-            output[j] = input[j] * g1 + prev[j];
-    }
-
-    /* Delay for the overlapping part. */
-    memcpy(prev, &input[256], 256 * sizeof(*prev));
-}
-
-/*
+/**
  * Combine the tonal band spectrum and regular band spectrum
  *
  * @param spectrum        output spectrum buffer
@@ -626,7 +564,7 @@ static void channel_weighting(float *su1, float *su2, int *p3)
     }
 }
 
-/*
+/**
  * Decode a Sound Unit
  *
  * @param snd           the channel unit to be used
@@ -663,8 +601,8 @@ static int decode_channel_sound_unit(ATRAC3Context *q, GetBitContext *gb,
 
     snd->num_components = decode_tonal_components(gb, snd->components,
                                                   snd->bands_coded);
-    if (snd->num_components == -1)
-        return -1;
+    if (snd->num_components < 0)
+        return snd->num_components;
 
     num_subbands = decode_spectrum(gb, snd->spectrum);
 
@@ -689,11 +627,10 @@ static int decode_channel_sound_unit(ATRAC3Context *q, GetBitContext *gb,
             memset(snd->imdct_buf, 0, 512 * sizeof(*snd->imdct_buf));
 
         /* gain compensation and overlapping */
-        gain_compensate_and_overlap(snd->imdct_buf,
-                                    &snd->prev_frame[band * 256],
-                                    &output[band * 256],
-                                    &gain1->g_block[band],
-                                    &gain2->g_block[band]);
+        ff_atrac_gain_compensation(&q->gainc_ctx, snd->imdct_buf,
+                                   &snd->prev_frame[band * 256],
+                                   &gain1->g_block[band], &gain2->g_block[band],
+                                   256, &output[band * 256]);
     }
 
     /* Swap the gain control buffers for the next frame. */
@@ -741,7 +678,7 @@ static int decode_frame(AVCodecContext *avctx, const uint8_t *databuf,
 
 
         /* set the bitstream reader at the start of the second Sound Unit*/
-        init_get_bits(&q->gb, ptr1, avctx->block_align * 8);
+        init_get_bits(&q->gb, ptr1, (avctx->block_align - i) * 8);
 
         /* Fill the Weighting coeffs delay buffer */
         memmove(q->weighting_delay, &q->weighting_delay[2],
@@ -839,7 +776,7 @@ static int atrac3_decode_frame(AVCodecContext *avctx, void *data,
     return avctx->block_align;
 }
 
-static void atrac3_init_static_data(AVCodec *codec)
+static av_cold void atrac3_init_static_data(AVCodec *codec)
 {
     int i;
 
@@ -940,9 +877,11 @@ static av_cold int atrac3_decode_init(AVCodecContext *avctx)
 
     if (q->coding_mode == STEREO)
         av_log(avctx, AV_LOG_DEBUG, "Normal stereo detected.\n");
-    else if (q->coding_mode == JOINT_STEREO)
+    else if (q->coding_mode == JOINT_STEREO) {
+        if (avctx->channels != 2)
+            return AVERROR_INVALIDDATA;
         av_log(avctx, AV_LOG_DEBUG, "Joint stereo detected.\n");
-    else {
+    } else {
         av_log(avctx, AV_LOG_ERROR, "Unknown channel coding mode %x!\n",
                q->coding_mode);
         return AVERROR_INVALIDDATA;
@@ -979,6 +918,7 @@ static av_cold int atrac3_decode_init(AVCodecContext *avctx)
         q->matrix_coeff_index_next[i] = 3;
     }
 
+    ff_atrac_init_gain_compensation(&q->gainc_ctx, 4, 3);
     avpriv_float_dsp_init(&q->fdsp, avctx->flags & CODEC_FLAG_BITEXACT);
     ff_fmt_convert_init(&q->fmt_conv, avctx);
 
@@ -993,6 +933,7 @@ static av_cold int atrac3_decode_init(AVCodecContext *avctx)
 
 AVCodec ff_atrac3_decoder = {
     .name             = "atrac3",
+    .long_name        = NULL_IF_CONFIG_SMALL("ATRAC3 (Adaptive TRansform Acoustic Coding 3)"),
     .type             = AVMEDIA_TYPE_AUDIO,
     .id               = AV_CODEC_ID_ATRAC3,
     .priv_data_size   = sizeof(ATRAC3Context),
@@ -1001,7 +942,6 @@ AVCodec ff_atrac3_decoder = {
     .close            = atrac3_decode_close,
     .decode           = atrac3_decode_frame,
     .capabilities     = CODEC_CAP_SUBFRAMES | CODEC_CAP_DR1,
-    .long_name        = NULL_IF_CONFIG_SMALL("Atrac 3 (Adaptive TRansform Acoustic Coding 3)"),
     .sample_fmts      = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_FLTP,
                                                         AV_SAMPLE_FMT_NONE },
 };

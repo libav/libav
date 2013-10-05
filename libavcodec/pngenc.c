@@ -29,8 +29,6 @@
 
 #include <zlib.h>
 
-//#define DEBUG
-
 #define IOBUF_SIZE 4096
 
 typedef struct PNGEncContext {
@@ -257,6 +255,10 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
         bit_depth = 8;
         color_type = PNG_COLOR_TYPE_RGB;
         break;
+    case AV_PIX_FMT_GRAY16BE:
+        bit_depth = 16;
+        color_type = PNG_COLOR_TYPE_GRAY;
+        break;
     case AV_PIX_FMT_GRAY8:
         bit_depth = 8;
         color_type = PNG_COLOR_TYPE_GRAY;
@@ -455,6 +457,7 @@ static av_cold int png_enc_init(AVCodecContext *avctx){
 
 AVCodec ff_png_encoder = {
     .name           = "png",
+    .long_name      = NULL_IF_CONFIG_SMALL("PNG (Portable Network Graphics) image"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_PNG,
     .priv_data_size = sizeof(PNGEncContext),
@@ -462,7 +465,7 @@ AVCodec ff_png_encoder = {
     .encode2        = encode_frame,
     .pix_fmts       = (const enum AVPixelFormat[]){
         AV_PIX_FMT_RGB24, AV_PIX_FMT_RGB32, AV_PIX_FMT_PAL8, AV_PIX_FMT_GRAY8,
+        AV_PIX_FMT_GRAY16BE,
         AV_PIX_FMT_MONOBLACK, AV_PIX_FMT_NONE
     },
-    .long_name      = NULL_IF_CONFIG_SMALL("PNG (Portable Network Graphics) image"),
 };

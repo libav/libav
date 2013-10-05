@@ -252,18 +252,27 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *got_frame, AVPac
         }
         break;
     case 2:
-    case 3:
     case 4:
-    case 5:
-        frame->key_frame = !(compr & 1);
-        frame->pict_type = (compr & 1) ? AV_PICTURE_TYPE_P : AV_PICTURE_TYPE_I;
-        for(j = 0; j < avctx->height; j++){
-            if(compr & 1){
-                for(i = 0; i < avctx->width; i++)
-                    outptr[i] = srcptr[i] ^ tmpptr[i];
-                tmpptr += stride;
-            }else
+        frame->key_frame = 1;
+        frame->pict_type = AV_PICTURE_TYPE_I;
+        for (j = 0; j < avctx->height; j++) {
                 memcpy(outptr, srcptr, avctx->width);
+            outptr += stride;
+            srcptr += avctx->width;
+        }
+        break;
+    case 3:
+    case 5:
+        if (!tmpptr) {
+            av_log(avctx, AV_LOG_ERROR, "Missing reference frame.\n");
+            return AVERROR_INVALIDDATA;
+        }
+        frame->key_frame = 0;
+        frame->pict_type = AV_PICTURE_TYPE_P;
+        for (j = 0; j < avctx->height; j++) {
+            for (i = 0; i < avctx->width; i++)
+                outptr[i] = srcptr[i] ^ tmpptr[i];
+            tmpptr += stride;
             outptr += stride;
             srcptr += avctx->width;
         }
@@ -316,6 +325,7 @@ static av_cold int decode_end(AVCodecContext *avctx)
 
 AVCodec ff_dxa_decoder = {
     .name           = "dxa",
+    .long_name      = NULL_IF_CONFIG_SMALL("Feeble Files/ScummVM DXA"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_DXA,
     .priv_data_size = sizeof(DxaDecContext),
@@ -323,5 +333,4 @@ AVCodec ff_dxa_decoder = {
     .close          = decode_end,
     .decode         = decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("Feeble Files/ScummVM DXA"),
 };

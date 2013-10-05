@@ -51,7 +51,7 @@ static int xwd_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     uint8_t *ptr, *buf;
 
     pixdepth = av_get_bits_per_pixel(desc);
-    if (desc->flags & PIX_FMT_BE)
+    if (desc->flags & AV_PIX_FMT_FLAG_BE)
         be = 1;
     switch (pix_fmt) {
     case AV_PIX_FMT_ARGB:
@@ -222,6 +222,7 @@ static av_cold int xwd_encode_close(AVCodecContext *avctx)
 
 AVCodec ff_xwd_encoder = {
     .name         = "xwd",
+    .long_name    = NULL_IF_CONFIG_SMALL("XWD (X Window Dump) image"),
     .type         = AVMEDIA_TYPE_VIDEO,
     .id           = AV_CODEC_ID_XWD,
     .init         = xwd_encode_init,
@@ -248,5 +249,4 @@ AVCodec ff_xwd_encoder = {
                                                  AV_PIX_FMT_PAL8,
                                                  AV_PIX_FMT_MONOWHITE,
                                                  AV_PIX_FMT_NONE },
-    .long_name    = NULL_IF_CONFIG_SMALL("XWD (X Window Dump) image"),
 };

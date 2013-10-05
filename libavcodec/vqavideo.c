@@ -134,6 +134,17 @@ static av_cold int vqa_decode_init(AVCodecContext *avctx)
 
     /* load up the VQA parameters from the header */
     s->vqa_version = s->avctx->extradata[0];
+    switch (s->vqa_version) {
+    case 1:
+    case 2:
+        break;
+    case 3:
+        avpriv_report_missing_feature(avctx, "VQA Version %d", s->vqa_version);
+        return AVERROR_PATCHWELCOME;
+    default:
+        avpriv_request_sample(avctx, "VQA Version %i", s->vqa_version);
+        return AVERROR_PATCHWELCOME;
+    }
     s->width = AV_RL16(&s->avctx->extradata[6]);
     s->height = AV_RL16(&s->avctx->extradata[8]);
     if ((ret = av_image_check_size(s->width, s->height, 0, avctx)) < 0) {
@@ -628,6 +639,7 @@ static av_cold int vqa_decode_end(AVCodecContext *avctx)
 
 AVCodec ff_vqa_decoder = {
     .name           = "vqavideo",
+    .long_name      = NULL_IF_CONFIG_SMALL("Westwood Studios VQA (Vector Quantized Animation) video"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_WS_VQA,
     .priv_data_size = sizeof(VqaContext),
@@ -635,5 +647,4 @@ AVCodec ff_vqa_decoder = {
     .close          = vqa_decode_end,
     .decode         = vqa_decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("Westwood Studios VQA (Vector Quantized Animation) video"),
 };

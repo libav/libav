@@ -93,7 +93,7 @@ static int find_expected_header(AVCodecContext *c, int size, int key_frame,
         header |= (bitrate_index & 1) << 9;
 
         return 2; //FIXME actually put the needed ones in build_elision_headers()
-        return 3; //we guess that the private bit is not set
+        //return 3; //we guess that the private bit is not set
 //FIXME the above assumptions should be checked, if these turn out false too often something should be done
     }
     return 0;
@@ -323,7 +323,7 @@ static void write_mainheader(NUTContext *nut, AVIOContext *bc)
         tmp_head_idx;
     int64_t tmp_match;
 
-    ff_put_v(bc, 3); /* version */
+    ff_put_v(bc, NUT_VERSION);
     ff_put_v(bc, nut->avf->nb_streams);
     ff_put_v(bc, nut->max_distance);
     ff_put_v(bc, nut->time_base_count);

@@ -247,7 +247,7 @@ void av_register_all(void)
     REGISTER_DEMUXER (WSAUD,            wsaud);
     REGISTER_DEMUXER (WSVQA,            wsvqa);
     REGISTER_DEMUXER (WTV,              wtv);
-    REGISTER_DEMUXER (WV,               wv);
+    REGISTER_MUXDEMUX(WV,               wv);
     REGISTER_DEMUXER (XA,               xa);
     REGISTER_DEMUXER (XMV,              xmv);
     REGISTER_DEMUXER (XWMA,             xwma);
@@ -281,6 +281,7 @@ void av_register_all(void)
     REGISTER_PROTOCOL(TCP,              tcp);
     REGISTER_PROTOCOL(TLS,              tls);
     REGISTER_PROTOCOL(UDP,              udp);
+    REGISTER_PROTOCOL(UNIX,             unix);
 
     /* external libraries */
     REGISTER_PROTOCOL(LIBRTMP,          librtmp);

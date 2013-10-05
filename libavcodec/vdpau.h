@@ -52,12 +52,14 @@
 #include <vdpau/vdpau.h>
 #include <vdpau/vdpau_x11.h>
 
-union VdpPictureInfo {
+#if FF_API_BUFS_VDPAU
+union AVVDPAUPictureInfo {
     VdpPictureInfoH264        h264;
     VdpPictureInfoMPEG1Or2    mpeg;
     VdpPictureInfoVC1          vc1;
     VdpPictureInfoMPEG4Part2 mpeg4;
 };
+#endif
 
 /**
  * This structure is used to share data between the libavcodec library and
@@ -83,18 +85,21 @@ typedef struct AVVDPAUContext {
      */
     VdpDecoderRender *render;
 
+#if FF_API_BUFS_VDPAU
     /**
      * VDPAU picture information
      *
      * Set by libavcodec.
      */
-    union VdpPictureInfo info;
+    attribute_deprecated
+    union AVVDPAUPictureInfo info;
 
     /**
      * Allocated size of the bitstream_buffers table.
      *
      * Set by libavcodec.
      */
+    attribute_deprecated
     int bitstream_buffers_allocated;
 
     /**
@@ -102,6 +107,7 @@ typedef struct AVVDPAUContext {
      *
      * Set by libavcodec.
      */
+    attribute_deprecated
     int bitstream_buffers_used;
 
    /**
@@ -110,10 +116,12 @@ typedef struct AVVDPAUContext {
      *
      * Set by libavcodec.
      */
+    attribute_deprecated
     VdpBitstreamBuffer *bitstream_buffers;
+#endif
 } AVVDPAUContext;
 
-
+#if FF_API_CAP_VDPAU
 /** @brief The videoSurface is used for rendering. */
 #define FF_VDPAU_STATE_USED_FOR_RENDER 1
 
@@ -136,7 +144,7 @@ struct vdpau_render_state {
     int state; ///< Holds FF_VDPAU_STATE_* values.
 
     /** picture parameter information for all supported codecs */
-    union VdpPictureInfo info;
+    union AVVDPAUPictureInfo info;
 
     /** Describe size/location of the compressed video data.
         Set to 0 when freeing bitstream_buffers. */
@@ -145,6 +153,7 @@ struct vdpau_render_state {
     /** The user is responsible for freeing this buffer using av_freep(). */
     VdpBitstreamBuffer *bitstream_buffers;
 };
+#endif
 
 /* @}*/
 

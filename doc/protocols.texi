@@ -164,11 +164,17 @@ content across a TCP/IP network.
 
 The required syntax is:
 @example
-rtmp://@var{server}[:@var{port}][/@var{app}][/@var{instance}][/@var{playpath}]
+rtmp://[@var{username}:@var{password}@@]@var{server}[:@var{port}][/@var{app}][/@var{instance}][/@var{playpath}]
 @end example
 
 The accepted parameters are:
 @table @option
+
+@item username
+An optional username (mostly for publishing).
+
+@item password
+An optional password (mostly for publishing).
 
 @item server
 The address of the RTMP server.
@@ -220,7 +226,8 @@ times to construct arbitrary AMF sequences.
 
 @item rtmp_flashver
 Version of the Flash plugin used to run the SWF player. The default
-is LNX 9,0,124,2.
+is LNX 9,0,124,2. (When publishing, the default is FMLE/3.0 (compatible;
+<libavformat version>).)
 
 @item rtmp_flush_interval
 Number of packets flushed in the same request (RTMPT only). The default
@@ -270,6 +277,12 @@ For example to read with @command{avplay} a multimedia resource named
 avplay rtmp://myserver/vod/sample
 @end example
 
+To publish to a password protected server, passing the playpath and
+app names separately:
+@example
+avconv -re -i <input> -f flv -rtmp_playpath some/long/path -rtmp_app long/app/name rtmp://username:password@@myserver/
+@end example
+
 @section rtmpe
 
 Encrypted Real-Time Messaging Protocol.
@@ -310,7 +323,7 @@ The Real-Time Messaging Protocol tunneled through HTTPS (RTMPTS) is used
 for streaming multimedia content within HTTPS requests to traverse
 firewalls.
 
-@section rtmp, rtmpe, rtmps, rtmpt, rtmpte
+@section librtmp rtmp, rtmpe, rtmps, rtmpt, rtmpte
 
 Real-Time Messaging Protocol and its variants supported through
 librtmp.
@@ -555,6 +568,52 @@ avplay tcp://@var{hostname}:@var{port}
 
 @end table
 
+@section tls
+
+Transport Layer Security (TLS) / Secure Sockets Layer (SSL)
+
+The required syntax for a TLS url is:
+@example
+tls://@var{hostname}:@var{port}
+@end example
+
+The following parameters can be set via command line options
+(or in code via @code{AVOption}s):
+
+@table @option
+
+@item ca_file
+A file containing certificate authority (CA) root certificates to treat
+as trusted. If the linked TLS library contains a default this might not
+need to be specified for verification to work, but not all libraries and
+setups have defaults built in.
+
+@item tls_verify=@var{1|0}
+If enabled, try to verify the peer that we are communicating with.
+Note, if using OpenSSL, this currently only makes sure that the
+peer certificate is signed by one of the root certificates in the CA
+database, but it does not validate that the certificate actually
+matches the host name we are trying to connect to. (With GnuTLS,
+the host name is validated as well.)
+
+This is disabled by default since it requires a CA database to be
+provided by the caller in many cases.
+
+@item cert_file
+A file containing a certificate to use in the handshake with the peer.
+(When operating as server, in listen mode, this is more often required
+by the peer, while client certificates only are mandated in certain
+setups.)
+
+@item key_file
+A file containing the private key for the certificate.
+
+@item listen=@var{1|0}
+If enabled, listen for connections on the provided port, and assume
+the server role in the handshake instead of the client role.
+
+@end table
+
 @section udp
 
 User Datagram Protocol.
@@ -564,7 +623,7 @@ The required syntax for a UDP url is:
 udp://@var{hostname}:@var{port}[?@var{options}]
 @end example
 
-@var{options} contains a list of &-seperated options of the form @var{key}=@var{val}.
+@var{options} contains a list of &-separated options of the form @var{key}=@var{val}.
 Follow the list of supported options.
 
 @table @option
@@ -625,5 +684,25 @@ To receive over UDP from a remote endpoint:
 @example
 avconv -i udp://[@var{multicast-address}]:@var{port}
 @end example
+
+@section unix
+
+Unix local socket
+
+The required syntax for a Unix socket URL is:
+
+@example
+unix://@var{filepath}
+@end example
+
+The following parameters can be set via command line options
+(or in code via @code{AVOption}s):
+
+@table @option
+@item timeout
+Timeout in ms.
+@item listen
+Create the Unix socket in listening mode.
+@end table
 
 @c man end PROTOCOLS

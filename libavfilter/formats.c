@@ -84,7 +84,7 @@ AVFilterFormats *ff_merge_formats(AVFilterFormats *a, AVFilterFormats *b)
     if (a == b)
         return a;
 
-    MERGE_FORMATS(ret, a, b, formats, format_count, AVFilterFormats, fail);
+    MERGE_FORMATS(ret, a, b, formats, nb_formats, AVFilterFormats, fail);
 
     return ret;
 fail:
@@ -103,9 +103,9 @@ AVFilterFormats *ff_merge_samplerates(AVFilterFormats *a,
 
     if (a == b) return a;
 
-    if (a->format_count && b->format_count) {
-        MERGE_FORMATS(ret, a, b, formats, format_count, AVFilterFormats, fail);
-    } else if (a->format_count) {
+    if (a->nb_formats && b->nb_formats) {
+        MERGE_FORMATS(ret, a, b, formats, nb_formats, AVFilterFormats, fail);
+    } else if (a->nb_formats) {
         MERGE_REF(a, b, formats, AVFilterFormats, fail);
         ret = a;
     } else {
@@ -173,7 +173,7 @@ AVFilterFormats *ff_make_format_list(const int *fmts)
     formats               = av_mallocz(sizeof(*formats));
     if (count)
         formats->formats  = av_malloc(sizeof(*formats->formats) * count);
-    formats->format_count = count;
+    formats->nb_formats = count;
     memcpy(formats->formats, fmts, sizeof(*formats->formats) * count);
 
     return formats;
@@ -198,7 +198,7 @@ do {                                                        \
 
 int ff_add_format(AVFilterFormats **avff, int fmt)
 {
-    ADD_FORMAT(avff, fmt, int, formats, format_count);
+    ADD_FORMAT(avff, fmt, int, formats, nb_formats);
 }
 
 int ff_add_channel_layout(AVFilterChannelLayouts **l, uint64_t channel_layout)
@@ -216,7 +216,7 @@ AVFilterFormats *ff_all_formats(enum AVMediaType type)
     for (fmt = 0; fmt < num_formats; fmt++) {
         const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(fmt);
         if ((type != AVMEDIA_TYPE_VIDEO) ||
-            (type == AVMEDIA_TYPE_VIDEO && !(desc->flags & PIX_FMT_HWACCEL)))
+            (type == AVMEDIA_TYPE_VIDEO && !(desc->flags & AV_PIX_FMT_FLAG_HWACCEL)))
             ff_add_format(&ret, fmt);
     }
 

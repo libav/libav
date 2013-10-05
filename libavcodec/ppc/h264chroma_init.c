@@ -20,15 +20,14 @@
 
 #include "config.h"
 #include "libavutil/attributes.h"
-#include "libavcodec/h264chroma.h"
-
-#if HAVE_ALTIVEC
 #include "libavutil/cpu.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/ppc/types_altivec.h"
 #include "libavutil/ppc/util_altivec.h"
+#include "libavcodec/h264chroma.h"
 #include "dsputil_altivec.h"
 
+#if HAVE_ALTIVEC
 #define PUT_OP_U8_ALTIVEC(d, s, dst) d = s
 #define AVG_OP_U8_ALTIVEC(d, s, dst) d = vec_avg(dst, s)
 
@@ -54,11 +53,12 @@ av_cold void ff_h264chroma_init_ppc(H264ChromaContext *c, int bit_depth)
 #if HAVE_ALTIVEC
     const int high_bit_depth = bit_depth > 8;
 
-    if (av_get_cpu_flags() & AV_CPU_FLAG_ALTIVEC) {
+    if (!(av_get_cpu_flags() & AV_CPU_FLAG_ALTIVEC))
+        return;
+
     if (!high_bit_depth) {
         c->put_h264_chroma_pixels_tab[0] = put_h264_chroma_mc8_altivec;
         c->avg_h264_chroma_pixels_tab[0] = avg_h264_chroma_mc8_altivec;
-    }
     }
 #endif /* HAVE_ALTIVEC */
 }

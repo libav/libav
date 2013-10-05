@@ -98,11 +98,11 @@ static av_cold int raw_init_decoder(AVCodecContext *avctx)
         return AVERROR(EINVAL);
     }
 
-    if (desc->flags & (PIX_FMT_PAL | PIX_FMT_PSEUDOPAL)) {
+    if (desc->flags & (AV_PIX_FMT_FLAG_PAL | AV_PIX_FMT_FLAG_PSEUDOPAL)) {
         context->palette = av_buffer_alloc(AVPALETTE_SIZE);
         if (!context->palette)
             return AVERROR(ENOMEM);
-        if (desc->flags & PIX_FMT_PSEUDOPAL)
+        if (desc->flags & AV_PIX_FMT_FLAG_PSEUDOPAL)
             avpriv_set_systematic_pal2((uint32_t*)context->palette->data, avctx->pix_fmt);
         else
             memset(context->palette->data, 0, AVPALETTE_SIZE);
@@ -210,7 +210,7 @@ static int raw_decode(AVCodecContext *avctx, void *data, int *got_frame,
     }
 
     if ((avctx->pix_fmt == AV_PIX_FMT_PAL8 && buf_size < context->frame_size) ||
-        (desc->flags & PIX_FMT_PSEUDOPAL)) {
+        (desc->flags & AV_PIX_FMT_FLAG_PSEUDOPAL)) {
         frame->buf[1]  = av_buffer_ref(context->palette);
         if (!frame->buf[1])
             return AVERROR(ENOMEM);
@@ -254,11 +254,11 @@ static av_cold int raw_close_decoder(AVCodecContext *avctx)
 
 AVCodec ff_rawvideo_decoder = {
     .name           = "rawvideo",
+    .long_name      = NULL_IF_CONFIG_SMALL("raw video"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_RAWVIDEO,
     .priv_data_size = sizeof(RawVideoContext),
     .init           = raw_init_decoder,
     .close          = raw_close_decoder,
     .decode         = raw_decode,
-    .long_name      = NULL_IF_CONFIG_SMALL("raw video"),
 };

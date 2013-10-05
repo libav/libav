@@ -25,24 +25,13 @@
 #include "libavutil/x86/cpu.h"
 #include "libavcodec/h264qpel.h"
 #include "libavcodec/mpegvideo.h"
-#include "dsputil_mmx.h"
+#include "dsputil_x86.h"
 
 #if HAVE_YASM
-void ff_put_pixels4_mmxext(uint8_t *block, const uint8_t *pixels, int line_size, int h);
-void ff_avg_pixels4_mmxext(uint8_t *block, const uint8_t *pixels, int line_size, int h);
-void ff_put_pixels8_mmxext(uint8_t *block, const uint8_t *pixels, int line_size, int h);
-static void ff_put_pixels16_mmxext(uint8_t *block, const uint8_t *pixels,
-                                   int line_size, int h)
-{
-    ff_put_pixels8_mmxext(block,     pixels,     line_size, h);
-    ff_put_pixels8_mmxext(block + 8, pixels + 8, line_size, h);
-}
-static void ff_avg_pixels16_mmxext(uint8_t *block, const uint8_t *pixels,
-                                   int line_size, int h)
-{
-    ff_avg_pixels8_mmxext(block,     pixels,     line_size, h);
-    ff_avg_pixels8_mmxext(block + 8, pixels + 8, line_size, h);
-}
+void ff_put_pixels4_mmxext(uint8_t *block, const uint8_t *pixels,
+                           ptrdiff_t line_size, int h);
+void ff_avg_pixels4_mmxext(uint8_t *block, const uint8_t *pixels,
+                           ptrdiff_t line_size, int h);
 void ff_put_pixels4_l2_mmxext(uint8_t *dst, uint8_t *src1, uint8_t *src2,
                               int dstStride, int src1Stride, int h);
 void ff_avg_pixels4_l2_mmxext(uint8_t *dst, uint8_t *src1, uint8_t *src2,
@@ -55,14 +44,13 @@ void ff_put_pixels16_l2_mmxext(uint8_t *dst, uint8_t *src1, uint8_t *src2,
                                int dstStride, int src1Stride, int h);
 void ff_avg_pixels16_l2_mmxext(uint8_t *dst, uint8_t *src1, uint8_t *src2,
                                int dstStride, int src1Stride, int h);
-void ff_put_pixels16_sse2(uint8_t *block, const uint8_t *pixels,
-                          int line_size, int h);
-void ff_avg_pixels16_sse2(uint8_t *block, const uint8_t *pixels,
-                          int line_size, int h);
 #define ff_put_pixels8_l2_sse2  ff_put_pixels8_l2_mmxext
 #define ff_avg_pixels8_l2_sse2  ff_avg_pixels8_l2_mmxext
 #define ff_put_pixels16_l2_sse2 ff_put_pixels16_l2_mmxext
 #define ff_avg_pixels16_l2_sse2 ff_avg_pixels16_l2_mmxext
+
+PIXELS16(static, ff_avg, , , _mmxext)
+PIXELS16(static, ff_put, , , _mmxext)
 
 #define DEF_QPEL(OPNAME)\
 void ff_ ## OPNAME ## _h264_qpel4_h_lowpass_mmxext(uint8_t *dst, uint8_t *src, int dstStride, int srcStride);\
@@ -209,7 +197,12 @@ static av_always_inline void ff_ ## OPNAME ## h264_qpel16_v_lowpass_ ## MMX(uint
     ff_ ## OPNAME ## h264_qpel8or16_v_lowpass_ ## MMX(dst+8, src+8, dstStride, srcStride, 16);\
 }
 
-static av_always_inline void ff_put_h264_qpel8or16_hv1_lowpass_sse2(int16_t *tmp, uint8_t *src, int tmpStride, int srcStride, int size){
+static av_always_inline void put_h264_qpel8or16_hv1_lowpass_sse2(int16_t *tmp,
+                                                                 uint8_t *src,
+                                                                 int tmpStride,
+                                                                 int srcStride,
+                                                                 int size)
+{
     int w = (size+8)>>3;
     src -= 2*srcStride+2;
     while(w--){
@@ -221,7 +214,7 @@ static av_always_inline void ff_put_h264_qpel8or16_hv1_lowpass_sse2(int16_t *tmp
 
 #define QPEL_H264_HV_XMM(OPNAME, OP, MMX)\
 static av_always_inline void ff_ ## OPNAME ## h264_qpel8or16_hv_lowpass_ ## MMX(uint8_t *dst, int16_t *tmp, uint8_t *src, int dstStride, int tmpStride, int srcStride, int size){\
-    ff_put_h264_qpel8or16_hv1_lowpass_sse2(tmp, src, tmpStride, srcStride, size);\
+    put_h264_qpel8or16_hv1_lowpass_sse2(tmp, src, tmpStride, srcStride, size);\
     ff_ ## OPNAME ## h264_qpel8or16_hv2_lowpass_ ## MMX(dst, tmp, dstStride, tmpStride, size);\
 }\
 static av_always_inline void ff_ ## OPNAME ## h264_qpel8_hv_lowpass_ ## MMX(uint8_t *dst, int16_t *tmp, uint8_t *src, int dstStride, int tmpStride, int srcStride){\
@@ -394,8 +387,6 @@ QPEL(put_, 16,XMM, 16)\
 QPEL(avg_, 8, XMM, 16)\
 QPEL(avg_, 16,XMM, 16)\
 
-#undef PAVGB
-#define PAVGB "pavgb"
 QPEL_H264(put_,        PUT_OP, mmxext)
 QPEL_H264(avg_, AVG_MMXEXT_OP, mmxext)
 QPEL_H264_V_XMM(put_,       PUT_OP, sse2)
@@ -406,7 +397,6 @@ QPEL_H264_H_XMM(put_,       PUT_OP, ssse3)
 QPEL_H264_H_XMM(avg_,AVG_MMXEXT_OP, ssse3)
 QPEL_H264_HV_XMM(put_,       PUT_OP, ssse3)
 QPEL_H264_HV_XMM(avg_,AVG_MMXEXT_OP, ssse3)
-#undef PAVGB
 
 H264_MC_4816(mmxext)
 H264_MC_816(H264_MC_V, sse2)
@@ -552,9 +542,9 @@ av_cold void ff_h264qpel_init_x86(H264QpelContext *c, int bit_depth)
 {
 #if HAVE_YASM
     int high_bit_depth = bit_depth > 8;
-    int mm_flags = av_get_cpu_flags();
+    int cpu_flags = av_get_cpu_flags();
 
-    if (EXTERNAL_MMXEXT(mm_flags)) {
+    if (EXTERNAL_MMXEXT(cpu_flags)) {
         if (!high_bit_depth) {
             SET_QPEL_FUNCS(put_h264_qpel, 0, 16, mmxext, );
             SET_QPEL_FUNCS(put_h264_qpel, 1,  8, mmxext, );
@@ -574,8 +564,8 @@ av_cold void ff_h264qpel_init_x86(H264QpelContext *c, int bit_depth)
         }
     }
 
-    if (EXTERNAL_SSE2(mm_flags)) {
-        if (!(mm_flags & AV_CPU_FLAG_SSE2SLOW) && !high_bit_depth) {
+    if (EXTERNAL_SSE2(cpu_flags)) {
+        if (!(cpu_flags & AV_CPU_FLAG_SSE2SLOW) && !high_bit_depth) {
             // these functions are slower than mmx on AMD, but faster on Intel
             H264_QPEL_FUNCS(0, 0, sse2);
         }
@@ -606,7 +596,7 @@ av_cold void ff_h264qpel_init_x86(H264QpelContext *c, int bit_depth)
         }
     }
 
-    if (EXTERNAL_SSSE3(mm_flags)) {
+    if (EXTERNAL_SSSE3(cpu_flags)) {
         if (!high_bit_depth) {
             H264_QPEL_FUNCS(1, 0, ssse3);
             H264_QPEL_FUNCS(1, 1, ssse3);
@@ -629,7 +619,7 @@ av_cold void ff_h264qpel_init_x86(H264QpelContext *c, int bit_depth)
         }
     }
 
-    if (EXTERNAL_AVX(mm_flags)) {
+    if (EXTERNAL_AVX(cpu_flags)) {
         /* AVX implies 64 byte cache lines without the need to avoid unaligned
          * memory accesses that cross the boundary between two cache lines.
          * TODO: Port X264_CPU_CACHELINE_32/64 detection from x264 to avoid

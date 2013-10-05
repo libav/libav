@@ -25,6 +25,7 @@
  * H.261 encoder.
  */
 
+#include "libavutil/attributes.h"
 #include "avcodec.h"
 #include "mpegvideo.h"
 #include "h263.h"
@@ -311,7 +312,7 @@ void ff_h261_encode_mb(MpegEncContext *s, int16_t block[6][64],
     }
 }
 
-void ff_h261_encode_init(MpegEncContext *s)
+av_cold void ff_h261_encode_init(MpegEncContext *s)
 {
     ff_h261_common_init();
 
@@ -325,6 +326,7 @@ FF_MPV_GENERIC_CLASS(h261)
 
 AVCodec ff_h261_encoder = {
     .name           = "h261",
+    .long_name      = NULL_IF_CONFIG_SMALL("H.261"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_H261,
     .priv_data_size = sizeof(H261Context),
@@ -333,6 +335,5 @@ AVCodec ff_h261_encoder = {
     .close          = ff_MPV_encode_end,
     .pix_fmts       = (const enum AVPixelFormat[]) { AV_PIX_FMT_YUV420P,
                                                      AV_PIX_FMT_NONE },
-    .long_name      = NULL_IF_CONFIG_SMALL("H.261"),
     .priv_class     = &h261_class,
 };

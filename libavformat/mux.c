@@ -19,8 +19,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-/* #define DEBUG */
-
 #include "avformat.h"
 #include "avio_internal.h"
 #include "internal.h"
@@ -33,6 +31,7 @@
 #include "id3v2.h"
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
+#include "libavutil/internal.h"
 #include "libavutil/mathematics.h"
 #include "libavutil/parseutils.h"
 #include "libavutil/time.h"
@@ -189,13 +188,18 @@ static int init_muxer(AVFormatContext *s, AVDictionary **options)
 
             if (av_cmp_q(st->sample_aspect_ratio,
                          codec->sample_aspect_ratio)) {
-                av_log(s, AV_LOG_ERROR, "Aspect ratio mismatch between muxer "
-                                        "(%d/%d) and encoder layer (%d/%d)\n",
-                       st->sample_aspect_ratio.num, st->sample_aspect_ratio.den,
-                       codec->sample_aspect_ratio.num,
-                       codec->sample_aspect_ratio.den);
-                ret = AVERROR(EINVAL);
-                goto fail;
+                if (st->sample_aspect_ratio.num != 0 &&
+                    st->sample_aspect_ratio.den != 0 &&
+                    codec->sample_aspect_ratio.den != 0 &&
+                    codec->sample_aspect_ratio.den != 0) {
+                    av_log(s, AV_LOG_ERROR, "Aspect ratio mismatch between muxer "
+                            "(%d/%d) and encoder layer (%d/%d)\n",
+                            st->sample_aspect_ratio.num, st->sample_aspect_ratio.den,
+                            codec->sample_aspect_ratio.num,
+                            codec->sample_aspect_ratio.den);
+                    ret = AVERROR(EINVAL);
+                    goto fail;
+                }
             }
             break;
         }
@@ -391,6 +395,40 @@ static int compute_pkt_fields2(AVFormatContext *s, AVStream *st, AVPacket *pkt)
     return 0;
 }
 
+/*
+ * FIXME: this function should NEVER get undefined pts/dts beside when the
+ * AVFMT_NOTIMESTAMPS is set.
+ * Those additional safety checks should be dropped once the correct checks
+ * are set in the callers.
+ */
+
+static int write_packet(AVFormatContext *s, AVPacket *pkt)
+{
+    int ret;
+    if (!(s->oformat->flags & (AVFMT_TS_NEGATIVE | AVFMT_NOTIMESTAMPS))) {
+        AVRational time_base = s->streams[pkt->stream_index]->time_base;
+        int64_t offset = 0;
+
+        if (!s->offset && pkt->dts != AV_NOPTS_VALUE && pkt->dts < 0) {
+            s->offset = -pkt->dts;
+            s->offset_timebase = time_base;
+        }
+        if (s->offset)
+            offset = av_rescale_q(s->offset, s->offset_timebase, time_base);
+
+        if (pkt->dts != AV_NOPTS_VALUE)
+            pkt->dts += offset;
+        if (pkt->pts != AV_NOPTS_VALUE)
+            pkt->pts += offset;
+    }
+    ret = s->oformat->write_packet(s, pkt);
+
+    if (s->pb && ret >= 0 && s->flags & AVFMT_FLAG_FLUSH_PACKETS)
+        avio_flush(s->pb);
+
+    return ret;
+}
+
 int av_write_frame(AVFormatContext *s, AVPacket *pkt)
 {
     int ret;
@@ -406,7 +444,7 @@ int av_write_frame(AVFormatContext *s, AVPacket *pkt)
     if (ret < 0 && !(s->oformat->flags & AVFMT_NOTIMESTAMPS))
         return ret;
 
-    ret = s->oformat->write_packet(s, pkt);
+    ret = write_packet(s, pkt);
 
     if (ret >= 0)
         s->streams[pkt->stream_index]->nb_frames++;
@@ -421,7 +459,9 @@ void ff_interleave_add_packet(AVFormatContext *s, AVPacket *pkt,
     this_pktl      = av_mallocz(sizeof(AVPacketList));
     this_pktl->pkt = *pkt;
 #if FF_API_DESTRUCT_PACKET
+FF_DISABLE_DEPRECATION_WARNINGS
     pkt->destruct  = NULL;           // do not free original but only the copy
+FF_ENABLE_DEPRECATION_WARNINGS
 #endif
     pkt->buf       = NULL;
     av_dup_packet(&this_pktl->pkt);  // duplicate the packet if it uses non-alloced memory
@@ -451,7 +491,8 @@ next_non_null:
         *next_point                                      = this_pktl;
 }
 
-static int ff_interleave_compare_dts(AVFormatContext *s, AVPacket *next, AVPacket *pkt)
+static int interleave_compare_dts(AVFormatContext *s, AVPacket *next,
+                                  AVPacket *pkt)
 {
     AVStream *st  = s->streams[pkt->stream_index];
     AVStream *st2 = s->streams[next->stream_index];
@@ -471,7 +512,7 @@ int ff_interleave_packet_per_dts(AVFormatContext *s, AVPacket *out,
     int i;
 
     if (pkt) {
-        ff_interleave_add_packet(s, pkt, ff_interleave_compare_dts);
+        ff_interleave_add_packet(s, pkt, interleave_compare_dts);
     }
 
     for (i = 0; i < s->nb_streams; i++)
@@ -544,7 +585,7 @@ int av_interleaved_write_frame(AVFormatContext *s, AVPacket *pkt)
         if (ret <= 0) //FIXME cleanup needed for ret<0 ?
             return ret;
 
-        ret = s->oformat->write_packet(s, &opkt);
+        ret = write_packet(s, &opkt);
         if (ret >= 0)
             s->streams[opkt.stream_index]->nb_frames++;
 
@@ -568,7 +609,7 @@ int av_write_trailer(AVFormatContext *s)
         if (!ret)
             break;
 
-        ret = s->oformat->write_packet(s, &pkt);
+        ret = write_packet(s, &pkt);
         if (ret >= 0)
             s->streams[pkt.stream_index]->nb_frames++;
 
@@ -593,4 +634,22 @@ fail:
         av_opt_free(s->priv_data);
     av_freep(&s->priv_data);
     return ret;
+}
+
+int ff_write_chained(AVFormatContext *dst, int dst_stream, AVPacket *pkt,
+                     AVFormatContext *src)
+{
+    AVPacket local_pkt;
+
+    local_pkt = *pkt;
+    local_pkt.stream_index = dst_stream;
+    if (pkt->pts != AV_NOPTS_VALUE)
+        local_pkt.pts = av_rescale_q(pkt->pts,
+                                     src->streams[pkt->stream_index]->time_base,
+                                     dst->streams[dst_stream]->time_base);
+    if (pkt->dts != AV_NOPTS_VALUE)
+        local_pkt.dts = av_rescale_q(pkt->dts,
+                                     src->streams[pkt->stream_index]->time_base,
+                                     dst->streams[dst_stream]->time_base);
+    return av_write_frame(dst, &local_pkt);
 }

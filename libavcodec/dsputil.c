@@ -27,6 +27,7 @@
  * DSP utils
  */
 
+#include "libavutil/attributes.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/internal.h"
 #include "avcodec.h"
@@ -43,11 +44,7 @@
 
 uint32_t ff_squareTbl[512] = {0, };
 
-#define BIT_DEPTH 9
-#include "dsputil_template.c"
-#undef BIT_DEPTH
-
-#define BIT_DEPTH 10
+#define BIT_DEPTH 16
 #include "dsputil_template.c"
 #undef BIT_DEPTH
 
@@ -110,7 +107,9 @@ static const uint8_t simple_mmx_permutation[64]={
 
 static const uint8_t idct_sse2_row_perm[8] = {0, 4, 1, 5, 2, 6, 3, 7};
 
-void ff_init_scantable(uint8_t *permutation, ScanTable *st, const uint8_t *src_scantable){
+av_cold void ff_init_scantable(uint8_t *permutation, ScanTable *st,
+                               const uint8_t *src_scantable)
+{
     int i;
     int end;
 
@@ -131,8 +130,8 @@ void ff_init_scantable(uint8_t *permutation, ScanTable *st, const uint8_t *src_s
     }
 }
 
-void ff_init_scantable_permutation(uint8_t *idct_permutation,
-                                   int idct_permutation_type)
+av_cold void ff_init_scantable_permutation(uint8_t *idct_permutation,
+                                           int idct_permutation_type)
 {
     int i;
 
@@ -2487,12 +2486,12 @@ static void vector_clip_int32_c(int32_t *dst, const int32_t *src, int32_t min,
     } while (len > 0);
 }
 
-static void ff_jref_idct_put(uint8_t *dest, int line_size, int16_t *block)
+static void jref_idct_put(uint8_t *dest, int line_size, int16_t *block)
 {
     ff_j_rev_dct (block);
     put_pixels_clamped_c(block, dest, line_size);
 }
-static void ff_jref_idct_add(uint8_t *dest, int line_size, int16_t *block)
+static void jref_idct_add(uint8_t *dest, int line_size, int16_t *block)
 {
     ff_j_rev_dct (block);
     add_pixels_clamped_c(block, dest, line_size);
@@ -2561,8 +2560,8 @@ av_cold void ff_dsputil_init(DSPContext* c, AVCodecContext *avctx)
         c->idct_permutation_type = FF_NO_IDCT_PERM;
     } else {
         if(avctx->idct_algo==FF_IDCT_INT){
-            c->idct_put= ff_jref_idct_put;
-            c->idct_add= ff_jref_idct_add;
+            c->idct_put= jref_idct_put;
+            c->idct_add= jref_idct_add;
             c->idct    = ff_j_rev_dct;
             c->idct_permutation_type= FF_LIBMPEG2_IDCT_PERM;
         }else if(avctx->idct_algo==FF_IDCT_FAAN){
@@ -2723,63 +2722,43 @@ av_cold void ff_dsputil_init(DSPContext* c, AVCodecContext *avctx)
 
     c->add_pixels8 = add_pixels8_c;
 
-#define hpel_funcs(prefix, idx, num) \
-    c->prefix ## _pixels_tab idx [0] = prefix ## _pixels ## num ## _8_c; \
-    c->prefix ## _pixels_tab idx [1] = prefix ## _pixels ## num ## _x2_8_c; \
-    c->prefix ## _pixels_tab idx [2] = prefix ## _pixels ## num ## _y2_8_c; \
-    c->prefix ## _pixels_tab idx [3] = prefix ## _pixels ## num ## _xy2_8_c
-
-    hpel_funcs(put, [0], 16);
-    hpel_funcs(put, [1],  8);
-    hpel_funcs(put, [2],  4);
-    hpel_funcs(put, [3],  2);
-    hpel_funcs(put_no_rnd, [0], 16);
-    hpel_funcs(put_no_rnd, [1],  8);
-    hpel_funcs(avg, [0], 16);
-    hpel_funcs(avg, [1],  8);
-    hpel_funcs(avg, [2],  4);
-    hpel_funcs(avg, [3],  2);
-    hpel_funcs(avg_no_rnd,, 16);
-
 #undef FUNC
 #undef FUNCC
 #define FUNC(f, depth) f ## _ ## depth
 #define FUNCC(f, depth) f ## _ ## depth ## _c
 
-#define BIT_DEPTH_FUNCS(depth, dct)\
-    c->get_pixels                    = FUNCC(get_pixels   ## dct   , depth);\
-    c->draw_edges                    = FUNCC(draw_edges            , depth);\
-    c->clear_block                   = FUNCC(clear_block  ## dct   , depth);\
-    c->clear_blocks                  = FUNCC(clear_blocks ## dct   , depth);\
+    c->draw_edges                    = FUNCC(draw_edges, 8);
+    c->clear_block                   = FUNCC(clear_block, 8);
+    c->clear_blocks                  = FUNCC(clear_blocks, 8);
+
+#define BIT_DEPTH_FUNCS(depth) \
+    c->get_pixels                    = FUNCC(get_pixels,   depth);
 
     switch (avctx->bits_per_raw_sample) {
     case 9:
-        if (c->dct_bits == 32) {
-            BIT_DEPTH_FUNCS(9, _32);
-        } else {
-            BIT_DEPTH_FUNCS(9, _16);
-        }
-        break;
     case 10:
-        if (c->dct_bits == 32) {
-            BIT_DEPTH_FUNCS(10, _32);
-        } else {
-            BIT_DEPTH_FUNCS(10, _16);
-        }
+        BIT_DEPTH_FUNCS(16);
         break;
     default:
-        BIT_DEPTH_FUNCS(8, _16);
+        BIT_DEPTH_FUNCS(8);
         break;
     }
 
 
-    if (HAVE_MMX)        ff_dsputil_init_mmx   (c, avctx);
-    if (ARCH_ARM)        ff_dsputil_init_arm   (c, avctx);
-    if (HAVE_VIS)        ff_dsputil_init_vis   (c, avctx);
-    if (ARCH_ALPHA)      ff_dsputil_init_alpha (c, avctx);
-    if (ARCH_PPC)        ff_dsputil_init_ppc   (c, avctx);
-    if (ARCH_SH4)        ff_dsputil_init_sh4   (c, avctx);
-    if (ARCH_BFIN)       ff_dsputil_init_bfin  (c, avctx);
+    if (ARCH_ALPHA)
+        ff_dsputil_init_alpha(c, avctx);
+    if (ARCH_ARM)
+        ff_dsputil_init_arm(c, avctx);
+    if (ARCH_BFIN)
+        ff_dsputil_init_bfin(c, avctx);
+    if (ARCH_PPC)
+        ff_dsputil_init_ppc(c, avctx);
+    if (ARCH_SH4)
+        ff_dsputil_init_sh4(c, avctx);
+    if (HAVE_VIS)
+        ff_dsputil_init_vis(c, avctx);
+    if (ARCH_X86)
+        ff_dsputil_init_x86(c, avctx);
 
     ff_init_scantable_permutation(c->idct_permutation,
                                   c->idct_permutation_type);

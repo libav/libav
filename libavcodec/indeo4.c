@@ -56,8 +56,8 @@ static const struct {
     int             is_2d_trans;
 } transforms[18] = {
     { ff_ivi_inverse_haar_8x8,  ff_ivi_dc_haar_2d,       1 },
-    { NULL, NULL, 0 }, /* inverse Haar 8x1 */
-    { NULL, NULL, 0 }, /* inverse Haar 1x8 */
+    { ff_ivi_row_haar8,         ff_ivi_dc_haar_2d,       0 },
+    { ff_ivi_col_haar8,         ff_ivi_dc_haar_2d,       0 },
     { ff_ivi_put_pixels_8x8,    ff_ivi_put_dc_pixel_8x8, 1 },
     { ff_ivi_inverse_slant_8x8, ff_ivi_dc_slant_2d,      1 },
     { ff_ivi_row_slant8,        ff_ivi_dc_row_slant,     1 },
@@ -65,13 +65,13 @@ static const struct {
     { NULL, NULL, 0 }, /* inverse DCT 8x8 */
     { NULL, NULL, 0 }, /* inverse DCT 8x1 */
     { NULL, NULL, 0 }, /* inverse DCT 1x8 */
-    { NULL, NULL, 0 }, /* inverse Haar 4x4 */
+    { ff_ivi_inverse_haar_4x4,  ff_ivi_dc_haar_2d,       1 },
     { ff_ivi_inverse_slant_4x4, ff_ivi_dc_slant_2d,      1 },
     { NULL, NULL, 0 }, /* no transform 4x4 */
-    { NULL, NULL, 0 }, /* inverse Haar 1x4 */
-    { NULL, NULL, 0 }, /* inverse Haar 4x1 */
-    { NULL, NULL, 0 }, /* inverse slant 1x4 */
-    { NULL, NULL, 0 }, /* inverse slant 4x1 */
+    { ff_ivi_row_haar4,         ff_ivi_dc_haar_2d,       0 },
+    { ff_ivi_col_haar4,         ff_ivi_dc_haar_2d,       0 },
+    { ff_ivi_row_slant4,        ff_ivi_dc_row_slant,     0 },
+    { ff_ivi_col_slant4,        ff_ivi_dc_col_slant,     0 },
     { NULL, NULL, 0 }, /* inverse DCT 4x4 */
 };
 
@@ -209,6 +209,7 @@ static int decode_pic_hdr(IVI45DecContext *ctx, AVCodecContext *avctx)
     if (ivi_pic_config_cmp(&pic_conf, &ctx->pic_conf)) {
         if (ff_ivi_init_planes(ctx->planes, &pic_conf)) {
             av_log(avctx, AV_LOG_ERROR, "Couldn't reallocate color planes!\n");
+            ctx->pic_conf.luma_bands = 0;
             return AVERROR(ENOMEM);
         }
 
@@ -346,12 +347,25 @@ static int decode_band_hdr(IVI45DecContext *ctx, IVIBandDesc *band,
             band->inv_transform = transforms[transform_id].inv_trans;
             band->dc_transform  = transforms[transform_id].dc_trans;
             band->is_2d_trans   = transforms[transform_id].is_2d_trans;
+            if (transform_id < 10)
+                band->transform_size = 8;
+            else
+                band->transform_size = 4;
+
+            if (band->blk_size != band->transform_size)
+                return AVERROR_INVALIDDATA;
 
             scan_indx = get_bits(&ctx->gb, 4);
             if (scan_indx == 15) {
                 av_log(avctx, AV_LOG_ERROR, "Custom scan pattern encountered!\n");
                 return AVERROR_INVALIDDATA;
             }
+            if (scan_indx > 4 && scan_indx < 10) {
+                if (band->blk_size != 4)
+                    return AVERROR_INVALIDDATA;
+            } else if (band->blk_size != 8)
+                return AVERROR_INVALIDDATA;
+
             band->scan = scan_index_to_tab[scan_indx];
 
             band->quant_mat = get_bits(&ctx->gb, 5);
@@ -359,12 +373,20 @@ static int decode_band_hdr(IVI45DecContext *ctx, IVIBandDesc *band,
                 av_log(avctx, AV_LOG_ERROR, "Custom quant matrix encountered!\n");
                 return AVERROR_INVALIDDATA;
             }
+            if (band->quant_mat >= FF_ARRAY_ELEMS(quant_index_to_tab)) {
+                avpriv_request_sample(avctx, "Quantization matrix %d",
+                                      band->quant_mat);
+                return AVERROR_INVALIDDATA;
+            }
         }
 
         /* decode block huffman codebook */
-        if (ff_ivi_dec_huff_desc(&ctx->gb, get_bits1(&ctx->gb), IVI_BLK_HUFF,
-                                 &band->blk_vlc, avctx))
-            return AVERROR_INVALIDDATA;
+        if (!get_bits1(&ctx->gb))
+            band->blk_vlc.tab = ctx->blk_vlc.tab;
+        else
+            if (ff_ivi_dec_huff_desc(&ctx->gb, 1, IVI_BLK_HUFF,
+                                     &band->blk_vlc, avctx))
+                return AVERROR_INVALIDDATA;
 
         /* select appropriate rvmap table for this band */
         band->rvmap_sel = get_bits1(&ctx->gb) ? get_bits(&ctx->gb, 3) : 8;
@@ -456,7 +478,7 @@ static int decode_mb_info(IVI45DecContext *ctx, IVIBandDesc *band,
                 }
 
                 mb->mv_x = mb->mv_y = 0; /* no motion vector coded */
-                if (band->inherit_mv) {
+                if (band->inherit_mv && ref_mb) {
                     /* motion vector inheritance */
                     if (mv_scale) {
                         mb->mv_x = ivi_scale_mv(ref_mb->mv_x, mv_scale);
@@ -468,7 +490,10 @@ static int decode_mb_info(IVI45DecContext *ctx, IVIBandDesc *band,
                 }
             } else {
                 if (band->inherit_mv) {
-                    mb->type = ref_mb->type; /* copy mb_type from corresponding reference mb */
+                    /* copy mb_type from corresponding reference mb */
+                    if (!ref_mb)
+                        return AVERROR_INVALIDDATA;
+                    mb->type = ref_mb->type;
                 } else if (ctx->frame_type == FRAMETYPE_INTRA ||
                            ctx->frame_type == FRAMETYPE_INTRA1) {
                     mb->type = 0; /* mb_type is always INTRA for intra-frames */
@@ -492,14 +517,15 @@ static int decode_mb_info(IVI45DecContext *ctx, IVIBandDesc *band,
                     mb->mv_x = mb->mv_y = 0; /* there is no motion vector in intra-macroblocks */
                 } else {
                     if (band->inherit_mv) {
-                        /* motion vector inheritance */
-                        if (mv_scale) {
-                            mb->mv_x = ivi_scale_mv(ref_mb->mv_x, mv_scale);
-                            mb->mv_y = ivi_scale_mv(ref_mb->mv_y, mv_scale);
-                        } else {
-                            mb->mv_x = ref_mb->mv_x;
-                            mb->mv_y = ref_mb->mv_y;
-                        }
+                        if (ref_mb)
+                            /* motion vector inheritance */
+                            if (mv_scale) {
+                                mb->mv_x = ivi_scale_mv(ref_mb->mv_x, mv_scale);
+                                mb->mv_y = ivi_scale_mv(ref_mb->mv_y, mv_scale);
+                            } else {
+                                mb->mv_x = ref_mb->mv_x;
+                                mb->mv_y = ref_mb->mv_y;
+                            }
                     } else {
                         /* decode motion vector deltas */
                         mv_delta = get_vlc2(&ctx->gb, ctx->mb_vlc.tab->table,
@@ -599,12 +625,12 @@ static av_cold int decode_init(AVCodecContext *avctx)
 
 AVCodec ff_indeo4_decoder = {
     .name           = "indeo4",
+    .long_name      = NULL_IF_CONFIG_SMALL("Intel Indeo Video Interactive 4"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_INDEO4,
     .priv_data_size = sizeof(IVI45DecContext),
     .init           = decode_init,
     .close          = ff_ivi_decode_close,
     .decode         = ff_ivi_decode_frame,
-    .long_name      = NULL_IF_CONFIG_SMALL("Intel Indeo Video Interactive 4"),
     .capabilities   = CODEC_CAP_DR1,
 };
