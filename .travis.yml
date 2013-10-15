@@ -1,0 +1,15 @@
+
+language: c
+
+compiler:
+  - clang
+  - gcc
+
+script: ./configure && make
+
+notifications:
+  recipients:
+    - arnaud.marcantoine@gmail.com
+  email:
+    on_success: change
+    on_failure: always
