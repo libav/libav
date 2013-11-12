@@ -220,14 +220,12 @@ static inline int hpel_motion(MpegEncContext *s,
         dxy &= ~2;
     src += src_y * stride + src_x;
 
-    if(s->unrestricted_mv && (s->flags&CODEC_FLAG_EMU_EDGE)){
-        if(   (unsigned)src_x > FFMAX(h_edge_pos - (motion_x&1) - w, 0)
-           || (unsigned)src_y > FFMAX(v_edge_pos - (motion_y&1) - h, 0)){
-            s->dsp.emulated_edge_mc(s->edge_emu_buffer, src, s->linesize, w+1, (h+1)<<field_based,
-                             src_x, src_y<<field_based, h_edge_pos, s->v_edge_pos);
-            src= s->edge_emu_buffer;
-            emu=1;
-        }
+    if(   (unsigned)src_x > FFMAX(h_edge_pos - (motion_x&1) - w, 0)
+          || (unsigned)src_y > FFMAX(v_edge_pos - (motion_y&1) - h, 0)){
+        s->dsp.emulated_edge_mc(s->edge_emu_buffer, src, s->linesize, w+1, (h+1)<<field_based,
+                                src_x, src_y<<field_based, h_edge_pos, s->v_edge_pos);
+        src= s->edge_emu_buffer;
+        emu=1;
     }
     if(field_select)
         src += s->linesize;
