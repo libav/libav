@@ -538,6 +538,7 @@ static const StreamType ISO_types[] = {
     { 0x11, AVMEDIA_TYPE_AUDIO,   AV_CODEC_ID_AAC_LATM }, /* LATM syntax */
     { 0x1b, AVMEDIA_TYPE_VIDEO,       AV_CODEC_ID_H264 },
     { 0x24, AVMEDIA_TYPE_VIDEO,       AV_CODEC_ID_HEVC },
+    { 0x27, AVMEDIA_TYPE_VIDEO,       AV_CODEC_ID_HEVC },	// HEVC Video for playing MPEG TS has stream_type 0x27
     { 0x42, AVMEDIA_TYPE_VIDEO,       AV_CODEC_ID_CAVS },
     { 0xd1, AVMEDIA_TYPE_VIDEO,      AV_CODEC_ID_DIRAC },
     { 0xea, AVMEDIA_TYPE_VIDEO,        AV_CODEC_ID_VC1 },
