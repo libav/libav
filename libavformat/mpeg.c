@@ -424,6 +424,10 @@ static int mpegps_read_packet(AVFormatContext *s,
         } else if(es_type == STREAM_TYPE_VIDEO_H264){
             codec_id = AV_CODEC_ID_H264;
             type = AVMEDIA_TYPE_VIDEO;
+		// HEVC Video for MPEG TS Play
+        } else if(es_type == STREAM_TYPE_VIDEO_HEVC){
+            codec_id = AV_CODEC_ID_HEVC;
+            type = AVMEDIA_TYPE_VIDEO;
         } else if(es_type == STREAM_TYPE_AUDIO_AC3){
             codec_id = AV_CODEC_ID_AC3;
             type = AVMEDIA_TYPE_AUDIO;

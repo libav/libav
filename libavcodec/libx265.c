@@ -102,7 +102,8 @@ static av_cold int libx265_encode_init(AVCodecContext *avctx)
     ctx->params->frameRate       = (int) (avctx->time_base.den / avctx->time_base.num);
     ctx->params->sourceWidth     = avctx->width;
     ctx->params->sourceHeight    = avctx->height;
-    ctx->params->inputBitDepth   = av_pix_fmt_desc_get(avctx->pix_fmt)->comp[0].depth_minus1 + 1;
+    //ctx->params->inputBitDepth   = av_pix_fmt_desc_get(avctx->pix_fmt)->comp[0].depth_minus1 + 1;
+    ctx->params->internalBitDepth   = av_pix_fmt_desc_get(avctx->pix_fmt)->comp[0].depth_minus1 + 1;   // for symbol match x265 library ver.6162:291b3a3
 
     if (avctx->bit_rate > 0) {
         ctx->params->rc.bitrate         = avctx->bit_rate / 1000;
