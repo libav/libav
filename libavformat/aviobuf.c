@@ -30,8 +30,10 @@
 #include "internal.h"
 #include "url.h"
 #include <stdarg.h>
+#include <unistd.h>
 
 #define IO_BUFFER_SIZE 32768
+#define INPUT_HISTORY_SIZE 10 // s
 
 /**
  * Do seeks within this distance ahead of the current buffer by skipping
@@ -51,7 +53,11 @@ static const AVClass *ffio_url_child_class_next(const AVClass *prev)
     return prev ? NULL : &ffurl_context_class;
 }
 
+#define OFFSET(x) offsetof(AVIOContext, x)
+#define D AV_OPT_FLAG_DECODING_PARAM
 static const AVOption ffio_url_options[] = {
+    { "in_packet_size", "set max input packet size", OFFSET(max_packet_size), AV_OPT_TYPE_INT, {.i64 = 0 }, 0, INT_MAX, D },
+    { "throttle", "set max input rate in Kib/s", OFFSET(throttle), AV_OPT_TYPE_INT, {.i64 = 0 }, 0, INT_MAX, D },
     { NULL },
 };
 
@@ -359,6 +365,57 @@ void avio_wb24(AVIOContext *s, unsigned int val)
 
 /* Input stream */
 
+/* traffic history for input throttle */
+static void t_queue_push(traffic_queue *queue, int64_t time, int traf)
+{
+    traffic* data;
+    queue->len++;
+    data = av_realloc(queue->data, sizeof(traffic)*queue->len);
+    if (!data)
+        return;
+    queue->data = data;
+    queue->data[queue->len-1].time = time;
+    queue->data[queue->len-1].traf = traf;
+}
+
+static void t_queue_pop(traffic_queue *queue)
+{
+    int i;
+    for (i = 0; i < queue->len; i++)  {
+        if (queue->data[i].time < av_gettime()-INPUT_HISTORY_SIZE*1000000) {
+            memmove(queue->data + i, queue->data + i + 1, sizeof(traffic)*(queue->len - i - 1));
+            queue->len--;
+        }
+    }
+}
+
+/* input throttle */
+static int64_t avio_throttle_rate(traffic_queue *queue, int64_t time)
+{
+    int64_t sum = 0;
+    int i;
+    for (i = 0; i < queue->len; i++) {
+        if (queue->data[i].time > av_gettime()-time)
+            sum += queue->data[i].traf;
+    }
+    return (double)sum/((double)time/1000000.0); // B/s
+}
+
+static int avio_throttle(AVIOContext *s)
+{
+    if (!s->throttle) return 0;
+    t_queue_pop(&s->t_queue);
+    // measure speed at multiple intervals to create an even transfer rate
+    if (avio_throttle_rate(&s->t_queue, 0.001*1000000) > s->throttle*0x80
+        || avio_throttle_rate(&s->t_queue, 0.01*1000000) > s->throttle*0x80
+        || avio_throttle_rate(&s->t_queue, 0.1*1000000) > s->throttle*0x80
+        || avio_throttle_rate(&s->t_queue, 1*1000000) > s->throttle*0x80
+        || avio_throttle_rate(&s->t_queue, 10*1000000) > s->throttle*0x80
+        )
+    return 1;
+    return 0;
+}
+
 static void fill_buffer(AVIOContext *s)
 {
     uint8_t *dst        = !s->max_packet_size &&
@@ -405,6 +462,12 @@ static void fill_buffer(AVIOContext *s)
         s->pos += len;
         s->buf_ptr = dst;
         s->buf_end = dst + len;
+        
+        // throttle
+        t_queue_push(&s->t_queue, av_gettime(), len);
+        while (s->throttle && avio_throttle(s)) {
+            usleep(0.1*1000000);
+        }
     }
 }
 

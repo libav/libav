@@ -54,6 +54,19 @@ typedef struct AVIOInterruptCB {
 } AVIOInterruptCB;
 
 /**
+ * Input stream throttle queue.
+ */
+typedef struct traffic {
+    int64_t time;
+    int traf;
+} traffic;
+typedef struct traffic_queue {
+    int size;
+    int len;
+    traffic *data;
+} traffic_queue;
+
+/**
  * Bytestream IO Context.
  * New fields can be added to the end with minor version bumps.
  * Removal, reordering and changes to existing fields require a major
@@ -96,6 +109,8 @@ typedef struct AVIOContext {
     int eof_reached;        /**< true if eof reached */
     int write_flag;         /**< true if open for writing */
     int max_packet_size;
+    int throttle;           /**< command line argument throttle */
+    traffic_queue t_queue;  /**< traffic queue for throttle */
     unsigned long checksum;
     unsigned char *checksum_ptr;
     unsigned long (*update_checksum)(unsigned long checksum, const uint8_t *buf, unsigned int size);
