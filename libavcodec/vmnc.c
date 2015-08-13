@@ -400,7 +400,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
                 reset_buffers(c);
                 return AVERROR(EINVAL);
             } else {
-                int screen_size = c->cur_w * c->cur_h * c->bpp2;
+                long screen_size = (long)c->cur_w * c->cur_h * c->bpp2;
                 if ((ret = av_reallocp(&c->curbits, screen_size)) < 0 ||
                     (ret = av_reallocp(&c->curmask, screen_size)) < 0 ||
                     (ret = av_reallocp(&c->screendta, screen_size)) < 0) {
