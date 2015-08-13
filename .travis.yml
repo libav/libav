@@ -1,0 +1,9 @@
+language: c
+compiler:
+  - clang
+  - gcc
+script:
+  - sudo apt-get install yasm bc
+  - mkdir ~/libav-samples
+  - ./configure --samples=${HOME}/libav-samples
+  - make -j 8
