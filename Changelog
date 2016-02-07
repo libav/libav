@@ -1,6 +1,63 @@
 Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
+version 11.5:
+
+ - aac_parser: add required padding for GetBitContext buffer
+ - ac3_parser: add required padding for GetBitContext buffer
+ - imc: add required padding for GetBitContext buffer
+ - h263: Always check both dimensions
+ - opusdec: properly handle mismatching configurations in multichannel streams (bug/876)
+ - configure: Set the initial ldflags to match the cflags
+ - configure: mips: Support mips r6, r2 and r1
+ - mips: intreadwrite: Only execute that code for mips r1 or r2
+ - vc1: Use logical instead of bitwise or for twomv
+ - configure: address a copy-paste typo
+ - rtmpcrypt: Do the xtea decryption in little endian mode
+ - mov: Correctly allocate ctts_data
+ - mov: Fix two memleaks
+ - bink: Factorize bink put_pixel
+ - aac: Wait to know the channels before allocating frame
+ - configure: Support MSVC 2015 (bug/864)
+ - rtpdec_asf: Check memory allocation and free memory on error (CID/1257774)
+ - jack: Check memory allocation (CID/1292520)
+ - mov: Check memory allocation (CID/1292518)
+ - audiointerleave: Always initialize new_pkt (CID/609333)
+ - sctp: Always initialize outmsg struct (CID/1302711)
+ - mkv: Correctly report the latest packet had been flushed (bug/865)
+ - h264_weight: Fix SSSE3 biweight code with weights of 128
+ - lavc: Clarify the behaviour of dimension and format context fields
+ - h264: make sure the current picture is not made a long ref multiple times
+ - aic: Fix slice size computation for widths multiples of 32 macroblocks
+ - mov: Preserve the metadata even when bit-exactness is requested (bug/845)
+ - webp: Make sure enough bytes are available
+ - h261: Set 'still image mode off' in picture header (bug/872)
+ - h261: Signal freeze picture release for intra frames (bug/873)
+ - avconv: vda: Unlock the pixel buffer once it is accessed
+ - g726: Do not crash on user mistake
+ - bytestream2: set the reader to the end when reading more than available
+ - arm: use a local label instead of the function symbol in ff_prefetch_arm
+ - af_channelmap: properly set the supported output channel layouts
+ - rtsp: Only interpret $ as interleaved packet indicator at the start of replies
+ - rtsp: Allow $ as interleaved packet indicator before a complete response header
+ - configure: arm: Assume softfp ABI on darwin
+ - vp7: bound checking in vp7_decode_frame_header
+ - imgutils: Fix a typo in avcodec_get_pix_fmt_loss
+ - mux: Make sure that the data is actually written (bug/881)
+ - file: properly forward errors from file_read() and file_write() (bug/881)
+ - mmvideo: Make sure the rle does not write over the frame boundaries (bug/887)
+ - opus: Buffer the samples from the correct offset (bug/909)
+ - nut: Use the correct codec_tag when multiple are available (bug/883)
+ - truemotion2: Fix the buffer check (bug/906)
+ - flashsv: Initialize the block array (bug/908)
+ - mimic: Always return on failure (bug/905)
+ - msnwc_tcp: Correctly report failure
+ - lagarith: Correctly compute hash_shift (bug/907)
+ - rpza: Check the blocks left before processing one (bug/903)
+ - dvdsubdec: Validate the RLE offsets
+ - avi: Validate the stream-id for DV as well (bug/879)
+ - mov: Use the correct type for size (bug/921)
+
 version 11.4:
 
  - h264: Make sure reinit failures mark the context as not initialized (CVE-2015-3417)
