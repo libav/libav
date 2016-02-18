@@ -2335,6 +2335,9 @@ for n in $COMPONENT_LIST; do
     eval ${n}_if_any="\$$v"
 done
 
+# It is a security issue
+disable concat_protocol
+
 enable $ARCH_EXT_LIST
 
 die_unknown(){
@@ -2455,6 +2458,8 @@ for opt do
         ;;
     esac
 done
+
+enabled concat_protocol && warn "The concat protocol is a known vulnerability vector. Tread carefully."
 
 disabled logging && logfile=/dev/null
 
