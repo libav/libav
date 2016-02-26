@@ -1,6 +1,11 @@
 Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
+version 11.6:
+
+ - configure: add --enable-rpath
+ - concat: disable by default
+
 version 11.5:
 
  - aac_parser: add required padding for GetBitContext buffer
@@ -57,6 +62,9 @@ version 11.5:
  - dvdsubdec: Validate the RLE offsets
  - avi: Validate the stream-id for DV as well (bug/879)
  - mov: Use the correct type for size (bug/921)
+ - mov: Force the full parsing of mp3 (bug/899)
+ - mkv: Force the full parsing of mp3
+ - matroska: Always consider S_TEXT/UTF8 as SRT when demuxing
 
 version 11.4:
 
