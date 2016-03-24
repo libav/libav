@@ -98,7 +98,7 @@ static int do_tls_poll(URLContext *h, int ret)
         if (n > 0)
             break;
         if (ff_check_interrupt(&h->interrupt_callback))
-            return AVERROR(EINTR);
+            return AVERROR_EXIT;
     }
     return 0;
 }
