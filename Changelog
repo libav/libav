@@ -1,6 +1,20 @@
 Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
+version 11.7:
+
+ - asfenc: fix some possible integer overflows (CVE-2016-2326)
+ - vf_fade: make sure the slice end is always in the frame
+ - tls: Use the right return value for breaking out due to the interrupt callback
+ - avpacket: Check buffer reference (CID/1267889)
+ - avpacket: fix setting AVPacket.data in av_packet_ref()
+ - cmdutils: update copyright year to 2016
+ - colorspace: Add support for BT709
+ - pgssub: Fix subpicture colorspace and range
+ - indeo2: Fix banding artefacts
+ - mov: Check the entries value when parsing dref boxes (CVE-2016-3062)
+ - matroska: Support V_QUICKTIME as written in the specification
+
 version 11.6:
 
  - configure: add --enable-rpath
