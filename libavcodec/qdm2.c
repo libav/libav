@@ -693,7 +693,7 @@ static void fill_coding_method_array(sb_int8_array tone_level_idx,
     if (!superblocktype_2_3) {
         /* This case is untested, no samples available */
         SAMPLES_NEEDED
-        for (ch = 0; ch < nb_channels; ch++)
+        for (ch = 0; ch < nb_channels; ch++) {
             for (sb = 0; sb < 30; sb++) {
                 for (j = 1; j < 63; j++) {  // The loop only iterates to 63 so the code doesn't overflow the buffer
                     add1 = tone_level_idx[ch][sb][j] - 10;
@@ -783,6 +783,7 @@ static void fill_coding_method_array(sb_int8_array tone_level_idx,
                                     coding_method[ch][sb][j] = 30;
                             }
                         }
+        }
     } else { // superblocktype_2_3 != 0
         for (ch = 0; ch < nb_channels; ch++)
             for (sb = 0; sb < 30; sb++)
