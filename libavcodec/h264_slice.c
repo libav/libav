@@ -1216,6 +1216,12 @@ int ff_h264_decode_slice_header(H264Context *h, H264Context *h0)
         }
     }
 
+    if (!h0->current_slice && h != h0) {
+        av_log(h->avctx, AV_LOG_ERROR,
+               "A new picture can only be started in the first slice thread\n");
+        return AVERROR(ENOSYS);
+    }
+
     slice_type = get_ue_golomb_31(&h->gb);
     if (slice_type > 9) {
         av_log(h->avctx, AV_LOG_ERROR,
