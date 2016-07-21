@@ -963,7 +963,7 @@ int main(int argc, char **argv)
     avio_flush(probe_out);
     av_freep(&probe_out);
     av_freep(&buffer);
-
+    uninit_opts();
     avformat_network_deinit();
 
     return ret;
