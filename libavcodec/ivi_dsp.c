@@ -539,11 +539,12 @@ void ff_ivi_inverse_slant_8x8(const int32_t *in, int16_t *out, uint32_t pitch, c
             IVI_INV_SLANT8(src[0], src[8], src[16], src[24], src[32], src[40], src[48], src[56],
                            dst[0], dst[8], dst[16], dst[24], dst[32], dst[40], dst[48], dst[56],
                            t0, t1, t2, t3, t4, t5, t6, t7, t8);
-        } else
+        } else {
             dst[0] = dst[8] = dst[16] = dst[24] = dst[32] = dst[40] = dst[48] = dst[56] = 0;
+        }
 
-            src++;
-            dst++;
+        src++;
+        dst++;
     }
 #undef COMPENSATE
 
@@ -579,11 +580,11 @@ void ff_ivi_inverse_slant_4x4(const int32_t *in, int16_t *out, uint32_t pitch, c
             IVI_INV_SLANT4(src[0], src[4], src[8], src[12],
                            dst[0], dst[4], dst[8], dst[12],
                            t0, t1, t2, t3, t4);
-        } else
+        } else {
             dst[0] = dst[4] = dst[8] = dst[12] = 0;
-
-            src++;
-            dst++;
+        }
+        src++;
+        dst++;
     }
 #undef COMPENSATE
 
