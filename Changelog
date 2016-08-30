@@ -1,6 +1,34 @@
 Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
+version 11.8:
+
+ - ppc: Support little endian intreadwrite
+ - ppc: avutil: Drop a potentially dangerous workaround
+ - ppc: linux: Check altivec using the auxv
+ - ppc: Restrict some Altivec implementations to Big Endian
+ - fft: ppc: Place ff_fft_calc_interleave_altivec() under correct ifdefs
+ - ac3: Check the array bound before dereferencing
+ - librtmp: Avoid an infiniloop setting connection arguments
+ - h264: only allow starting a new picture in the first slice thread
+ - mimic: do not release the newly obsolete reference at the end of decoding
+ - buffer: fix av_buffer_realloc() when the data is offset wrt buffer start
+ - vp9: make mv bounds 32bit.
+ - riff: don't overwrite bps from WAVEFORMATEX if EXTENSIBLE doesn't contain that data.
+ - vmnc: check that subrectangles fit into their containing rectangles
+ - alac: do not return success if nothing was decoded
+ - qpeg: fix an off by 1 error in the MV check
+ - cook: use the bytestream2 API for reading extradata
+ - pcx: properly pad the scanline
+ - pcx: check that the packet is large enough before reading the header
+ - pcx: use the bytestream2 API for reading from input
+ - vc1: check that slices have a positive height
+ - mss12: validate display dimensions
+ - mov: Remove ancient heuristic hack
+ - mov: Remove old b-frame/video delay heuristic
+ - avprobe: do not call avio_close() on a custom context
+ - avprobe: Fix memory leak
+
 version 11.7:
 
  - asfenc: fix some possible integer overflows (CVE-2016-2326)
