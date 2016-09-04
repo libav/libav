@@ -1,5 +1,16 @@
 Releases are sorted from youngest to oldest.
 
+version 9.19:
+ - h264: deMpegEncContextize
+ - h264: remove silly macros
+ - mpegvideo: split ff_draw_horiz_band().
+ - error_resilience: add required headers.
+ - error_resilience: decouple ER from MpegEncContext
+ - h264: remove a pointless if()
+ - h264: simplify calls to ff_er_add_slice().
+ - tls: Use the right return value for breaking out due to the interrupt callback
+ - rtmpcrypt: Do the xtea decryption in little endian mode
+
 version 9.18:
 - tiff: Check that there is no aliasing in pixel format selection (CVE-2014-8544)
 - utvideodec: Handle slice_height being zero (CVE-2014-9604)
