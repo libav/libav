@@ -1,5 +1,8 @@
 Releases are sorted from youngest to oldest.
 
+version 9.20:
+ - avcodec: bump micro version
+
 version 9.19:
  - h264: deMpegEncContextize
  - h264: remove silly macros
