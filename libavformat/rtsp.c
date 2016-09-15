@@ -770,7 +770,8 @@ int ff_rtsp_open_transport_ctx(AVFormatContext *s, RTSPStream *rtsp_st)
 
     if (!rtsp_st->transport_priv) {
          return AVERROR(ENOMEM);
-    } else if (CONFIG_RTPDEC && rt->transport == RTSP_TRANSPORT_RTP) {
+    } else if (CONFIG_RTPDEC && rt->transport == RTSP_TRANSPORT_RTP &&
+               s->iformat) {
         if (rtsp_st->dynamic_handler) {
             ff_rtp_parse_set_dynamic_protocol(rtsp_st->transport_priv,
                                               rtsp_st->dynamic_protocol_context,
