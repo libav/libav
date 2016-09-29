@@ -1,6 +1,15 @@
 Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
+version 0.8.18:
+
+ - ac3_parser: add required padding for GetBitContext buffer (CVE-2016-7393)
+ - aac_parser: add required padding for GetBitContext buffer
+ - mjpegdec: Check number of components for JPEG-LS (CVE-2015-1872)
+ - h263: Always check both dimensions (CVE-2015-5479)
+ - segment: Fix the failure paths
+ - tls: Use the right return value for breaking out due to the interrupt callback
+
 version 0.8.17:
 
 - utvideodec: Handle slice_height being zero (CVE-2014-9604)
