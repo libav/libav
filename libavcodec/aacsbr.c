@@ -334,6 +334,9 @@ static int sbr_make_f_master(AACContext *ac, SpectralBandReplication *sbr,
     } else
         temp = 5000;
 
+    if (!sbr->sample_rate)
+        return -1;
+
     start_min = ((temp << 7) + (sbr->sample_rate >> 1)) / sbr->sample_rate;
     stop_min  = ((temp << 8) + (sbr->sample_rate >> 1)) / sbr->sample_rate;
 
