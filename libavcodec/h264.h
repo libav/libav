@@ -350,6 +350,9 @@ typedef struct H264Context{
     int slice_type_nos;        ///< S free slice type (SI/SP are remapped to I/P)
     int slice_type_fixed;
 
+    int chroma_format_idc;
+    int bit_depth;
+
     //interlacing specific flags
     int mb_aff_frame;
     int mb_field_decoding_flag;

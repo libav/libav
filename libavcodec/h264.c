@@ -2795,7 +2795,9 @@ static int decode_slice_header(H264Context *h, H264Context *h0){
 
     if (s->context_initialized
         && (   s->width != s->avctx->width || s->height != s->avctx->height
-            || av_cmp_q(h->sps.sar, s->avctx->sample_aspect_ratio))) {
+            || av_cmp_q(h->sps.sar, s->avctx->sample_aspect_ratio) ||
+            h->chroma_format_idc != h->sps.chroma_format_idc ||
+            h->bit_depth         != h->sps.bit_depth_luma)) {
         if(h != h0 || (HAVE_THREADS && h->s.avctx->active_thread_type & FF_THREAD_FRAME)) {
             av_log_missing_feature(s->avctx, "Width/height changing with threads is", 0);
             return AVERROR_PATCHWELCOME;   // width / height changed during parallelized decoding
@@ -2885,6 +2887,9 @@ static int decode_slice_header(H264Context *h, H264Context *h0){
         }
         s->first_field = 0;
         h->prev_interlaced_frame = 1;
+
+        h->chroma_format_idc = h->sps.chroma_format_idc;
+        h->bit_depth         = h->sps.bit_depth_luma;
 
         init_scan_tables(h);
         if (ff_h264_alloc_tables(h) < 0) {
