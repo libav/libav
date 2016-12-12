@@ -1514,6 +1514,9 @@ int ff_h264_decode_slice_header(H264Context *h, H264Context *h0)
                     h->short_ref[0]->f.width  == prev->f.width &&
                     h->short_ref[0]->f.height == prev->f.height &&
                     h->short_ref[0]->f.format == prev->f.format) {
+                    ff_thread_await_progress(&prev->tf, INT_MAX, 0);
+                    if (prev->field_picture)
+                        ff_thread_await_progress(&prev->tf, INT_MAX, 1);
                     av_image_copy(h->short_ref[0]->f.data,
                                   h->short_ref[0]->f.linesize,
                                   (const uint8_t **)prev->f.data,
