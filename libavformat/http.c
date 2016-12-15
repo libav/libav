@@ -777,8 +777,9 @@ static int http_read_stream(URLContext *h, uint8_t *buf, int size)
 
                 av_dlog(NULL, "Chunked encoding data size: %"PRId64"'\n",
                         s->chunksize);
-
-                if (!s->chunksize)
+                if (s->chunksize < 0)
+                    return AVERROR_INVALIDDATA;
+                else if (!s->chunksize)
                     return 0;
                 break;
             }
