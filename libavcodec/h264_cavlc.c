@@ -583,8 +583,10 @@ static int decode_residual(H264Context *h, GetBitContext *gb, DCTELEM *block, in
         for(i=1;i<total_coeff && zeros_left > 0;i++) { \
             if(zeros_left < 7) \
                 run_before= get_vlc2(gb, (run_vlc-1)[zeros_left].table, RUN_VLC_BITS, 1); \
-            else \
+            else {\
                 run_before= get_vlc2(gb, run7_vlc.table, RUN7_VLC_BITS, 2); \
+                run_before = FFMIN(zeros_left, run_before);\
+            }\
             zeros_left -= run_before; \
             scantable -= 1 + run_before; \
             ((type*)block)[*scantable]= level[i]; \
@@ -598,8 +600,10 @@ static int decode_residual(H264Context *h, GetBitContext *gb, DCTELEM *block, in
         for(i=1;i<total_coeff && zeros_left > 0;i++) { \
             if(zeros_left < 7) \
                 run_before= get_vlc2(gb, (run_vlc-1)[zeros_left].table, RUN_VLC_BITS, 1); \
-            else \
+            else {\
                 run_before= get_vlc2(gb, run7_vlc.table, RUN7_VLC_BITS, 2); \
+                run_before = FFMIN(zeros_left, run_before);\
+            }\
             zeros_left -= run_before; \
             scantable -= 1 + run_before; \
             ((type*)block)[*scantable]= ((int)(level[i] * qmul[*scantable] + 32))>>6; \
