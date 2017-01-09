@@ -1,6 +1,13 @@
 Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
+version 0.8.19:
+
+ - h264: Reinit the context on pixel format changes (Bug-Id: 939)
+ - mpegvideo_motion: Handle edge emulation even without unrestricted_mv (Bug-Id: 959)
+ - asfenc: Check pts
+ - mov: Check the entries value when parsing dref boxes (Bug-Id: 929, CVE-2016-3062)
+
 version 0.8.18:
 
  - ac3_parser: add required padding for GetBitContext buffer (CVE-2016-7393)
