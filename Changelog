@@ -1,5 +1,12 @@
 Releases are sorted from youngest to oldest.
 
+version 9.21:
+- mpeg12: move setting first_field to mpeg_field_start() (libav/999)
+- mpeg12: avoid signed overflow in bitrate calculation (libav/981)
+- mpegvideo_parser: avoid signed overflow in bitrate calculation (libav/981)
+- avformat/output-example: Declare link dependency on libswscale in the Makefile
+- build: output-example: Add avutil to ELIBS in link command
+
 version 9.20:
  - avcodec: bump micro version
 
