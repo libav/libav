@@ -1,10 +1,19 @@
 Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
+version 0.8.20:
+
+- mpegvideo: Fix undefined negative shifts in mpeg_motion_internal (Bug-Id: 980, CVE-2016-9820)
+- mpegvideo: Fix undefined negative shifts in ff_init_block_index (Bug-Id: 980, CVE-2016-9819)
+- mpeg12dec: move setting first_field to mpeg_field_start() (Bug-ID: 999)
+- mpeg12dec: avoid signed overflow in bitrate calculation (Bug-Id: 981, CVE-2016-9822)
+- mpegvideo_parser: avoid signed overflow in bitrate calculation (Bug-Id: 981, CVE-2016-9821)
+- h264: Use the right H264Context for struct member comparison
+
 version 0.8.19:
 
  - h264: Reinit the context on pixel format changes (Bug-Id: 939)
- - mpegvideo_motion: Handle edge emulation even without unrestricted_mv (Bug-Id: 959)
+ - mpegvideo_motion: Handle edge emulation even without unrestricted_mv (Bug-Id: 959, CVE-2016-7424)
  - asfenc: Check pts
  - mov: Check the entries value when parsing dref boxes (Bug-Id: 929, CVE-2016-3062)
 
