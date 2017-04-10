@@ -1,6 +1,34 @@
 Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
+version 11.9:
+
+ - libvpxenc: remove some unused ctrl id mappings
+ - audiodsp/x86: fix ff_vector_clip_int32_sse2
+ - audiodsp/x86: clear the high bits of the order parameter on 64bit
+ - mpegvideo_motion: Handle edge emulation even without unrestricted_mv (bug/959)
+ - file protocol: handle the file: protocol string in file_check
+ - rtmpproto: Check the return from ff_amf_read_string
+ - rtmpproto: Lengthen the filename buffer when receiving streams
+ - rtmpproto: Send chunk size on the network channel
+ - aacsbr: Check that sample_rate is not 0 before division (bug/957)
+ - rtsp: move the CONFIG_ macros to the beginning of the check
+ - rtsp: Fix a crash with the RTSP muxer
+ - avconv: Fix the audio next dts computation
+ - m4vdec: Check for non-startcode 00 00 00 sequences in probe (bug/962)
+ - mpegvideo: Fix undefined negative shifts in ff_init_block_index (bug/980)
+ - mpegvideo: Fix undefined negative shifts in mpeg_motion_internal (bug/980)
+ - h264: er: Copy from the previous reference only if compatible
+ - h264_slice: Wait for refs to be available before we use them in error concealment
+ - mpegvideo_parser: avoid signed overflow in bitrate calculation (bug/981)
+ - mpeg12dec: avoid signed overflow in bitrate calculation (bug/981)
+ - mpeg12dec: move setting first_field to mpeg_field_start() (bug/999)
+ - http: Check for negative chunk sizes
+ - cmdutils: update copyright year to 2017
+ - matroskadec: make sure not to leave EbmlBin in an inconsistent state (bug/1001)
+ - vf_fade: Make sure to not miss the last lines of a frame
+ - mpeg4videodec: raise an error if sprite_trajectory.table is NULL (bug/1012)
+
 version 11.8:
 
  - ppc: Support little endian intreadwrite
