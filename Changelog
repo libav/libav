@@ -1,6 +1,57 @@
 Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
+version 12.1:
+
+ - vaapi_h264: fix RefPicList[] field flags.
+ - libilbc: support for latest git of libilbc
+ - libopusdec: default to stereo for invalid number of channels
+ - avpacket: fix leak on realloc in av_packet_add_side_data()
+ - mpegvideo: Return correct coded frame sizes from parser
+ - hwcontext_vaapi: Don't abort on failing to allocate from a fixed-size pool
+ - mov: Update colr values
+ - avconv: Fix the audio next dts computation
+ - mss2: only use error correction for matching block counts
+ - h264_slice: Wait for refs to be available before we use them in error concealment
+ - hevc: decouple calling get_format() from exporting the SPS parameters
+ - hevcdec: do not set decoder-global SPS prematurely
+ - mov: fix a possible invalid read in mov_read_mac_string() (bug/972, bug/1003)
+ - mpegvideo_parser: avoid signed overflow in bitrate calculation (bug/981)
+ - mpeg12dec: avoid signed overflow in bitrate calculation (bug/981)
+ - mpeg12dec: move setting first_field to mpeg_field_start() (bug/999)
+ - h264dec: make sure to only end a field if it has been started (bug/977, bug/978, bug/992)
+ - matroskadec: fix SRT subtitle duration
+ - http: Check for negative chunk sizes
+ - cmdutils: update copyright year to 2017
+ - matroskadec: make sure not to leave EbmlBin in an inconsistent state (bug/1001)
+ - asfdec: Use the ASF stream count when iterating
+ - aac: Validate the sbr sample rate before using the value (bug/1027)
+ - mov: Do not try to parse multiple stsd for the same track (bug/1017)
+ - vf_fade: Make sure to not miss the last lines of a frame
+ - asfdec: Account for different Format Data sizes (bug/1020)
+ - asfdec: fix reading files larger than 2GB
+ - h264dec: fix dropped initial SEI recovery point
+ - rtmppkt: Check for packet size mismatches
+ - apetag: fix flag value to signal footer presence
+ - apetag: account for header size if present when returning the start position
+ - lavc: make sure not to return EAGAIN from codecs
+ - h264dec: initialize field_started to 0 on each decode call (bug/1019)
+ - h2645_parse: use the bytestream2 API for packet splitting (bug/1002)
+ - h264_cavlc: check the value of run_before (bug/1000)
+ - nsvdec: don't ignore the return value of av_get_packet() (bug/1039)
+ - mpeg4videodec: raise an error if sprite_trajectory.table is NULL (bug/1012)
+ - dca: Validate the channel map (bug/1016)
+ - avformat: Free the internal codec context at the end
+ - dca: Account for lfe when checking for the channel count (bug/1037)
+ - flv: Validate the packet size (bug/1041)
+ - mjpeg: Report non-3 component rgb lossless as not supported (bug/1043)
+ - mm: Skip unexpected audio packets (bug/1046)
+ - vc1dec: raise an error if sprite picture data is missing (bug/1013)
+ - avplay: Do not try to allocate new frames when the player is closing (bug/1052)
+ - avprobe: Handle unknown values for the color description (bug/1040)
+ - aacsbr: Turnoff in the event of over read. (bug/1047)
+ - h264_refs: validate the SPS pointer in ff_h264_execute_ref_pic_marking() (bug/1036)
+
 version 12:
 - aliases and defaults for Ogg subtypes (opus, spx)
 - HEVC/H.265 RTP payload format (draft v6) packetizer and depacketizer
