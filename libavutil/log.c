@@ -26,6 +26,10 @@
 
 #include "config.h"
 
+#if HAVE_COMMANDLINETOARGVW && defined(_WIN32)
+#include <malloc.h>
+#endif
+
 #if HAVE_UNISTD_H
 #include <unistd.h>
 #endif
@@ -109,7 +113,37 @@ static void colored_fputs(int level, int tint, const char *str)
     default:
         break;
     }
+#if HAVE_COMMANDLINETOARGVW && defined(_WIN32)
+    int wcBufLen = 0;
+    wcBufLen = MultiByteToWideChar(CP_UTF8, 0, str, -1, NULL, 0);
+    if (wcBufLen == 0) {
+        fputs("Failed to convert multibyte log string to widechar.\n", stderr);
+        exit(1);
+    }
+    __try {
+        // stack buffer is faster.
+        // wchar_t wcBuf[wcBufLen];
+        // VLA is still not supported in VS2013('cause C11 makes it optional).
+        // use alloca instead.
+        wchar_t* wcBuf = (wchar_t*)_malloca(wcBufLen * sizeof(wchar_t));
+        wcBufLen = MultiByteToWideChar(CP_UTF8, 0, str, -1, wcBuf, wcBufLen);
+        WriteConsoleW(GetStdHandle(STD_ERROR_HANDLE), wcBuf, wcBufLen, &wcBufLen, NULL);
+        _freea(wcBuf);
+    }
+    __except( GetExceptionCode() == STATUS_STACK_OVERFLOW ) {
+        // windows SEH exception caught
+        if(_resetstkoflw()) {
+            fputs("Stack overflow in log.c, and the reset on the stack failed", stderr);
+            exit(1);
+        }
+        wchar_t* wcBuf = (wchar_t*)malloc(wcBufLen * sizeof(wchar_t));
+        wcBufLen = MultiByteToWideChar(CP_UTF8, 0, str, -1, wcBuf, wcBufLen);
+        WriteConsoleW(GetStdHandle(STD_ERROR_HANDLE), wcBuf, wcBufLen, &wcBufLen, NULL);
+        free(wcBuf);
+    }
+#else
     fputs(str, stderr);
+#endif
     if (use_color) {
         reset_color();
     }
