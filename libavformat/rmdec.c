@@ -720,6 +720,7 @@ ff_rm_parse_packet (AVFormatContext *s, AVIOContext *pb,
                     int *seq, int flags, int64_t timestamp)
 {
     RMDemuxContext *rm = s->priv_data;
+    int ret;
 
     if (st->codec->codec_type == AVMEDIA_TYPE_VIDEO) {
         rm->current_stream= st->id;
@@ -776,11 +777,16 @@ ff_rm_parse_packet (AVFormatContext *s, AVIOContext *pb,
             } else
                 return -1;
         } else {
-            av_get_packet(pb, pkt, len);
+            ret = av_get_packet(pb, pkt, len);
+            if (ret < 0)
+                return ret;
             rm_ac3_swap_bytes(st, pkt);
         }
-    } else
-        av_get_packet(pb, pkt, len);
+    } else {
+        ret = av_get_packet(pb, pkt, len);
+        if (ret < 0)
+            return ret;
+    }
 
     pkt->stream_index = st->index;
 
@@ -809,14 +815,18 @@ ff_rm_retrieve_cache (AVFormatContext *s, AVIOContext *pb,
                       AVStream *st, RMStream *ast, AVPacket *pkt)
 {
     RMDemuxContext *rm = s->priv_data;
+    int ret;
 
     assert (rm->audio_pkt_cnt > 0);
 
     if (ast->deint_id == DEINT_ID_VBRF ||
-        ast->deint_id == DEINT_ID_VBRS)
-        av_get_packet(pb, pkt, ast->sub_packet_lengths[ast->sub_packet_cnt - rm->audio_pkt_cnt]);
+        ast->deint_id == DEINT_ID_VBRS) {
+        ret = av_get_packet(pb, pkt, ast->sub_packet_lengths[ast->sub_packet_cnt - rm->audio_pkt_cnt]);
+        if (ret < 0)
+            return ret;
+    }
     else {
-        int ret = av_new_packet(pkt, st->codec->block_align);
+        ret = av_new_packet(pkt, st->codec->block_align);
         if (ret < 0)
             return ret;
         memcpy(pkt->data, ast->pkt.data + st->codec->block_align * //FIXME avoid this
