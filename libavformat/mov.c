@@ -1607,6 +1607,11 @@ static int mov_read_stsd(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     avio_rb24(pb); /* flags */
     entries = avio_rb32(pb);
 
+    if (entries <= 0) {
+        av_log(c->fc, AV_LOG_ERROR, "invalid STSD entries %d\n", entries);
+        return AVERROR_INVALIDDATA;
+    }
+
     return ff_mov_read_stsd_entries(c, pb, entries);
 }
 
