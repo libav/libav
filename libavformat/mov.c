@@ -1884,7 +1884,7 @@ int ff_mov_read_stsd_entries(MOVContext *c, AVIOContext *pb, int entries)
     if (pb->eof_reached)
         return AVERROR_EOF;
 
-    return mov_finalize_stsd_codec(c, pb, st, sc);
+    return 0;
 }
 
 static int mov_read_stsd(MOVContext *c, AVIOContext *pb, MOVAtom atom)
@@ -1940,7 +1940,7 @@ static int mov_read_stsd(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     }
     memcpy(st->codecpar->extradata, sc->extradata[0], sc->extradata_size[0]);
 
-    return 0;
+    return mov_finalize_stsd_codec(c, pb, st, sc);
 fail:
     av_freep(&sc->extradata);
     av_freep(&sc->extradata_size);
