@@ -1,6 +1,32 @@
 Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
+version 12.2:
+
+ - mpegvideo_motion: Handle edge emulation even without unrestricted_mv (bug/962, bug/1060)
+ - smacker: Check that the data size is a multiple of a sample vector (CVE-2015-8365)
+ - build: Add an option for passing linker flags to the shared library build
+ - configure: Simplify and fix libxcb check
+ - openssl: Support version 1.1.0.
+ - rtmpdh: Don't use the OpenSSL DH struct
+ - dvbsubdec: Fixed segfault when decoding subtitles
+ - doc: Drop the legacy symlink to README
+ - dfa: Disallow odd width/height and add proper bounds check for DDS1 chunks (CVE-2017-9992)
+ - rmdec: don't ignore the return value of av_get_packet()
+ - caf: add an Opus tag
+ - h264dec: Fix mix of lossless and lossy MBs decoding
+ - h264_cabac: Fix CABAC+8x8dct in 4:4:4
+ - h264dec: fix Lossless Decoding (Profile 244) for 8x8 Intra Prediction
+ - h264dec: track the last seen value of x264_build
+ - h264dec: use a large enough field for reference list modification values
+ - yadif: Account for the buffer alignment while processing the frame edges (bug/1031)
+ - mov: log and return early on non-positive stsd entry counts
+ - mov: Do not set stsd_count if mov_read_stsd() fails
+ - mov: move stsd finalization to an appropriate place (bug/1072)
+ - arm: Fix SIGBUS on ARM when compiled with binutils 2.29
+ - smacker: return meaningful error codes on failure
+ - smacker: fix integer overflow with pts_inc (bug/1073)
+
 version 12.1:
 
  - vaapi_h264: fix RefPicList[] field flags.
