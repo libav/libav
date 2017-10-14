@@ -1,6 +1,14 @@
 Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
+version 0.8.21:
+
+ - h264_cavlc: check the value of run_before (Bug-Id: 1000, CVE-2017-7208)
+ - pictor: Correctly check frame dimensions (CVE-2017-7862)
+ - dfa: Disallow odd width/height and add proper bounds check for DDS1 chunks (CVE-2017-9992)
+ - smacker: Check that the data size is a multiple of a sample vector (CVE-2015-8365)
+ - configure: make jack depend on pthreads
+
 version 0.8.20:
 
 - mpegvideo: Fix undefined negative shifts in mpeg_motion_internal (Bug-Id: 980, CVE-2016-9820)
