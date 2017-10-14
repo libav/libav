@@ -1,6 +1,20 @@
 Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
+version 11.11:
+ - dfa: Disallow odd width/height and add proper bounds check for DDS1 chunks (CVE-2017-9992)
+ - pictor: Correctly check frame dimensions (CVE-2017-7862)
+ - h264_cavlc: check the value of run_before (bug/1000)
+ - dvbsubdec: improve error checking (CID/29575)
+ - dvbsubdec: Fixed segfault when decoding subtitles
+ - rmdec: don't ignore the return value of av_get_packet()
+ - caf: add an Opus tag
+ - yadif: Account for the buffer alignment while processing the frame edges (bug/1031)
+ - mov: log and return early on non-positive stsd entry counts
+ - arm: Fix SIGBUS on ARM when compiled with binutils 2.29
+ - smacker: return meaningful error codes on failure
+ - smacker: fix integer overflow with pts_inc (bug/1073)
+
 version 11.10:
  - mm: Skip unexpected audio packets (bug/1046)
  - aacsbr: Turnoff in the event of over read. (bug/1047)
