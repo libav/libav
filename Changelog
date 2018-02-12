@@ -1,6 +1,17 @@
 Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
+version 12.3:
+
+ - pictor: Correctly check frame dimension (CVE-2017-7862)
+ - smacker: add sanity check for length in smacker_decode_tree() (CVE-2017-16803)
+ - smacker: limit recursion depth of smacker_decode_bigtree
+ - cmdutils: update copyright year to 2018
+ - matroskadec: allow RealAudio/Cook/Sipro streams of flavor 0 (bug/1055)
+ - avconv: only retry decoding on actual decoding errors (bug/1089)
+ - vc1: skip motion compensation when data for last picture is invalid (bug/1101)
+ - avcodec/vc1dec: fix mby_start for interlaced content (bug/1100)
+
 version 12.2:
 
  - mpegvideo_motion: Handle edge emulation even without unrestricted_mv (bug/962, bug/1060)
