@@ -20,6 +20,7 @@
 #include "avformat.h"
 #include "avio_internal.h"
 #include "internal.h"
+#include "url.h"
 
 #include "libavutil/internal.h"
 #include "libavutil/opt.h"
@@ -90,11 +91,44 @@ static const AVClass av_format_context_class = {
     .child_class_next = format_child_class_next,
 };
 
+static int io_open_default(AVFormatContext *s, AVIOContext **pb,
+                           const char *url, int flags, AVDictionary **options)
+{
+    AVDictionary *opts_local = NULL;
+    int ret;
+
+    if (!options)
+        options = &opts_local;
+
+    if (s->protocol_whitelist) {
+        ret = av_dict_set(options, "protocol_whitelist", s->protocol_whitelist, 0);
+        if (ret < 0)
+            goto finish;
+    }
+    if (s->protocol_blacklist) {
+        ret = av_dict_set(options, "protocol_blacklist", s->protocol_blacklist, 0);
+        if (ret < 0)
+            goto finish;
+    }
+    ret = avio_open2(pb, url, flags, &s->interrupt_callback, options);
+finish:
+    av_dict_free(&opts_local);
+    return ret;
+}
+
+static void io_close_default(AVFormatContext *s, AVIOContext *pb)
+{
+    avio_close(pb);
+}
+
 static void avformat_get_context_defaults(AVFormatContext *s)
 {
     memset(s, 0, sizeof(AVFormatContext));
 
     s->av_class = &av_format_context_class;
+
+    s->io_open  = io_open_default;
+    s->io_close = io_close_default;
 
     av_opt_set_defaults(s);
 }

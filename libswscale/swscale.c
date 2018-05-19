@@ -91,7 +91,7 @@ static void hScale16To19_c(SwsContext *c, int16_t *_dst, int dstW,
     int i;
     int32_t *dst        = (int32_t *) _dst;
     const uint16_t *src = (const uint16_t *) _src;
-    int bits            = desc->comp[0].depth_minus1;
+    int bits            = desc->comp[0].depth - 1;
     int sh              = bits - 4;
 
     for (i = 0; i < dstW; i++) {
@@ -114,7 +114,7 @@ static void hScale16To15_c(SwsContext *c, int16_t *dst, int dstW,
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(c->srcFormat);
     int i;
     const uint16_t *src = (const uint16_t *) _src;
-    int sh              = desc->comp[0].depth_minus1;
+    int sh              = desc->comp[0].depth - 1;
 
     for (i = 0; i < dstW; i++) {
         int j;
@@ -384,9 +384,9 @@ static int swscale(SwsContext *c, const uint8_t *src[],
     yuv2packed2_fn yuv2packed2       = c->yuv2packed2;
     yuv2packedX_fn yuv2packedX       = c->yuv2packedX;
     yuv2anyX_fn yuv2anyX             = c->yuv2anyX;
-    const int chrSrcSliceY           =     srcSliceY  >> c->chrSrcVSubSample;
-    const int chrSrcSliceH           = -((-srcSliceH) >> c->chrSrcVSubSample);
-    int should_dither                = is9_OR_10BPS(c->srcFormat) ||
+    const int chrSrcSliceY           =                srcSliceY >> c->chrSrcVSubSample;
+    const int chrSrcSliceH           = AV_CEIL_RSHIFT(srcSliceH,   c->chrSrcVSubSample);
+    int should_dither                = is9_15BPS(c->srcFormat) ||
                                        is16BPS(c->srcFormat);
     int lastDstY;
 
@@ -484,7 +484,7 @@ static int swscale(SwsContext *c, const uint8_t *src[],
 
         // Do we have enough lines in this slice to output the dstY line
         enough_lines = lastLumSrcY2 < srcSliceY + srcSliceH &&
-                       lastChrSrcY < -((-srcSliceY - srcSliceH) >> c->chrSrcVSubSample);
+                       lastChrSrcY < AV_CEIL_RSHIFT(srcSliceY + srcSliceH, c->chrSrcVSubSample);
 
         if (!enough_lines) {
             lastLumSrcY = srcSliceY + srcSliceH - 1;
@@ -696,11 +696,10 @@ static int swscale(SwsContext *c, const uint8_t *src[],
         if (is16BPS(c->dstFormat))
             length *= 2;
 
-        if (is9_OR_10BPS(dstFormat)) {
+        if (is9_15BPS(dstFormat)) {
             const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(dstFormat);
             fill_plane9or10(dst[3], dstStride[3], length, height, lastDstY,
-                            255, desc->comp[3].depth_minus1 + 1,
-                            isBE(dstFormat));
+                            255, desc->comp[3].depth, isBE(dstFormat));
         } else
             fillPlane(dst[3], dstStride[3], length, height, lastDstY, 255);
     }
@@ -732,7 +731,7 @@ static av_cold void sws_init_swscale(SwsContext *c)
     ff_sws_init_input_funcs(c);
 
     if (c->srcBpc == 8) {
-        if (c->dstBpc <= 10) {
+        if (c->dstBpc <= 15) {
             c->hyScale = c->hcScale = hScale8To15_c;
             if (c->flags & SWS_FAST_BILINEAR) {
                 c->hyscale_fast = hyscale_fast_c;
@@ -742,12 +741,12 @@ static av_cold void sws_init_swscale(SwsContext *c)
             c->hyScale = c->hcScale = hScale8To19_c;
         }
     } else {
-        c->hyScale = c->hcScale = c->dstBpc > 10 ? hScale16To19_c
+        c->hyScale = c->hcScale = c->dstBpc > 15 ? hScale16To19_c
                                                  : hScale16To15_c;
     }
 
     if (c->srcRange != c->dstRange && !isAnyRGB(c->dstFormat)) {
-        if (c->dstBpc <= 10) {
+        if (c->dstBpc <= 15) {
             if (c->srcRange) {
                 c->lumConvertRange = lumRangeFromJpeg_c;
                 c->chrConvertRange = chrRangeFromJpeg_c;

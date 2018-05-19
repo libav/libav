@@ -68,10 +68,10 @@ static int mmf_write_header(AVFormatContext *s)
     int64_t pos;
     int rate;
 
-    rate = mmf_rate_code(s->streams[0]->codec->sample_rate);
+    rate = mmf_rate_code(s->streams[0]->codecpar->sample_rate);
     if (rate < 0) {
         av_log(s, AV_LOG_ERROR, "Unsupported sample rate %d\n",
-               s->streams[0]->codec->sample_rate);
+               s->streams[0]->codecpar->sample_rate);
         return -1;
     }
 
@@ -107,7 +107,7 @@ static int mmf_write_header(AVFormatContext *s)
 
     mmf->awapos = ff_start_tag(pb, "Awa\x01");
 
-    avpriv_set_pts_info(s->streams[0], 64, 1, s->streams[0]->codec->sample_rate);
+    avpriv_set_pts_info(s->streams[0], 64, 1, s->streams[0]->codecpar->sample_rate);
 
     avio_flush(pb);
 
@@ -140,7 +140,7 @@ static int mmf_write_trailer(AVFormatContext *s)
     int64_t pos, size;
     int gatetime;
 
-    if (s->pb->seekable) {
+    if (s->pb->seekable & AVIO_SEEKABLE_NORMAL) {
         /* Fill in length fields */
         end_tag_be(pb, mmf->awapos);
         end_tag_be(pb, mmf->atrpos);
@@ -155,7 +155,7 @@ static int mmf_write_trailer(AVFormatContext *s)
         /* "play wav" */
         avio_w8(pb, 0); /* start time */
         avio_w8(pb, 1); /* (channel << 6) | wavenum */
-        gatetime = size * 500 / s->streams[0]->codec->sample_rate;
+        gatetime = size * 500 / s->streams[0]->codecpar->sample_rate;
         put_varlength(pb, gatetime); /* duration */
 
         /* "nop" */
@@ -255,16 +255,16 @@ static int mmf_read_header(AVFormatContext *s)
     if (!st)
         return AVERROR(ENOMEM);
 
-    st->codec->codec_type            = AVMEDIA_TYPE_AUDIO;
-    st->codec->codec_id              = AV_CODEC_ID_ADPCM_YAMAHA;
-    st->codec->sample_rate           = rate;
-    st->codec->channels              = 1;
-    st->codec->channel_layout        = AV_CH_LAYOUT_MONO;
-    st->codec->bits_per_coded_sample = 4;
-    st->codec->bit_rate              = st->codec->sample_rate *
-                                       st->codec->bits_per_coded_sample;
+    st->codecpar->codec_type            = AVMEDIA_TYPE_AUDIO;
+    st->codecpar->codec_id              = AV_CODEC_ID_ADPCM_YAMAHA;
+    st->codecpar->sample_rate           = rate;
+    st->codecpar->channels              = 1;
+    st->codecpar->channel_layout        = AV_CH_LAYOUT_MONO;
+    st->codecpar->bits_per_coded_sample = 4;
+    st->codecpar->bit_rate              = st->codecpar->sample_rate *
+                                          st->codecpar->bits_per_coded_sample;
 
-    avpriv_set_pts_info(st, 64, 1, st->codec->sample_rate);
+    avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
     return 0;
 }
@@ -292,7 +292,7 @@ static int mmf_read_packet(AVFormatContext *s, AVPacket *pkt)
 
     ret = avio_read(s->pb, pkt->data, pkt->size);
     if (ret < 0)
-        av_free_packet(pkt);
+        av_packet_unref(pkt);
 
     mmf->data_size -= ret;
 

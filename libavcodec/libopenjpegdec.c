@@ -94,22 +94,22 @@ static int libopenjpeg_matches_pix_fmt(const opj_image_t *img,
     switch (desc->nb_components) {
     case 4:
         match = match &&
-                desc->comp[3].depth_minus1 + 1 >= img->comps[3].prec &&
+                desc->comp[3].depth >= img->comps[3].prec &&
                 1 == img->comps[3].dx &&
                 1 == img->comps[3].dy;
     case 3:
         match = match &&
-                desc->comp[2].depth_minus1 + 1 >= img->comps[2].prec &&
+                desc->comp[2].depth >= img->comps[2].prec &&
                 1 << desc->log2_chroma_w == img->comps[2].dx &&
                 1 << desc->log2_chroma_h == img->comps[2].dy;
     case 2:
         match = match &&
-                desc->comp[1].depth_minus1 + 1 >= img->comps[1].prec &&
+                desc->comp[1].depth >= img->comps[1].prec &&
                 1 << desc->log2_chroma_w == img->comps[1].dx &&
                 1 << desc->log2_chroma_h == img->comps[1].dy;
     case 1:
         match = match &&
-                desc->comp[0].depth_minus1 + 1 >= img->comps[0].prec &&
+                desc->comp[0].depth >= img->comps[0].prec &&
                 1 == img->comps[0].dx &&
                 1 == img->comps[0].dy;
     default:
@@ -365,7 +365,7 @@ static int libopenjpeg_decode_frame(AVCodecContext *avctx,
     }
 
     desc       = av_pix_fmt_desc_get(avctx->pix_fmt);
-    pixel_size = desc->comp[0].step_minus1 + 1;
+    pixel_size = desc->comp[0].step;
     ispacked   = libopenjpeg_ispacked(avctx->pix_fmt);
 
     switch (pixel_size) {
@@ -396,7 +396,7 @@ static int libopenjpeg_decode_frame(AVCodecContext *avctx,
         }
         break;
     default:
-        av_log(avctx, AV_LOG_ERROR, "unsupported pixel size %d\n", pixel_size);
+        avpriv_report_missing_feature(avctx, "Pixel size %d", pixel_size);
         ret = AVERROR_PATCHWELCOME;
         goto done;
     }
@@ -436,6 +436,7 @@ AVCodec ff_libopenjpeg_decoder = {
     .priv_data_size = sizeof(LibOpenJPEGContext),
     .init           = libopenjpeg_decode_init,
     .decode         = libopenjpeg_decode_frame,
-    .capabilities   = CODEC_CAP_DR1 | CODEC_CAP_FRAME_THREADS,
+    .capabilities   = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_FRAME_THREADS,
     .priv_class     = &class,
+    .wrapper_name   = "libopenjpeg",
 };

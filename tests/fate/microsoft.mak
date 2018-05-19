@@ -1,6 +1,9 @@
 FATE_SAMPLES_AVCONV-$(call DEMDEC, AVI, MSMPEG4V1) += fate-msmpeg4v1
 fate-msmpeg4v1: CMD = framecrc -flags +bitexact -idct simple -i $(TARGET_SAMPLES)/msmpeg4v1/mpg4.avi -an
 
+FATE_SAMPLES_AVCONV-$(call DEMDEC, ASF, MSS1) += fate-mss1
+fate-mss1: CMD = framecrc -i $(TARGET_SAMPLES)/mss1/screen_codec.wmv -an -pix_fmt rgb24
+
 FATE_MSS2 += fate-mss2-pal
 fate-mss2-pal: CMD = framecrc -i $(TARGET_SAMPLES)/mss2/rlepal.wmv
 
@@ -28,15 +31,21 @@ fate-msvideo1-16bit: CMD = framecrc -i $(TARGET_SAMPLES)/cram/clock-cram16.avi -
 FATE_SAMPLES_AVCONV-$(call DEMDEC, AVI, MSVIDEO1) += $(FATE_MSVIDEO1)
 fate-msvideo1: $(FATE_MSVIDEO1)
 
-FATE_WMV8_DRM += fate-wmv8-drm
+FATE_SAMPLES_AVCONV-$(call DEMDEC, ASF, MTS2) += fate-mts2
+fate-mts2: CMD = framecrc -i $(TARGET_SAMPLES)/mts2/ScreenCapture.xesc
+
+FATE_WMV3_DRM += fate-wmv3-drm-dec
 # discard last packet to avoid fails due to overread of VC-1 decoder
-fate-wmv8-drm: CMD = framecrc -cryptokey 137381538c84c068111902a59c5cf6c340247c39 -i $(TARGET_SAMPLES)/wmv8/wmv_drm.wmv -an -frames:v 129
+fate-wmv3-drm-dec: CMD = framecrc -cryptokey 137381538c84c068111902a59c5cf6c340247c39 -i $(TARGET_SAMPLES)/wmv3/wmv_drm.wmv -an -frames:v 129
 
-FATE_WMV8_DRM += fate-wmv8-drm-nodec
-fate-wmv8-drm-nodec: CMD = framecrc -cryptokey 137381538c84c068111902a59c5cf6c340247c39 -i $(TARGET_SAMPLES)/wmv8/wmv_drm.wmv -acodec copy -vcodec copy
+FATE_WMV3_DRM += fate-wmv3-drm-nodec
+fate-wmv3-drm-nodec: CMD = framecrc -cryptokey 137381538c84c068111902a59c5cf6c340247c39 -i $(TARGET_SAMPLES)/wmv3/wmv_drm.wmv -c copy
 
-FATE_SAMPLES_AVCONV-$(call DEMDEC, ASF, WMV3) += $(FATE_WMV8_DRM)
-fate-wmv8_drm: $(FATE_WMV8_DRM)
+FATE_SAMPLES_AVCONV-$(call DEMDEC, ASF, WMV3) += $(FATE_WMV3_DRM)
+fate-wmv3-drm: $(FATE_WMV3_DRM)
+
+FATE_SAMPLES_AVCONV-$(call DEMDEC, ASF, WMV2) += fate-wmv8-intrax8
+fate-wmv8-intrax8: CMD = framecrc -flags +bitexact -i $(TARGET_SAMPLES)/wmv8/wmv8_x8intra.wmv -an
 
 FATE_VC1-$(CONFIG_VC1_DEMUXER) += fate-vc1_sa00040
 fate-vc1_sa00040: CMD = framecrc -i $(TARGET_SAMPLES)/vc1/SA00040.vc1
@@ -61,3 +70,6 @@ fate-vc1-ism: CMD = framecrc -i $(TARGET_SAMPLES)/isom/vc1-wmapro.ism -an
 
 FATE_SAMPLES_AVCONV-$(CONFIG_VC1_DECODER) += $(FATE_VC1-yes)
 fate-vc1: $(FATE_VC1-yes)
+
+FATE_SAMPLES_AVCONV-$(CONFIG_ASF_DEMUXER) += fate-asf-repldata
+fate-asf-repldata: CMD = framecrc -i $(TARGET_SAMPLES)/asf/bug821-2.asf -c copy

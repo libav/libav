@@ -36,8 +36,49 @@
 
 #define AC3ENC_TYPE AC3ENC_TYPE_AC3
 #include "ac3enc_opts_template.c"
-static const AVClass ac3enc_class = { "AC-3 Encoder", av_default_item_name,
-                                      ac3_options, LIBAVUTIL_VERSION_INT };
+
+static const AVClass ac3enc_class = {
+    .class_name = "AC-3 Encoder",
+    .item_name  = av_default_item_name,
+    .option     = ac3_options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
+
+
+/*
+ * Scale MDCT coefficients from float to 24-bit fixed-point.
+ */
+static void scale_coefficients(AC3EncodeContext *s)
+{
+    int chan_size = AC3_MAX_COEFS * s->num_blocks;
+    int cpl       = s->cpl_on;
+    s->ac3dsp.float_to_fixed24(s->fixed_coef_buffer + (chan_size * !cpl),
+                               s->mdct_coef_buffer  + (chan_size * !cpl),
+                               chan_size * (s->channels + cpl));
+}
+
+
+/*
+ * Clip MDCT coefficients to allowable range.
+ */
+static void clip_coefficients(AudioDSPContext *adsp, float *coef,
+                              unsigned int len)
+{
+    adsp->vector_clipf(coef, coef, len, COEF_MIN, COEF_MAX);
+}
+
+
+/*
+ * Calculate a single coupling coordinate.
+ */
+static CoefType calc_cpl_coord(CoefSumType energy_ch, CoefSumType energy_cpl)
+{
+    float coord = 0.125;
+    if (energy_cpl > 0)
+        coord *= sqrtf(energy_ch / energy_cpl);
+    return FFMIN(coord, COEF_MAX);
+}
+
 
 #include "ac3enc_template.c"
 
@@ -82,54 +123,10 @@ av_cold int ff_ac3_float_mdct_init(AC3EncodeContext *s)
 }
 
 
-/*
- * Normalize the input samples.
- * Not needed for the floating-point encoder.
- */
-static int normalize_samples(AC3EncodeContext *s)
-{
-    return 0;
-}
-
-
-/*
- * Scale MDCT coefficients from float to 24-bit fixed-point.
- */
-static void scale_coefficients(AC3EncodeContext *s)
-{
-    int chan_size = AC3_MAX_COEFS * s->num_blocks;
-    int cpl       = s->cpl_on;
-    s->ac3dsp.float_to_fixed24(s->fixed_coef_buffer + (chan_size * !cpl),
-                               s->mdct_coef_buffer  + (chan_size * !cpl),
-                               chan_size * (s->channels + cpl));
-}
-
-
-/*
- * Clip MDCT coefficients to allowable range.
- */
-static void clip_coefficients(AudioDSPContext *adsp, float *coef,
-                              unsigned int len)
-{
-    adsp->vector_clipf(coef, coef, COEF_MIN, COEF_MAX, len);
-}
-
-
-/*
- * Calculate a single coupling coordinate.
- */
-static CoefType calc_cpl_coord(CoefSumType energy_ch, CoefSumType energy_cpl)
-{
-    float coord = 0.125;
-    if (energy_cpl > 0)
-        coord *= sqrtf(energy_ch / energy_cpl);
-    return FFMIN(coord, COEF_MAX);
-}
-
 av_cold int ff_ac3_float_encode_init(AVCodecContext *avctx)
 {
     AC3EncodeContext *s = avctx->priv_data;
-    avpriv_float_dsp_init(&s->fdsp, avctx->flags & CODEC_FLAG_BITEXACT);
+    avpriv_float_dsp_init(&s->fdsp, avctx->flags & AV_CODEC_FLAG_BITEXACT);
     return ff_ac3_encode_init(avctx);
 }
 

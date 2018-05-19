@@ -1,6 +1,7 @@
-include config.mak
+include avbuild/config.mak
 
 vpath %.c    $(SRC_PATH)
+vpath %.m    $(SRC_PATH)
 vpath %.h    $(SRC_PATH)
 vpath %.S    $(SRC_PATH)
 vpath %.asm  $(SRC_PATH)
@@ -10,8 +11,8 @@ vpath %.texi $(SRC_PATH)
 ifndef V
 Q      = @
 ECHO   = printf "$(1)\t%s\n" $(2)
-BRIEF  = CC HOSTCC HOSTLD AS YASM AR LD
-SILENT = DEPCC DEPHOSTCC DEPAS DEPYASM RANLIB RM STRIP
+BRIEF  = CC HOSTCC HOSTLD AS X86ASM AR LD
+SILENT = DEPCC DEPHOSTCC DEPAS DEPX86ASM RANLIB RM STRIP
 MSG    = $@
 M      = @$(call ECHO,$(TAG),$@);
 $(foreach VAR,$(BRIEF), \
@@ -26,8 +27,10 @@ IFLAGS     := -I. -I$(SRC_PATH)
 CPPFLAGS   := $(IFLAGS) $(CPPFLAGS)
 CFLAGS     += $(ECFLAGS)
 CCFLAGS     = $(CPPFLAGS) $(CFLAGS)
+OBJCFLAGS  += $(EOBJCFLAGS)
+OBJCCFLAGS  = $(CPPFLAGS) $(CFLAGS) $(OBJCFLAGS)
 ASFLAGS    := $(CPPFLAGS) $(ASFLAGS)
-YASMFLAGS  += $(IFLAGS:%=%/) -Pconfig.asm
+X86ASMFLAGS += $(IFLAGS:%=%/) -I$(<D)/ -Pconfig.asm
 HOSTCCFLAGS = $(IFLAGS) $(HOSTCPPFLAGS) $(HOSTCFLAGS)
 LDFLAGS    := $(ALLFFLIBS:%=$(LD_PATH)lib%) $(LDFLAGS)
 
@@ -38,6 +41,8 @@ endef
 
 COMPILE_C = $(call COMPILE,CC)
 COMPILE_S = $(call COMPILE,AS)
+COMPILE_M = $(call COMPILE,OBJCC)
+COMPILE_X86ASM = $(call COMPILE,X86ASM)
 COMPILE_HOSTC = $(call COMPILE,HOSTCC)
 
 %.o: %.c
@@ -46,8 +51,15 @@ COMPILE_HOSTC = $(call COMPILE,HOSTCC)
 %.o: %.S
 	$(COMPILE_S)
 
+%.o: %.m
+	$(COMPILE_M)
+
 %_host.o: %.c
 	$(COMPILE_HOSTC)
+
+%.o: %.asm
+	$(COMPILE_X86ASM)
+	-$(STRIP) $(STRIPFLAGS) $@
 
 %.i: %.c
 	$(CC) $(CCFLAGS) $(CC_E) $<
@@ -55,32 +67,10 @@ COMPILE_HOSTC = $(call COMPILE,HOSTCC)
 %.h.c:
 	$(Q)echo '#include "$*.h"' >$@
 
-%.ver: %.v
-	$(Q)sed 's/$$MAJOR/$($(basename $(@F))_VERSION_MAJOR)/' $^ > $@
-
-%.c %.h: TAG = GEN
-
-AVPROGS-$(CONFIG_AVCONV)   += avconv
-AVPROGS-$(CONFIG_AVPLAY)   += avplay
-AVPROGS-$(CONFIG_AVPROBE)  += avprobe
-
-AVPROGS    := $(AVPROGS-yes:%=%$(EXESUF))
-PROGS      += $(AVPROGS)
-
-AVBASENAMES = avconv avplay avprobe
-ALLAVPROGS  = $(AVBASENAMES:%=%$(EXESUF))
-
-$(foreach prog,$(AVBASENAMES),$(eval OBJS-$(prog) += cmdutils.o))
-
-OBJS-avconv                   += avconv_opt.o avconv_filter.o
-OBJS-avconv-$(HAVE_VDPAU_X11) += avconv_vdpau.o
-OBJS-avconv-$(HAVE_DXVA2_LIB) += avconv_dxva2.o
-OBJS-avconv-$(CONFIG_VDA)     += avconv_vda.o
+%.c %.h %.pc %.ver %.version: TAG = GEN
 
 TESTTOOLS   = audiogen videogen rotozoom tiny_psnr base64
 HOSTPROGS  := $(TESTTOOLS:%=tests/%) doc/print_options
-TOOLS       = qt-faststart trasher
-TOOLS-$(CONFIG_ZLIB) += cws2fws
 
 # $(FFLIBS-yes) needs to be in linking order
 FFLIBS-$(CONFIG_AVDEVICE)   += avdevice
@@ -94,30 +84,36 @@ FFLIBS := avutil
 
 DATA_FILES := $(wildcard $(SRC_PATH)/presets/*.avpreset)
 
-SKIPHEADERS = cmdutils_common_opts.h compat/w32pthreads.h
+SKIPHEADERS = compat/w32pthreads.h
 
-include $(SRC_PATH)/common.mak
+# first so "all" becomes default target
+all: all-yes
+
+include $(SRC_PATH)/tools/Makefile
+include $(SRC_PATH)/avbuild/common.mak
 
 FF_EXTRALIBS := $(FFEXTRALIBS)
 FF_DEP_LIBS  := $(DEP_LIBS)
+FF_STATIC_DEP_LIBS := $(STATIC_DEP_LIBS)
 
-all: $(AVPROGS)
+$(TOOLS): %$(EXESUF): %.o
+	$(LD) $(LDFLAGS) $(LDEXEFLAGS) $(LD_O) $^ $(EXTRALIBS-$(*F)) $(EXTRALIBS) $(ELIBS)
 
-$(TOOLS): %$(EXESUF): %.o $(EXEOBJS)
-	$(LD) $(LDFLAGS) $(LDEXEFLAGS) $(LD_O) $^ $(ELIBS)
+CONFIGURABLE_COMPONENTS =                                           \
+    $(wildcard $(FFLIBS:%=$(SRC_PATH)/lib%/all*.c))                 \
+    $(SRC_PATH)/libavcodec/bitstream_filters.c                      \
+    $(SRC_PATH)/libavformat/protocols.c                             \
 
-tools/cws2fws$(EXESUF): ELIBS = $(ZLIB)
-
-config.h: .config
-.config: $(wildcard $(FFLIBS:%=$(SRC_PATH)/lib%/all*.c))
+config.h: avbuild/.config
+avbuild/.config: $(CONFIGURABLE_COMPONENTS)
 	@-tput bold 2>/dev/null
-	@-printf '\nWARNING: $(?F) newer than config.h, rerun configure\n\n'
+	@-printf '\nWARNING: $(?) newer than config.h, rerun configure\n\n'
 	@-tput sgr0 2>/dev/null
 
-SUBDIR_VARS := CLEANFILES EXAMPLES FFLIBS HOSTPROGS TESTPROGS TOOLS      \
+SUBDIR_VARS := CLEANFILES FFLIBS HOSTPROGS TESTPROGS TOOLS               \
                HEADERS ARCH_HEADERS BUILT_HEADERS SKIPHEADERS            \
                ARMV5TE-OBJS ARMV6-OBJS ARMV8-OBJS VFP-OBJS NEON-OBJS     \
-               ALTIVEC-OBJS MMX-OBJS YASM-OBJS                           \
+               ALTIVEC-OBJS VSX-OBJS MMX-OBJS X86ASM-OBJS                \
                OBJS HOSTOBJS TESTOBJS
 
 define RESET
@@ -131,37 +127,25 @@ SUBDIR := $(1)/
 include $(SRC_PATH)/$(1)/Makefile
 -include $(SRC_PATH)/$(1)/$(ARCH)/Makefile
 -include $(SRC_PATH)/$(1)/$(INTRINSICS)/Makefile
-include $(SRC_PATH)/library.mak
+include $(SRC_PATH)/avbuild/library.mak
 endef
 
 $(foreach D,$(FFLIBS),$(eval $(call DOSUBDIR,lib$(D))))
 
+include $(SRC_PATH)/avtools/Makefile
 include $(SRC_PATH)/doc/Makefile
+include $(SRC_PATH)/doc/examples/Makefile
 
-define DOPROG
-OBJS-$(1) += $(1).o $(EXEOBJS) $(OBJS-$(1)-yes)
-$(1)$(EXESUF): $$(OBJS-$(1))
-$$(OBJS-$(1)): CFLAGS  += $(CFLAGS-$(1))
-$(1)$(EXESUF): LDFLAGS += $(LDFLAGS-$(1))
-$(1)$(EXESUF): FF_EXTRALIBS += $(LIBS-$(1))
--include $$(OBJS-$(1):.o=.d)
-endef
-
-$(foreach P,$(PROGS),$(eval $(call DOPROG,$(P:$(EXESUF)=))))
-
-$(PROGS): %$(EXESUF): %.o $(FF_DEP_LIBS)
+$(PROGS): %$(EXESUF): $(FF_DEP_LIBS)
 	$(LD) $(LDFLAGS) $(LDEXEFLAGS) $(LD_O) $(OBJS-$*) $(FF_EXTRALIBS)
 
-OBJDIRS += tools
-
--include $(wildcard tools/*.d)
-
-VERSION_SH  = $(SRC_PATH)/version.sh
+VERSION_SH  = $(SRC_PATH)/avbuild/version.sh
 GIT_LOG     = $(SRC_PATH)/.git/logs/HEAD
 
-.version: $(wildcard $(GIT_LOG)) $(VERSION_SH) config.mak
+.version: $(wildcard $(GIT_LOG)) $(VERSION_SH) avbuild/config.mak
 .version: M=@
 
+libavutil/utils.o: avversion.h
 avversion.h .version:
 	$(M)$(VERSION_SH) $(SRC_PATH) avversion.h $(EXTRA_VERSION)
 	$(Q)touch .version
@@ -169,46 +153,33 @@ avversion.h .version:
 # force version.sh to run whenever version might have changed
 -include .version
 
-ifdef AVPROGS
-install: install-progs install-data
-endif
-
 install: install-libs install-headers
 
 install-libs: install-libs-yes
-
-install-progs-yes:
-install-progs-$(CONFIG_SHARED): install-libs
-
-install-progs: install-progs-yes $(AVPROGS)
-	$(Q)mkdir -p "$(BINDIR)"
-	$(INSTALL) -c -m 755 $(AVPROGS) "$(BINDIR)"
 
 install-data: $(DATA_FILES)
 	$(Q)mkdir -p "$(DATADIR)"
 	$(INSTALL) -m 644 $(DATA_FILES) "$(DATADIR)"
 
-uninstall: uninstall-libs uninstall-headers uninstall-progs uninstall-data
-
-uninstall-progs:
-	$(RM) $(addprefix "$(BINDIR)/", $(ALLAVPROGS))
+uninstall: uninstall-data uninstall-headers uninstall-libs uninstall-pkgconfig
 
 uninstall-data:
 	$(RM) -r "$(DATADIR)"
 
 clean::
-	$(RM) $(ALLAVPROGS)
 	$(RM) $(CLEANSUFFIXES)
-	$(RM) $(CLEANSUFFIXES:%=tools/%)
+	$(RM) $(addprefix compat/,$(CLEANSUFFIXES)) $(addprefix compat/*/,$(CLEANSUFFIXES))
 	$(RM) -rf coverage.info lcov
 
-distclean::
-	$(RM) $(DISTCLEANSUFFIXES)
-	$(RM) config.* .config libavutil/avconfig.h .version avversion.h
+distclean: clean
+	$(RM) .version avversion.h config.asm config.h mapfile \
+            avbuild/.config avbuild/config.* libavutil/avconfig.h \
+            libavcodec/bsf_list.c libavformat/protocol_list.c
 
 config:
 	$(SRC_PATH)/configure $(value LIBAV_CONFIGURATION)
 
+build: all alltools checkheaders examples testprogs
 check: all alltools checkheaders examples testprogs fate
 
 include $(SRC_PATH)/tests/Makefile
@@ -224,5 +195,5 @@ $(sort $(OBJDIRS)):
 # so this saves some time on slow systems.
 .SUFFIXES:
 
-.PHONY: all all-yes alltools check *clean config examples install*
-.PHONY: testprogs uninstall*
+.PHONY: all all-yes alltools build check config testprogs
+.PHONY: *clean install* uninstall*

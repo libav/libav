@@ -56,7 +56,7 @@ typedef struct TDSCContext {
     AVFrame *jpgframe;          // decoded JPEG tile
     uint8_t *tilebuffer;        // buffer containing tile data
 
-    /* zlib interation */
+    /* zlib interaction */
     uint8_t *deflatebuffer;
     uLongf deflatelen;
 
@@ -343,7 +343,6 @@ static int tdsc_decode_jpeg_tile(AVCodecContext *avctx, int tile_size,
 {
     TDSCContext *ctx = avctx->priv_data;
     AVPacket jpkt;
-    int got_frame = 0;
     int ret;
 
     /* Prepare a packet and send to the MJPEG decoder */
@@ -351,12 +350,16 @@ static int tdsc_decode_jpeg_tile(AVCodecContext *avctx, int tile_size,
     jpkt.data = ctx->tilebuffer;
     jpkt.size = tile_size;
 
-    ret = avcodec_decode_video2(ctx->jpeg_avctx, ctx->jpgframe,
-                                &got_frame, &jpkt);
-    if (ret < 0 || !got_frame || ctx->jpgframe->format != AV_PIX_FMT_YUVJ420P) {
+    ret = avcodec_send_packet(ctx->jpeg_avctx, &jpkt);
+    if (ret < 0) {
+        av_log(avctx, AV_LOG_ERROR, "Error submitting a packet for decoding\n");
+        return ret;
+    }
+
+    ret = avcodec_receive_frame(ctx->jpeg_avctx, ctx->jpgframe);
+    if (ret < 0 || ctx->jpgframe->format != AV_PIX_FMT_YUVJ420P) {
         av_log(avctx, AV_LOG_ERROR,
-               "JPEG decoding error (%d) for (%d) frame.\n",
-               ret, got_frame);
+               "JPEG decoding error (%d).\n", ret);
 
         /* Normally skip, error if explode */
         if (avctx->err_recognition & AV_EF_EXPLODE)
@@ -365,7 +368,7 @@ static int tdsc_decode_jpeg_tile(AVCodecContext *avctx, int tile_size,
             return 0;
     }
 
-    /* Let's paint ont the buffer */
+    /* Let's paint onto the buffer */
     tdsc_blit(ctx->refframe->data[0] + x * 3 + ctx->refframe->linesize[0] * y,
               ctx->refframe->linesize[0],
               ctx->jpgframe->data[0], ctx->jpgframe->linesize[0],
@@ -621,7 +624,7 @@ AVCodec ff_tdsc_decoder = {
     .decode         = tdsc_decode_frame,
     .close          = tdsc_close,
     .priv_data_size = sizeof(TDSCContext),
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
     .caps_internal  = FF_CODEC_CAP_INIT_THREADSAFE |
                       FF_CODEC_CAP_INIT_CLEANUP,
 };

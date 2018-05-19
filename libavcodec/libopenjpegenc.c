@@ -131,8 +131,8 @@ static opj_image_t *libopenjpeg_create_image(AVCodecContext *avctx,
     }
 
     for (i = 0; i < numcomps; i++) {
-        cmptparm[i].prec = desc->comp[i].depth_minus1 + 1;
-        cmptparm[i].bpp  = desc->comp[i].depth_minus1 + 1;
+        cmptparm[i].prec = desc->comp[i].depth;
+        cmptparm[i].bpp  = desc->comp[i].depth;
         cmptparm[i].sgnd = 0;
         cmptparm[i].dx   = sub_dx[i];
         cmptparm[i].dy   = sub_dy[i];
@@ -169,12 +169,6 @@ static av_cold int libopenjpeg_encode_init(AVCodecContext *avctx)
         return AVERROR(ENOMEM);
     }
 
-    avctx->coded_frame = av_frame_alloc();
-    if (!avctx->coded_frame) {
-        av_log(avctx, AV_LOG_ERROR, "Error allocating coded frame\n");
-        goto fail;
-    }
-
     ctx->image = libopenjpeg_create_image(avctx, &ctx->enc_params);
     if (!ctx->image) {
         av_log(avctx, AV_LOG_ERROR, "Error creating the mj2 image\n");
@@ -191,7 +185,6 @@ static av_cold int libopenjpeg_encode_init(AVCodecContext *avctx)
 
 fail:
     av_freep(&ctx->compress);
-    av_freep(&avctx->coded_frame);
     return err;
 }
 
@@ -371,7 +364,6 @@ static av_cold int libopenjpeg_encode_close(AVCodecContext *avctx)
 
     opj_destroy_compress(ctx->compress);
     opj_image_destroy(ctx->image);
-    av_freep(&avctx->coded_frame);
     return 0;
 }
 
@@ -434,4 +426,5 @@ AVCodec ff_libopenjpeg_encoder = {
         AV_PIX_FMT_NONE
     },
     .priv_class     = &class,
+    .wrapper_name   = "libopenjpeg",
 };

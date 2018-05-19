@@ -69,16 +69,16 @@ FATE_SEEK_VSYNTH2-$(call ENCDEC, JPEGLS,        AVI)     += jpegls
 FATE_SEEK_VSYNTH2-$(call ENCDEC, LJPEG MJPEG,   AVI)     += ljpeg
 FATE_SEEK_VSYNTH2-$(call ENCDEC, MJPEG,         AVI)     += mjpeg
 
-FATE_SEEK_VSYNTH2-$(call ENCDEC, MPEG1VIDEO, MPEG1VIDEO MPEGVIDEO) +=          \
-                                                    mpeg1                      \
+FATE_SEEK_VSYNTH2-$(call ENCDEC, MPEG1VIDEO, MPEG1VIDEO MPEGVIDEO) +=    \
+                                                    mpeg1                \
                                                     mpeg1b
 
-FATE_SEEK_VSYNTH2-$(call ENCDEC, MPEG2VIDEO, MPEG2VIDEO MPEGVIDEO) +=          \
-                                                    mpeg2-422                  \
-                                                    mpeg2-idct-int             \
-                                                    mpeg2-ilace                \
-                                                    mpeg2-ivlc-qprd            \
-                                                    mpeg2-thread               \
+FATE_SEEK_VSYNTH2-$(call ENCDEC, MPEG2VIDEO, MPEG2VIDEO MPEGVIDEO) +=    \
+                                                    mpeg2-422            \
+                                                    mpeg2-idct-int       \
+                                                    mpeg2-ilace          \
+                                                    mpeg2-ivlc-qprd      \
+                                                    mpeg2-thread         \
                                                     mpeg2-thread-ivlc
 
 FATE_SEEK_VSYNTH2-$(call ENCDEC, MPEG4,         MP4 MOV) += mpeg4
@@ -218,8 +218,8 @@ fate-seek-lavf-yuv4mpeg: SRC = lavf/lavf.y4m
 
 FATE_SEEK += $(FATE_SEEK_LAVF-yes:%=fate-seek-lavf-%)
 
-$(FATE_SEEK): libavformat/seek-test$(EXESUF)
-$(FATE_SEEK): CMD = run libavformat/seek-test$(EXESUF) $(TARGET_PATH)/tests/data/$(SRC)
+$(FATE_SEEK): libavformat/tests/seek$(EXESUF)
+$(FATE_SEEK): CMD = run libavformat/tests/seek$(EXESUF) $(TARGET_PATH)/tests/data/$(SRC)
 $(FATE_SEEK): fate-seek-%: fate-%
 fate-seek-%: REF = $(SRC_PATH)/tests/ref/seek/$(@:fate-seek-%=%)
 

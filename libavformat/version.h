@@ -29,8 +29,8 @@
 
 #include "libavutil/version.h"
 
-#define LIBAVFORMAT_VERSION_MAJOR 56
-#define LIBAVFORMAT_VERSION_MINOR 21
+#define LIBAVFORMAT_VERSION_MAJOR 58
+#define LIBAVFORMAT_VERSION_MINOR  2
 #define LIBAVFORMAT_VERSION_MICRO  0
 
 #define LIBAVFORMAT_VERSION_INT AV_VERSION_INT(LIBAVFORMAT_VERSION_MAJOR, \
@@ -48,14 +48,15 @@
  * dropped at a future version bump. The defines themselves are not part of
  * the public API and may change, break or disappear at any time.
  */
-#ifndef FF_API_LAVF_BITEXACT
-#define FF_API_LAVF_BITEXACT            (LIBAVFORMAT_VERSION_MAJOR < 57)
+
+#ifndef FF_API_LAVF_FMT_RAWPICTURE
+#define FF_API_LAVF_FMT_RAWPICTURE      (LIBAVFORMAT_VERSION_MAJOR < 59)
 #endif
-#ifndef FF_API_LAVF_FRAC
-#define FF_API_LAVF_FRAC                (LIBAVFORMAT_VERSION_MAJOR < 57)
+#ifndef FF_API_COMPUTE_PKT_FIELDS2
+#define FF_API_COMPUTE_PKT_FIELDS2      (LIBAVFORMAT_VERSION_MAJOR < 59)
 #endif
-#ifndef FF_API_LAVF_CODEC_TB
-#define FF_API_LAVF_CODEC_TB            (LIBAVFORMAT_VERSION_MAJOR < 57)
+#ifndef FF_API_LAVF_AVCTX
+#define FF_API_LAVF_AVCTX               (LIBAVFORMAT_VERSION_MAJOR < 59)
 #endif
 
 #endif /* AVFORMAT_VERSION_H */

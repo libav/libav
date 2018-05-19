@@ -11,7 +11,7 @@
 
 @chapter Introduction
 
-FATE provides a regression testsuite embedded within the Libav build system.
+FATE provides a regression test suite embedded within the Libav build system.
 It can be run locally and optionally configured to send reports to a web
 aggregator and viewer @url{http://fate.libav.org}.
 
@@ -24,7 +24,7 @@ and provide new tests when submitting patches to add additional features.
 In order to run, FATE needs a large amount of data (samples and references)
 that is provided separately from the actual source distribution.
 
-To inform the build system about the testsuite location, pass
+To inform the build system about the test suite location, pass
 @option{--samples=<path to the samples>} to @command{configure} or set the
 @var{SAMPLES} Make variable or the @var{LIBAV_SAMPLES} environment variable
 to a suitable value.
@@ -57,7 +57,7 @@ Specific Makefile targets and Makefile variables are available:
 List all fate/regression test targets.
 
 @item fate-rsync
-Shortcut to download the fate test samples to the specified testsuite location.
+Shortcut to download the fate test samples to the specified test suite location.
 
 @item fate
 Run the FATE test suite (requires the fate-suite dataset).
@@ -99,6 +99,11 @@ Specify or override the wrapper used to run the tests.
 
 @item GEN
 Set to @var{1} to generate the missing or mismatched references.
+
+@item HWACCEL
+Specify which hardware acceleration to use while running regression tests,
+by default none is used.
+
 @end table
 
 @example
@@ -134,6 +139,7 @@ workdir=                                # directory in which to do all the work
 fate_recv="ssh -T fate@@fate.libav.org"  # command to submit report
 comment=                                # optional description
 build_only=     # set to "yes" for a compile-only instance that skips tests
+ignore_tests=
 
 # the following are optional and map to configure options
 arch=
@@ -154,6 +160,8 @@ extra_conf=     # extra configure options not covered above
 
 #make=          # name of GNU make if not 'make'
 makeopts=       # extra options passed to 'make'
+#makeopts_fate= # extra options passed to 'make' when running tests,
+                # defaulting to makeopts above if this is not set
 #tar=           # command to create a tar archive from its arguments on
                 # stdout, defaults to 'tar c'
 @end example

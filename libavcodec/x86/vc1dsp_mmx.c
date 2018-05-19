@@ -81,13 +81,13 @@
     "movq      %%mm"#R1", "#OFF"(%1)   \n\t"    \
     "add       %2, %0                  \n\t"
 
-/** Sacrifying mm6 allows to pipeline loads from src */
+/** Sacrificing mm6 allows to pipeline loads from src */
 static void vc1_put_ver_16b_shift2_mmx(int16_t *dst,
                                        const uint8_t *src, x86_reg stride,
                                        int rnd, int64_t shift)
 {
     __asm__ volatile(
-        "mov       $3, %%"REG_c"           \n\t"
+        "mov       $3, %%"FF_REG_c"        \n\t"
         LOAD_ROUNDER_MMX("%5")
         "movq      "MANGLE(ff_pw_9)", %%mm6 \n\t"
         "1:                                \n\t"
@@ -106,12 +106,12 @@ static void vc1_put_ver_16b_shift2_mmx(int16_t *dst,
         SHIFT2_LINE(168, 4, 1, 2, 3)
         "sub       %6, %0                  \n\t"
         "add       $8, %1                  \n\t"
-        "dec       %%"REG_c"               \n\t"
+        "dec       %%"FF_REG_c"            \n\t"
         "jnz 1b                            \n\t"
         : "+r"(src), "+r"(dst)
         : "r"(stride), "r"(-2*stride),
           "m"(shift), "m"(rnd), "r"(9*stride-4)
-        : "%"REG_c, "memory"
+        : "%"FF_REG_c, "memory"
     );
 }
 
@@ -165,7 +165,7 @@ VC1_HOR_16b_SHIFT2(OP_AVG, avg_)
 
 /**
  * Purely vertical or horizontal 1/2 shift interpolation.
- * Sacrify mm6 for *9 factor.
+ * Sacrifice mm6 for *9 factor.
  */
 #define VC1_SHIFT2(OP, OPNAME)\
 static void OPNAME ## vc1_shift2_mmx(uint8_t *dst, const uint8_t *src,\
@@ -173,7 +173,7 @@ static void OPNAME ## vc1_shift2_mmx(uint8_t *dst, const uint8_t *src,\
 {\
     rnd = 8-rnd;\
     __asm__ volatile(\
-        "mov       $8, %%"REG_c"           \n\t"\
+        "mov       $8, %%"FF_REG_c"        \n\t"\
         LOAD_ROUNDER_MMX("%5")\
         "movq      "MANGLE(ff_pw_9)", %%mm6\n\t"\
         "1:                                \n\t"\
@@ -208,12 +208,12 @@ static void OPNAME ## vc1_shift2_mmx(uint8_t *dst, const uint8_t *src,\
         "movq      %%mm3, (%1)             \n\t"\
         "add       %6, %0                  \n\t"\
         "add       %4, %1                  \n\t"\
-        "dec       %%"REG_c"               \n\t"\
+        "dec       %%"FF_REG_c"            \n\t"\
         "jnz 1b                            \n\t"\
         : "+r"(src),  "+r"(dst)\
         : "r"(offset), "r"(-2*offset), "g"(stride), "m"(rnd),\
           "g"(stride-offset)\
-        : "%"REG_c, "memory"\
+        : "%"FF_REG_c, "memory"\
     );\
 }
 
@@ -223,7 +223,7 @@ VC1_SHIFT2(OP_AVG, avg_)
 /**
  * Core of the 1/4 and 3/4 shift bicubic interpolation.
  *
- * @param UNPACK  Macro unpacking arguments from 8 to 16bits (can be empty).
+ * @param UNPACK  Macro unpacking arguments from 8 to 16 bits (can be empty).
  * @param MOVQ    "movd 1" or "movq 2", if data read is already unpacked.
  * @param A1      Address of 1st tap (beware of unpacked/packed).
  * @param A2      Address of 2nd tap
@@ -263,7 +263,7 @@ VC1_SHIFT2(OP_AVG, avg_)
      "paddw     %%mm2, %%mm4    \n\t" /* 4,53,18,-3 */
 
 /**
- * Macro to build the vertical 16bits version of vc1_put_shift[13].
+ * Macro to build the vertical 16 bits version of vc1_put_shift[13].
  * Here, offset=src_stride. Parameters passed A1 to A4 must use
  * %3 (src_stride) and %4 (3*src_stride).
  *
@@ -320,8 +320,8 @@ vc1_put_ver_16b_ ## NAME ## _mmx(int16_t *dst, const uint8_t *src,      \
 }
 
 /**
- * Macro to build the horizontal 16bits version of vc1_put_shift[13].
- * Here, offset=16bits, so parameters passed A1 to A4 should be simple.
+ * Macro to build the horizontal 16 bits version of vc1_put_shift[13].
+ * Here, offset=16 bits, so parameters passed A1 to A4 should be simple.
  *
  * @param  NAME   Either 1 or 3
  * @see MSPEL_FILTER13_CORE for information on A1->A4
@@ -357,7 +357,7 @@ OPNAME ## vc1_hor_16b_ ## NAME ## _mmx(uint8_t *dst, x86_reg stride,    \
 }
 
 /**
- * Macro to build the 8bits, any direction, version of vc1_put_shift[13].
+ * Macro to build the 8 bits, any direction, version of vc1_put_shift[13].
  * Here, offset=src_stride. Parameters passed A1 to A4 must use
  * %3 (offset) and %4 (3*offset).
  *
@@ -498,7 +498,7 @@ DECLARE_FUNCTION(3, 1)
 DECLARE_FUNCTION(3, 2)
 DECLARE_FUNCTION(3, 3)
 
-static void vc1_inv_trans_4x4_dc_mmxext(uint8_t *dest, int linesize,
+static void vc1_inv_trans_4x4_dc_mmxext(uint8_t *dest, ptrdiff_t stride,
                                         int16_t *block)
 {
     int dc = block[0];
@@ -530,14 +530,14 @@ static void vc1_inv_trans_4x4_dc_mmxext(uint8_t *dest, int linesize,
         "movd       %%mm3, %1    \n\t"
         "movd       %%mm4, %2    \n\t"
         "movd       %%mm5, %3    \n\t"
-        :"+m"(*(uint32_t*)(dest+0*linesize)),
-         "+m"(*(uint32_t*)(dest+1*linesize)),
-         "+m"(*(uint32_t*)(dest+2*linesize)),
-         "+m"(*(uint32_t*)(dest+3*linesize))
+        :"+m"(*(uint32_t *)(dest + 0 * stride)),
+         "+m"(*(uint32_t *)(dest + 1 * stride)),
+         "+m"(*(uint32_t *)(dest + 2 * stride)),
+         "+m"(*(uint32_t *)(dest + 3 * stride))
     );
 }
 
-static void vc1_inv_trans_4x8_dc_mmxext(uint8_t *dest, int linesize,
+static void vc1_inv_trans_4x8_dc_mmxext(uint8_t *dest, ptrdiff_t stride,
                                         int16_t *block)
 {
     int dc = block[0];
@@ -569,12 +569,12 @@ static void vc1_inv_trans_4x8_dc_mmxext(uint8_t *dest, int linesize,
         "movd       %%mm3, %1    \n\t"
         "movd       %%mm4, %2    \n\t"
         "movd       %%mm5, %3    \n\t"
-        :"+m"(*(uint32_t*)(dest+0*linesize)),
-         "+m"(*(uint32_t*)(dest+1*linesize)),
-         "+m"(*(uint32_t*)(dest+2*linesize)),
-         "+m"(*(uint32_t*)(dest+3*linesize))
+        :"+m"(*(uint32_t *)(dest + 0 * stride)),
+         "+m"(*(uint32_t *)(dest + 1 * stride)),
+         "+m"(*(uint32_t *)(dest + 2 * stride)),
+         "+m"(*(uint32_t *)(dest + 3 * stride))
     );
-    dest += 4*linesize;
+    dest += 4 * stride;
     __asm__ volatile(
         "movd          %0, %%mm2 \n\t"
         "movd          %1, %%mm3 \n\t"
@@ -592,14 +592,14 @@ static void vc1_inv_trans_4x8_dc_mmxext(uint8_t *dest, int linesize,
         "movd       %%mm3, %1    \n\t"
         "movd       %%mm4, %2    \n\t"
         "movd       %%mm5, %3    \n\t"
-        :"+m"(*(uint32_t*)(dest+0*linesize)),
-         "+m"(*(uint32_t*)(dest+1*linesize)),
-         "+m"(*(uint32_t*)(dest+2*linesize)),
-         "+m"(*(uint32_t*)(dest+3*linesize))
+        :"+m"(*(uint32_t *)(dest + 0 * stride)),
+         "+m"(*(uint32_t *)(dest + 1 * stride)),
+         "+m"(*(uint32_t *)(dest + 2 * stride)),
+         "+m"(*(uint32_t *)(dest + 3 * stride))
     );
 }
 
-static void vc1_inv_trans_8x4_dc_mmxext(uint8_t *dest, int linesize,
+static void vc1_inv_trans_8x4_dc_mmxext(uint8_t *dest, ptrdiff_t stride,
                                         int16_t *block)
 {
     int dc = block[0];
@@ -631,14 +631,14 @@ static void vc1_inv_trans_8x4_dc_mmxext(uint8_t *dest, int linesize,
         "movq       %%mm3, %1    \n\t"
         "movq       %%mm4, %2    \n\t"
         "movq       %%mm5, %3    \n\t"
-        :"+m"(*(uint32_t*)(dest+0*linesize)),
-         "+m"(*(uint32_t*)(dest+1*linesize)),
-         "+m"(*(uint32_t*)(dest+2*linesize)),
-         "+m"(*(uint32_t*)(dest+3*linesize))
+        :"+m"(*(uint32_t *)(dest + 0 * stride)),
+         "+m"(*(uint32_t *)(dest + 1 * stride)),
+         "+m"(*(uint32_t *)(dest + 2 * stride)),
+         "+m"(*(uint32_t *)(dest + 3 * stride))
     );
 }
 
-static void vc1_inv_trans_8x8_dc_mmxext(uint8_t *dest, int linesize,
+static void vc1_inv_trans_8x8_dc_mmxext(uint8_t *dest, ptrdiff_t stride,
                                         int16_t *block)
 {
     int dc = block[0];
@@ -670,12 +670,12 @@ static void vc1_inv_trans_8x8_dc_mmxext(uint8_t *dest, int linesize,
         "movq       %%mm3, %1    \n\t"
         "movq       %%mm4, %2    \n\t"
         "movq       %%mm5, %3    \n\t"
-        :"+m"(*(uint32_t*)(dest+0*linesize)),
-         "+m"(*(uint32_t*)(dest+1*linesize)),
-         "+m"(*(uint32_t*)(dest+2*linesize)),
-         "+m"(*(uint32_t*)(dest+3*linesize))
+        :"+m"(*(uint32_t *)(dest + 0 * stride)),
+         "+m"(*(uint32_t *)(dest + 1 * stride)),
+         "+m"(*(uint32_t *)(dest + 2 * stride)),
+         "+m"(*(uint32_t *)(dest + 3 * stride))
     );
-    dest += 4*linesize;
+    dest += 4 * stride;
     __asm__ volatile(
         "movq          %0, %%mm2 \n\t"
         "movq          %1, %%mm3 \n\t"
@@ -693,10 +693,10 @@ static void vc1_inv_trans_8x8_dc_mmxext(uint8_t *dest, int linesize,
         "movq       %%mm3, %1    \n\t"
         "movq       %%mm4, %2    \n\t"
         "movq       %%mm5, %3    \n\t"
-        :"+m"(*(uint32_t*)(dest+0*linesize)),
-         "+m"(*(uint32_t*)(dest+1*linesize)),
-         "+m"(*(uint32_t*)(dest+2*linesize)),
-         "+m"(*(uint32_t*)(dest+3*linesize))
+        :"+m"(*(uint32_t *)(dest + 0 * stride)),
+         "+m"(*(uint32_t *)(dest + 1 * stride)),
+         "+m"(*(uint32_t *)(dest + 2 * stride)),
+         "+m"(*(uint32_t *)(dest + 3 * stride))
     );
 }
 

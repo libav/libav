@@ -71,8 +71,8 @@ static void cmv_decode_intra(CmvContext * s, AVFrame *frame,
     }
 }
 
-static void cmv_motcomp(unsigned char *dst, int dst_stride,
-                        const unsigned char *src, int src_stride,
+static void cmv_motcomp(unsigned char *dst, ptrdiff_t dst_stride,
+                        const unsigned char *src, ptrdiff_t src_stride,
                         int x, int y,
                         int xoffset, int yoffset,
                         int width, int height){
@@ -240,5 +240,5 @@ AVCodec ff_eacmv_decoder = {
     .init           = cmv_decode_init,
     .close          = cmv_decode_end,
     .decode         = cmv_decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
 };

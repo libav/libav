@@ -1,5 +1,4 @@
 /*
- *
  * This file is part of Libav.
  *
  * Libav is free software; you can redistribute it and/or
@@ -55,7 +54,6 @@
    }
    av_dict_free(&d);
  @endcode
- *
  */
 
 #define AV_DICT_MATCH_CASE      1
@@ -63,7 +61,7 @@
 #define AV_DICT_DONT_STRDUP_KEY 4   /**< Take ownership of a key that's been
                                          allocated with av_malloc() and children. */
 #define AV_DICT_DONT_STRDUP_VAL 8   /**< Take ownership of a value that's been
-                                         allocated with av_malloc() and chilren. */
+                                         allocated with av_malloc() and children. */
 #define AV_DICT_DONT_OVERWRITE 16   ///< Don't overwrite existing entries.
 #define AV_DICT_APPEND         32   /**< If the entry already exists, append to it.  Note that no
                                       delimiter is added, the strings are simply concatenated. */
@@ -130,8 +128,10 @@ int av_dict_parse_string(AVDictionary **pm, const char *str,
  * @param src pointer to source AVDictionary struct
  * @param flags flags to use when setting entries in *dst
  * @note metadata is read using the AV_DICT_IGNORE_SUFFIX flag
+ * @return 0 on success, negative AVERROR code on failure. If dst was allocated
+ *           by this function, callers should free the associated memory.
  */
-void av_dict_copy(AVDictionary **dst, const AVDictionary *src, int flags);
+int av_dict_copy(AVDictionary **dst, const AVDictionary *src, int flags);
 
 /**
  * Free all the memory allocated for an AVDictionary struct

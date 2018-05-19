@@ -32,20 +32,20 @@
 #include "libavutil/x86/cpu.h"
 #include "hpeldsp.h"
 
-#if HAVE_YASM
+#if HAVE_X86ASM
 void ff_put_rv40_chroma_mc8_mmx  (uint8_t *dst, uint8_t *src,
-                                  int stride, int h, int x, int y);
+                                  ptrdiff_t stride, int h, int x, int y);
 void ff_avg_rv40_chroma_mc8_mmxext(uint8_t *dst, uint8_t *src,
-                                   int stride, int h, int x, int y);
+                                   ptrdiff_t stride, int h, int x, int y);
 void ff_avg_rv40_chroma_mc8_3dnow(uint8_t *dst, uint8_t *src,
-                                  int stride, int h, int x, int y);
+                                  ptrdiff_t stride, int h, int x, int y);
 
 void ff_put_rv40_chroma_mc4_mmx  (uint8_t *dst, uint8_t *src,
-                                  int stride, int h, int x, int y);
+                                  ptrdiff_t stride, int h, int x, int y);
 void ff_avg_rv40_chroma_mc4_mmxext(uint8_t *dst, uint8_t *src,
-                                   int stride, int h, int x, int y);
+                                   ptrdiff_t stride, int h, int x, int y);
 void ff_avg_rv40_chroma_mc4_3dnow(uint8_t *dst, uint8_t *src,
-                                  int stride, int h, int x, int y);
+                                  ptrdiff_t stride, int h, int x, int y);
 
 #define DECLARE_WEIGHT(opt) \
 void ff_rv40_weight_func_rnd_16_##opt(uint8_t *dst, uint8_t *src1, uint8_t *src2, \
@@ -94,7 +94,7 @@ static void OP ## rv40_qpel ##SIZE ##_mc ##PH ##PV ##OPT(uint8_t *dst,  \
             ff_ ##OP ##rv40_qpel_h ## OPT(dst + i, stride, src + i,     \
                                           stride, SIZE, HCOFF(PH));     \
     }                                                                   \
-};
+}
 
 /** Declare functions for sizes 8 and 16 and given operations
  *  and qpel position. */
@@ -186,7 +186,7 @@ QPEL_FUNCS_SET (OP, 3, 1, OPT) \
 QPEL_FUNCS_SET (OP, 3, 2, OPT)
 /** @} */
 
-#endif /* HAVE_YASM */
+#endif /* HAVE_X86ASM */
 
 #if HAVE_MMX_INLINE
 static void put_rv40_qpel8_mc33_mmx(uint8_t *dst, const uint8_t *src,
@@ -224,7 +224,7 @@ av_cold void ff_rv40dsp_init_x86(RV34DSPContext *c)
     }
 #endif /* HAVE_MMX_INLINE */
 
-#if HAVE_YASM
+#if HAVE_X86ASM
     if (EXTERNAL_MMX(cpu_flags)) {
         c->put_chroma_pixels_tab[0] = ff_put_rv40_chroma_mc8_mmx;
         c->put_chroma_pixels_tab[1] = ff_put_rv40_chroma_mc4_mmx;
@@ -266,5 +266,5 @@ av_cold void ff_rv40dsp_init_x86(RV34DSPContext *c)
         QPEL_MC_SET(put_, _ssse3)
         QPEL_MC_SET(avg_, _ssse3)
     }
-#endif /* HAVE_YASM */
+#endif /* HAVE_X86ASM */
 }

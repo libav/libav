@@ -28,7 +28,6 @@
  * Supports: PAL8 (RGB 8bpp, paletted)
  *         : BGR24 (RGB 24bpp) (can also output it as RGB32)
  *         : RGB32 (RGB 32bpp, 4th plane is probably alpha and it's ignored)
- *
  */
 
 #include <stdio.h>
@@ -193,5 +192,5 @@ AVCodec ff_eightbps_decoder = {
     .priv_data_size = sizeof(EightBpsContext),
     .init           = decode_init,
     .decode         = decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
 };

@@ -20,9 +20,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/cpu.h"
 #include "libavutil/mem.h"
-#include "libavutil/ppc/types_altivec.h"
+#include "libavutil/ppc/cpu.h"
 #include "libavutil/ppc/util_altivec.h"
+
 #include "libavcodec/mpegvideodsp.h"
 
 #if HAVE_ALTIVEC && HAVE_BIGENDIAN
@@ -123,11 +125,14 @@ static void gmc1_altivec(uint8_t *dst /* align 8 */, uint8_t *src /* align1 */,
         src += stride;
     }
 }
-#endif /* HAVE_ALTIVEC */
+#endif /* HAVE_ALTIVEC && HAVE_BIGENDIAN */
 
 av_cold void ff_mpegvideodsp_init_ppc(MpegVideoDSPContext *c)
 {
 #if HAVE_ALTIVEC && HAVE_BIGENDIAN
+    if (!PPC_ALTIVEC(av_get_cpu_flags()))
+        return;
+
     c->gmc1 = gmc1_altivec;
-#endif /* HAVE_ALTIVEC */
+#endif /* HAVE_ALTIVEC && HAVE_BIGENDIAN */
 }

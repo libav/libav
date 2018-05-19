@@ -304,7 +304,7 @@ retry:
     url = s->segments[s->cur_seq_no - s->start_seq_no]->url,
     av_log(h, AV_LOG_DEBUG, "opening %s\n", url);
     ret = ffurl_open(&s->seg_hd, url, AVIO_FLAG_READ,
-                     &h->interrupt_callback, NULL);
+                     &h->interrupt_callback, NULL, h->protocols, h);
     if (ret < 0) {
         if (ff_check_interrupt(&h->interrupt_callback))
             return AVERROR_EXIT;
@@ -315,7 +315,7 @@ retry:
     goto start;
 }
 
-URLProtocol ff_hls_protocol = {
+const URLProtocol ff_hls_protocol = {
     .name           = "hls",
     .url_open       = hls_open,
     .url_read       = hls_read,

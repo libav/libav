@@ -31,9 +31,10 @@
 
 #include "libavutil/channel_layout.h"
 #include "libavutil/float_dsp.h"
+
 #include "avcodec.h"
+#include "bitstream.h"
 #include "internal.h"
-#include "get_bits.h"
 #include "qcelpdata.h"
 #include "celp_filters.h"
 #include "acelp_filters.h"
@@ -53,7 +54,7 @@ typedef enum {
 } qcelp_packet_rate;
 
 typedef struct QCELPContext {
-    GetBitContext     gb;
+    BitstreamContext  bc;
     qcelp_packet_rate bitrate;
     QCELPFrame        frame;    /**< unpacked data frame */
 
@@ -600,7 +601,7 @@ static qcelp_packet_rate buf_size2bitrate(const int buf_size)
  *
  * @param avctx the AV codec context
  * @param buf_size length of the buffer
- * @param buf the bufffer
+ * @param buf the buffer
  *
  * @return the bitrate on success,
  *         I_F_Q  if the bitrate cannot be satisfactorily determined
@@ -718,12 +719,12 @@ static int qcelp_decode_frame(AVCodecContext *avctx, void *data,
                                          qcelp_unpacking_bitmaps_lengths[q->bitrate];
         uint8_t *unpacked_data         = (uint8_t *)&q->frame;
 
-        init_get_bits(&q->gb, buf, 8 * buf_size);
+        bitstream_init8(&q->bc, buf, buf_size);
 
         memset(&q->frame, 0, sizeof(QCELPFrame));
 
         for (; bitmaps < bitmaps_end; bitmaps++)
-            unpacked_data[bitmaps->index] |= get_bits(&q->gb, bitmaps->bitlen) << bitmaps->bitpos;
+            unpacked_data[bitmaps->index] |= bitstream_read(&q->bc, bitmaps->bitlen) << bitmaps->bitpos;
 
         // Check for erasures/blanks on rates 1, 1/4 and 1/8.
         if (q->frame.reserved) {
@@ -794,6 +795,6 @@ AVCodec ff_qcelp_decoder = {
     .id             = AV_CODEC_ID_QCELP,
     .init           = qcelp_decode_init,
     .decode         = qcelp_decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
     .priv_data_size = sizeof(QCELPContext),
 };

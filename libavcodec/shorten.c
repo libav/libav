@@ -23,13 +23,13 @@
  * @file
  * Shorten decoder
  * @author Jeff Muizelaar
- *
  */
 
 #include <limits.h>
+
 #include "avcodec.h"
+#include "bitstream.h"
 #include "bytestream.h"
-#include "get_bits.h"
 #include "golomb.h"
 #include "internal.h"
 
@@ -80,7 +80,7 @@ static const uint8_t is_audio_command[10] = { 1, 1, 1, 1, 0, 0, 0, 1, 1, 0 };
 
 typedef struct ShortenContext {
     AVCodecContext *avctx;
-    GetBitContext gb;
+    BitstreamContext bc;
 
     int min_framesize, max_framesize;
     unsigned channels;
@@ -155,8 +155,8 @@ static int allocate_buffers(ShortenContext *s)
 static inline unsigned int get_uint(ShortenContext *s, int k)
 {
     if (s->version != 0)
-        k = get_ur_golomb_shorten(&s->gb, ULONGSIZE);
-    return get_ur_golomb_shorten(&s->gb, k);
+        k = get_ur_golomb_shorten(&s->bc, ULONGSIZE);
+    return get_ur_golomb_shorten(&s->bc, k);
 }
 
 static void fix_bitshift(ShortenContext *s, int32_t *buffer)
@@ -281,7 +281,7 @@ static int decode_subframe_lpc(ShortenContext *s, int command, int channel,
 
     if (command == FN_QLPC) {
         /* read/validate prediction order */
-        pred_order = get_ur_golomb_shorten(&s->gb, LPCQSIZE);
+        pred_order = get_ur_golomb_shorten(&s->bc, LPCQSIZE);
         if (pred_order > s->nwrap) {
             av_log(s->avctx, AV_LOG_ERROR, "invalid pred_order %d\n",
                    pred_order);
@@ -289,7 +289,7 @@ static int decode_subframe_lpc(ShortenContext *s, int command, int channel,
         }
         /* read LPC coefficients */
         for (i = 0; i < pred_order; i++)
-            s->coeffs[i] = get_sr_golomb_shorten(&s->gb, LPCQUANT);
+            s->coeffs[i] = get_sr_golomb_shorten(&s->bc, LPCQUANT);
         coeffs = s->coeffs;
 
         qshift = LPCQUANT;
@@ -316,7 +316,7 @@ static int decode_subframe_lpc(ShortenContext *s, int command, int channel,
         sum = init_sum;
         for (j = 0; j < pred_order; j++)
             sum += coeffs[j] * s->decoded[channel][i - j - 1];
-        s->decoded[channel][i] = get_sr_golomb_shorten(&s->gb, residual_size) +
+        s->decoded[channel][i] = get_sr_golomb_shorten(&s->bc, residual_size) +
                                  (sum >> qshift);
     }
 
@@ -333,7 +333,7 @@ static int read_header(ShortenContext *s)
     int i, ret;
     int maxnlpc = 0;
     /* shorten signature */
-    if (get_bits_long(&s->gb, 32) != AV_RB32("ajkg")) {
+    if (bitstream_read(&s->bc, 32) != AV_RB32("ajkg")) {
         av_log(s->avctx, AV_LOG_ERROR, "missing shorten magic 'ajkg'\n");
         return AVERROR_INVALIDDATA;
     }
@@ -341,7 +341,7 @@ static int read_header(ShortenContext *s)
     s->lpcqoffset     = 0;
     s->blocksize      = DEFAULT_BLOCK_SIZE;
     s->nmean          = -1;
-    s->version        = get_bits(&s->gb, 8);
+    s->version        = bitstream_read(&s->bc, 8);
     s->internal_ftype = get_uint(s, TYPESIZE);
 
     s->channels = get_uint(s, CHANSIZE);
@@ -375,7 +375,7 @@ static int read_header(ShortenContext *s)
 
         skip_bytes = get_uint(s, NSKIPSIZE);
         for (i = 0; i < skip_bytes; i++)
-            skip_bits(&s->gb, 8);
+            bitstream_skip(&s->bc, 8);
     }
     s->nwrap = FFMAX(NWRAP, maxnlpc);
 
@@ -388,13 +388,13 @@ static int read_header(ShortenContext *s)
     if (s->version > 1)
         s->lpcqoffset = V2LPCQOFFSET;
 
-    if (get_ur_golomb_shorten(&s->gb, FNSIZE) != FN_VERBATIM) {
+    if (get_ur_golomb_shorten(&s->bc, FNSIZE) != FN_VERBATIM) {
         av_log(s->avctx, AV_LOG_ERROR,
                "missing verbatim section at beginning of stream\n");
         return AVERROR_INVALIDDATA;
     }
 
-    s->header_size = get_ur_golomb_shorten(&s->gb, VERBATIM_CKSIZE_SIZE);
+    s->header_size = get_ur_golomb_shorten(&s->bc, VERBATIM_CKSIZE_SIZE);
     if (s->header_size >= OUT_BUFFER_SIZE ||
         s->header_size < CANONICAL_HEADER_SIZE) {
         av_log(s->avctx, AV_LOG_ERROR, "header is wrong size: %d\n",
@@ -403,7 +403,7 @@ static int read_header(ShortenContext *s)
     }
 
     for (i = 0; i < s->header_size; i++)
-        s->header[i] = (char)get_ur_golomb_shorten(&s->gb, VERBATIM_BYTE_SIZE);
+        s->header[i] = (char)get_ur_golomb_shorten(&s->bc, VERBATIM_BYTE_SIZE);
 
     if ((ret = decode_wave_header(s->avctx, s->header, s->header_size)) < 0)
         return ret;
@@ -431,7 +431,7 @@ static int shorten_decode_frame(AVCodecContext *avctx, void *data,
         void *tmp_ptr;
         s->max_framesize = 1024; // should hopefully be enough for the first header
         tmp_ptr = av_fast_realloc(s->bitstream, &s->allocated_bitstream_size,
-                                  s->max_framesize + FF_INPUT_BUFFER_PADDING_SIZE);
+                                  s->max_framesize + AV_INPUT_BUFFER_PADDING_SIZE);
         if (!tmp_ptr) {
             av_log(avctx, AV_LOG_ERROR, "error allocating bitstream buffer\n");
             return AVERROR(ENOMEM);
@@ -465,8 +465,8 @@ static int shorten_decode_frame(AVCodecContext *avctx, void *data,
         }
     }
     /* init and position bitstream reader */
-    init_get_bits(&s->gb, buf, buf_size * 8);
-    skip_bits(&s->gb, s->bitindex);
+    bitstream_init8(&s->bc, buf, buf_size);
+    bitstream_skip(&s->bc, s->bitindex);
 
     /* process header or next subblock */
     if (!s->got_header) {
@@ -487,12 +487,12 @@ static int shorten_decode_frame(AVCodecContext *avctx, void *data,
         unsigned cmd;
         int len;
 
-        if (get_bits_left(&s->gb) < 3 + FNSIZE) {
+        if (bitstream_bits_left(&s->bc) < 3 + FNSIZE) {
             *got_frame_ptr = 0;
             break;
         }
 
-        cmd = get_ur_golomb_shorten(&s->gb, FNSIZE);
+        cmd = get_ur_golomb_shorten(&s->bc, FNSIZE);
 
         if (cmd > FN_VERBATIM) {
             av_log(avctx, AV_LOG_ERROR, "unknown shorten function %d\n", cmd);
@@ -504,20 +504,20 @@ static int shorten_decode_frame(AVCodecContext *avctx, void *data,
             /* process non-audio command */
             switch (cmd) {
             case FN_VERBATIM:
-                len = get_ur_golomb_shorten(&s->gb, VERBATIM_CKSIZE_SIZE);
+                len = get_ur_golomb_shorten(&s->bc, VERBATIM_CKSIZE_SIZE);
                 while (len--)
-                    get_ur_golomb_shorten(&s->gb, VERBATIM_BYTE_SIZE);
+                    get_ur_golomb_shorten(&s->bc, VERBATIM_BYTE_SIZE);
                 break;
             case FN_BITSHIFT:
-                s->bitshift = get_ur_golomb_shorten(&s->gb, BITSHIFTSIZE);
+                s->bitshift = get_ur_golomb_shorten(&s->bc, BITSHIFTSIZE);
                 if (s->bitshift < 0)
                     return AVERROR_INVALIDDATA;
                 break;
             case FN_BLOCKSIZE: {
                 unsigned blocksize = get_uint(s, av_log2(s->blocksize));
                 if (blocksize > s->blocksize) {
-                    av_log(avctx, AV_LOG_ERROR,
-                           "Increasing block size is not supported\n");
+                    avpriv_report_missing_feature(avctx,
+                                                  "Increasing block size");
                     return AVERROR_PATCHWELCOME;
                 }
                 if (!blocksize || blocksize > MAX_BLOCKSIZE) {
@@ -544,7 +544,7 @@ static int shorten_decode_frame(AVCodecContext *avctx, void *data,
 
             /* get Rice code for residual decoding */
             if (cmd != FN_ZERO) {
-                residual_size = get_ur_golomb_shorten(&s->gb, ENERGYSIZE);
+                residual_size = get_ur_golomb_shorten(&s->bc, ENERGYSIZE);
                 /* This is a hack as version 0 differed in the definition
                  * of get_sr_golomb_shorten(). */
                 if (s->version == 0)
@@ -617,8 +617,8 @@ static int shorten_decode_frame(AVCodecContext *avctx, void *data,
         *got_frame_ptr = 0;
 
 finish_frame:
-    s->bitindex = get_bits_count(&s->gb) - 8 * (get_bits_count(&s->gb) / 8);
-    i           = get_bits_count(&s->gb) / 8;
+    s->bitindex = bitstream_tell(&s->bc) - 8 * (bitstream_tell(&s->bc) / 8);
+    i           = bitstream_tell(&s->bc) / 8;
     if (i > buf_size) {
         av_log(s->avctx, AV_LOG_ERROR, "overread: %d\n", i - buf_size);
         s->bitstream_size  = 0;
@@ -658,7 +658,7 @@ AVCodec ff_shorten_decoder = {
     .init           = shorten_decode_init,
     .close          = shorten_decode_close,
     .decode         = shorten_decode_frame,
-    .capabilities   = CODEC_CAP_DELAY | CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DELAY | AV_CODEC_CAP_DR1,
     .sample_fmts    = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_S16P,
                                                       AV_SAMPLE_FMT_NONE },
 };

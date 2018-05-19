@@ -47,7 +47,7 @@ const uint8_t ff_dca_bits_per_sample[7] = {
 
 /* ADPCM data */
 
-/* 16bits signed fractional Q13 binary codes */
+/* 16 bits signed fractional Q13 binary codes */
 const int16_t ff_dca_adpcm_vb[4096][4] = {
     {   9928,  -2618,  -1093, -1263 },
     {  11077,  -2876,  -1747,  -308 },
@@ -4179,7 +4179,7 @@ const uint32_t ff_dca_scale_factor_quant7[128] = {
     5011872, 5688529, 6456542, 7328245, 8317638,       0,       0,       0
 };
 
-/* 20bits unsigned fractional binary codes */
+/* 20 bits unsigned fractional binary codes */
 const uint32_t ff_dca_lossy_quant[32] = {
          0, 6710886, 4194304, 3355443, 2474639, 2097152, 1761608, 1426063,
     796918,  461373,  251658,  146801,   79692,   46137,   27263,   16777,
@@ -4187,27 +4187,12 @@ const uint32_t ff_dca_lossy_quant[32] = {
         84,      42,      21,       0,       0,       0,       0,       0
 };
 
-const float ff_dca_lossy_quant_d[32] = {
-          0,     1.6,      1.0,     0.8,    0.59,    0.50,    0.42,    0.34,
-       0.19,    0.11,     0.06,   0.035,   0.019,   0.011,  0.0065,  0.0040,
-     0.0025,  0.0014,   0.0008, 0.00045, 0.00030, 0.00017, 0.00008, 0.00004,
-    0.00002, 0.00001, 0.000005,       0,       0,       0,       0,       0
-};
-
-/* 20bits unsigned fractional binary codes */
+/* 20 bits unsigned fractional binary codes */
 const uint32_t ff_dca_lossless_quant[32] = {
          0, 4194304, 2097152, 1384120, 1048576, 696254, 524288, 348127,
     262144,  131072,   65431,   33026,   16450,   8208,   4100,   2049,
       1024,     512,     256,     128,      64,     32,     16,      8,
          4,       2,       1,       0,       0,      0,      0,      0
-};
-
-const float ff_dca_lossless_quant_d[32] = {
-           0,      1.0,      0.5,     0.33,     0.25,    0.166,    0.125,
-       0.083,   0.0625,  0.03125,   0.0156, 7.874E-3, 3.922E-3, 1.957E-3,
-    9.775E-4, 4.885E-4, 2.442E-4, 1.221E-4, 6.104E-5, 3.052E-5, 1.526E-5,
-    7.629E-6, 3.815E-6, 1.907E-6, 9.537E-7, 4.768E-7, 2.384E-7,        0,
-           0,        0,        0,        0
 };
 
 /* Vector quantization tables */

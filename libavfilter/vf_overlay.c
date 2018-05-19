@@ -66,7 +66,7 @@ enum EOFAction {
     EOF_ACTION_PASS
 };
 
-static const char *eof_action_str[] = {
+static const char * const eof_action_str[] = {
     "repeat", "endall", "pass"
 };
 
@@ -75,7 +75,7 @@ static const char *eof_action_str[] = {
 
 typedef struct OverlayContext {
     const AVClass *class;
-    int x, y;                   ///< position of overlayed picture
+    int x, y;                   ///< position of overlaid picture
 
     int max_plane_step[4];      ///< steps per pixel for each plane
     int hsub, vsub;             ///< chroma subsampling values
@@ -99,8 +99,8 @@ static av_cold void uninit(AVFilterContext *ctx)
 
 static int query_formats(AVFilterContext *ctx)
 {
-    const enum AVPixelFormat inout_pix_fmts[] = { AV_PIX_FMT_YUV420P,  AV_PIX_FMT_NONE };
-    const enum AVPixelFormat blend_pix_fmts[] = { AV_PIX_FMT_YUVA420P, AV_PIX_FMT_NONE };
+    static const enum AVPixelFormat inout_pix_fmts[] = { AV_PIX_FMT_YUV420P,  AV_PIX_FMT_NONE };
+    static const enum AVPixelFormat blend_pix_fmts[] = { AV_PIX_FMT_YUVA420P, AV_PIX_FMT_NONE };
     AVFilterFormats *inout_formats = ff_make_format_list(inout_pix_fmts);
     AVFilterFormats *blend_formats = ff_make_format_list(blend_pix_fmts);
 

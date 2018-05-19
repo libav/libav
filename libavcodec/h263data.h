@@ -1,6 +1,6 @@
 /*
  * copyright (c) 2000,2001 Fabrice Bellard
- * H263+ support
+ * H.263+ support
  * copyright (c) 2001 Juan J. Sierralta P
  * copyright (c) 2002-2004 Michael Niedermayer <michaelni@gmx.at>
  *
@@ -71,7 +71,7 @@ extern const uint8_t ff_modified_quant_tab[2][32];
 
 extern const uint8_t ff_h263_chroma_qscale_table[32];
 
-extern uint16_t ff_mba_max[6];
-extern uint8_t ff_mba_length[7];
+extern const uint16_t ff_mba_max[6];
+extern const uint8_t ff_mba_length[7];
 
 #endif /* AVCODEC_H263DATA_H */

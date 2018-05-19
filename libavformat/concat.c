@@ -95,7 +95,7 @@ static av_cold int concat_open(URLContext *h, const char *uri, int flags)
 
         /* creating URLContext */
         if ((err = ffurl_open(&uc, node_uri, flags,
-                              &h->interrupt_callback, NULL)) < 0)
+                              &h->interrupt_callback, NULL, h->protocols, h)) < 0)
             break;
 
         /* creating size */
@@ -181,7 +181,7 @@ static int64_t concat_seek(URLContext *h, int64_t pos, int whence)
     return result;
 }
 
-URLProtocol ff_concat_protocol = {
+const URLProtocol ff_concat_protocol = {
     .name           = "concat",
     .url_open       = concat_open,
     .url_read       = concat_read,

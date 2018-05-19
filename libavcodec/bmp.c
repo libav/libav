@@ -98,7 +98,8 @@ static int bmp_decode_frame(AVCodecContext *avctx,
         height = bytestream_get_le16(&buf);
         break;
     default:
-        av_log(avctx, AV_LOG_ERROR, "unsupported BMP file, patch welcome\n");
+        avpriv_report_missing_feature(avctx, "Information header size %u",
+                                      ihsize);
         return AVERROR_PATCHWELCOME;
     }
 
@@ -264,7 +265,7 @@ static int bmp_decode_frame(AVCodecContext *avctx,
             p->linesize[0] = -p->linesize[0];
         }
         bytestream2_init(&gb, buf, dsize);
-        ff_msrle_decode(avctx, (AVPicture*)p, depth, &gb);
+        ff_msrle_decode(avctx, p, depth, &gb);
         if (height < 0) {
             p->data[0]    +=  p->linesize[0] * (avctx->height - 1);
             p->linesize[0] = -p->linesize[0];
@@ -353,5 +354,5 @@ AVCodec ff_bmp_decoder = {
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_BMP,
     .decode         = bmp_decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
 };

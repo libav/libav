@@ -253,6 +253,10 @@ Overwrite output files without asking.
 @item -n (@emph{global})
 Immediately exit when output files already exist.
 
+@item -loop @var{number} (@emph{input})
+Set number of times input stream shall be looped. Loop 0 means no loop,
+loop -1 means infinite loop.
+
 @item -c[:@var{stream_specifier}] @var{codec} (@emph{input/output,per-stream})
 @itemx -codec[:@var{stream_specifier}] @var{codec} (@emph{input/output,per-stream})
 Select an encoder (when used before an output file) or a decoder (when used
@@ -339,7 +343,8 @@ avconv -i myfile.avi -target vcd -bf 2 /tmp/vcd.mpg
 @end example
 
 @item -dframes @var{number} (@emph{output})
-Set the number of data frames to record. This is an alias for @code{-frames:d}.
+Set the number of data frames to record. This is an obsolete alias for
+@code{-frames:d}, which you should use instead.
 
 @item -frames[:@var{stream_specifier}] @var{framecount} (@emph{output,per-stream})
 Stop writing to the stream after @var{framecount} frames.
@@ -348,6 +353,13 @@ Stop writing to the stream after @var{framecount} frames.
 @itemx -qscale[:@var{stream_specifier}] @var{q} (@emph{output,per-stream})
 Use fixed quality scale (VBR). The meaning of @var{q} is
 codec-dependent.
+
+@item -b[:@var{stream_specifier}] @var{bitrate} (@emph{output,per-stream})
+Set the stream bitrate in bits per second. When transcoding, this tells the
+encoder to use the specified bitrate for the encoded stream.
+
+For streamcopy, this provides a hint to the muxer about the bitrate of the input
+stream.
 
 @item -filter[:@var{stream_specifier}] @var{filter_graph} (@emph{output,per-stream})
 @var{filter_graph} is a description of the filter graph to apply to
@@ -410,7 +422,8 @@ Disable automatically rotating video based on file metadata.
 
 @table @option
 @item -vframes @var{number} (@emph{output})
-Set the number of video frames to record. This is an alias for @code{-frames:v}.
+Set the number of video frames to record. This is an obsolete alias for
+@code{-frames:v}, which you should use instead.
 @item -r[:@var{stream_specifier}] @var{fps} (@emph{input/output,per-stream})
 Set frame rate (Hz value, fraction or abbreviation).
 
@@ -493,6 +506,14 @@ abbreviations are recognized:
 1280x720
 @item hd1080
 1920x1080
+@item 2kdci
+2048x1080
+@item 4kdci
+4096x2160
+@item uhd2160
+3840x2160
+@item uhd4320
+7680x4320
 @end table
 
 @item -aspect[:@var{stream_specifier}] @var{aspect} (@emph{output,per-stream})
@@ -573,6 +594,70 @@ The timestamps must be specified in ascending order.
 When doing stream copy, copy also non-key frames found at the
 beginning.
 
+@item -init_hw_device @var{type}[=@var{name}][:@var{device}[,@var{key=value}...]]
+Initialise a new hardware device of type @var{type} called @var{name}, using the
+given device parameters.
+If no name is specified it will receive a default name of the form "@var{type}%d".
+
+The meaning of @var{device} and the following arguments depends on the
+device type:
+@table @option
+
+@item cuda
+@var{device} is the number of the CUDA device.
+
+@item dxva2
+@var{device} is the number of the Direct3D 9 display adapter.
+
+@item vaapi
+@var{device} is either an X11 display name or a DRM render node.
+If not specified, it will attempt to open the default X11 display (@emph{$DISPLAY})
+and then the first DRM render node (@emph{/dev/dri/renderD128}).
+
+@item vdpau
+@var{device} is an X11 display name.
+If not specified, it will attempt to open the default X11 display (@emph{$DISPLAY}).
+
+@item qsv
+@var{device} selects a value in @samp{MFX_IMPL_*}. Allowed values are:
+@table @option
+@item auto
+@item sw
+@item hw
+@item auto_any
+@item hw_any
+@item hw2
+@item hw3
+@item hw4
+@end table
+If not specified, @samp{auto_any} is used.
+(Note that it may be easier to achieve the desired result for QSV by creating the
+platform-appropriate subdevice (@samp{dxva2} or @samp{vaapi}) and then deriving a
+QSV device from that.)
+
+@end table
+
+@item -init_hw_device @var{type}[=@var{name}]@@@var{source}
+Initialise a new hardware device of type @var{type} called @var{name},
+deriving it from the existing device with the name @var{source}.
+
+@item -init_hw_device list
+List all hardware device types supported in this build of avconv.
+
+@item -filter_hw_device @var{name}
+Pass the hardware device called @var{name} to all filters in any filter graph.
+This can be used to set the device to upload to with the @code{hwupload} filter,
+or the device to map to with the @code{hwmap} filter.  Other filters may also
+make use of this parameter when they require a hardware device.  Note that this
+is typically only required when the input is not already in hardware frames -
+when it is, filters will derive the device they require from the context of the
+frames they receive as input.
+
+This is a global setting, so all filters will receive the same device.
+
+Do not use this option in scripts that should remain functional in future
+avconv versions.
+
 @item -hwaccel[:@var{stream_specifier}] @var{hwaccel} (@emph{input,per-stream})
 Use hardware acceleration to decode the matching stream(s). The allowed values
 of @var{hwaccel} are:
@@ -591,6 +676,19 @@ Use VDPAU (Video Decode and Presentation API for Unix) hardware acceleration.
 
 @item dxva2
 Use DXVA2 (DirectX Video Acceleration) hardware acceleration.
+
+@item vaapi
+Use VAAPI (Video Acceleration API) hardware acceleration.
+
+@item qsv
+Use the Intel QuickSync Video acceleration for video transcoding.
+
+Unlike most other values, this option does not enable accelerated decoding (that
+is used automatically whenever a qsv decoder is selected), but accelerated
+transcoding, without copying the frames into the system memory.
+
+For it to work, both the decoder and the encoder must support QSV acceleration
+and no filters must be used.
 @end table
 
 This option has no effect if the selected hwaccel is not available or not
@@ -605,26 +703,23 @@ useful for testing.
 @item -hwaccel_device[:@var{stream_specifier}] @var{hwaccel_device} (@emph{input,per-stream})
 Select a device to use for hardware acceleration.
 
-This option only makes sense when the @option{-hwaccel} option is also
-specified. Its exact meaning depends on the specific hardware acceleration
-method chosen.
+This option only makes sense when the @option{-hwaccel} option is also specified.
+It can either refer to an existing device created with @option{-init_hw_device}
+by name, or it can create a new device as if
+@samp{-init_hw_device} @var{type}:@var{hwaccel_device}
+were called immediately before.
 
-@table @option
-@item vdpau
-For VDPAU, this option specifies the X11 display/screen to use. If this option
-is not specified, the value of the @var{DISPLAY} environment variable is used
+@item -hwaccels
+List all hardware acceleration methods supported in this build of avconv.
 
-@item dxva2
-For DXVA2, this option should contain the number of the display adapter to use.
-If this option is not specified, the default adapter is used.
-@end table
 @end table
 
 @section Audio Options
 
 @table @option
 @item -aframes @var{number} (@emph{output})
-Set the number of audio frames to record. This is an alias for @code{-frames:a}.
+Set the number of audio frames to record. This is an obsolete alias for
+@code{-frames:a}, which you should use instead.
 @item -ar[:@var{stream_specifier}] @var{freq} (@emph{input/output,per-stream})
 Set the audio sampling frequency. For output streams it is set by
 default to the frequency of the corresponding input stream. For input
@@ -846,7 +941,7 @@ avconv -i infile -streamid 0:33 -streamid 1:36 out.ts
 @end example
 
 @item -bsf[:@var{stream_specifier}] @var{bitstream_filters} (@emph{output,per-stream})
-Set bitstream filters for matching streams. @var{bistream_filters} is
+Set bitstream filters for matching streams. @var{bitstream_filters} is
 a comma-separated list of bitstream filters. Use the @code{-bsfs} option
 to get the list of bitstream filters.
 @example
@@ -915,6 +1010,15 @@ This option enables or disables accurate seeking in input files with the
 @option{-ss} option. It is enabled by default, so seeking is accurate when
 transcoding. Use @option{-noaccurate_seek} to disable it, which may be useful
 e.g. when copying some streams and transcoding the others.
+
+@item -max_muxing_queue_size @var{packets} (@emph{output,per-stream})
+When transcoding audio and/or video streams, avconv will not begin writing into
+the output until it has one packet for each such stream. While waiting for that
+to happen, packets for other streams are buffered. This option sets the size of
+this buffer, in packets, for the matching output stream.
+
+The default value of this option should be high enough for most uses, so only
+touch this option if you are sure that you need it.
 
 @end table
 @c man end OPTIONS
@@ -1115,8 +1219,8 @@ output them in files named @file{foo-001.jpeg}, @file{foo-002.jpeg},
 etc. Images will be rescaled to fit the new WxH values.
 
 If you want to extract just a limited number of frames, you can use the
-above command in combination with the -vframes or -t option, or in
-combination with -ss to start extracting from a certain point in time.
+above command in combination with the @code{-frames:v} or @code{-t} option,
+or in combination with -ss to start extracting from a certain point in time.
 
 For creating a video from many images:
 @example
@@ -1160,7 +1264,6 @@ avconv -i src.ext -lmax 21*QP2LAMBDA dst.ext
 @include demuxers.texi
 @include muxers.texi
 @include indevs.texi
-@include outdevs.texi
 @include protocols.texi
 @include bitstream_filters.texi
 @include filters.texi

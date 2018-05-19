@@ -15,15 +15,15 @@
 
 @itemize @bullet
 @item libavcodec is the library containing the codecs (both encoding and
-decoding). Look at @file{libavcodec/apiexample.c} to see how to use it.
+decoding). Look at @file{doc/examples/avcodec.c} to see how to use it.
 
 @item libavformat is the library containing the file format handling (mux and
 demux code for several formats). Look at @file{avplay.c} to use it in a
-player. See @file{libavformat/output-example.c} to use it to generate
+player. See @file{doc/examples/output.c} to use it to generate
 audio or video streams.
 @end itemize
 
-@section Integrating libav in your program
+@section Integrating Libav in your program
 
 Shared libraries should be used whenever is possible in order to reduce
 the effort distributors have to pour to support programs and to ensure
@@ -218,7 +218,7 @@ e.g. @samp{ff_w64_demuxer}.
 @item
 For variables and functions visible outside of file scope, used internally
 across multiple libraries, use @code{avpriv_} as prefix, for example,
-@samp{avpriv_aac_parse_header}.
+@samp{avpriv_report_missing_feature}.
 
 @item
 For externally visible symbols, each library has its own prefix. Check
@@ -617,7 +617,7 @@ least make sure that it does not break anything.
 If the code changed has already a test present in FATE you should run it,
 otherwise it is advised to add it.
 
-Improvements to codec or demuxer might change the FATE results. Make sure
+Improvements to a codec or demuxer might change the FATE results. Make sure
 to commit the update reference with the change and to explain in the comment
 why the expected result changed.
 

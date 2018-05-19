@@ -21,9 +21,8 @@
 
 %include "libavutil/x86/x86util.asm"
 
-SECTION_RODATA
+SECTION_RODATA 16
 
-align 16
 ps_mask:  dd 0, ~0, ~0, ~0
 ps_mask2: dd 0, ~0,  0, ~0
 ps_mask3: dd 0,  0,  0, ~0
@@ -72,7 +71,7 @@ costabs:  times 4 dd  0.98480773
           times 4 dd  5.73685646
 
 %define SBLIMIT 32
-SECTION_TEXT
+SECTION .text
 
 %macro PSHUFD 3
 %if cpuflag(sse2) && notcpuflag(avx)

@@ -25,8 +25,10 @@
 
 #include "libavutil/frame.h"
 #include "libavutil/mem.h"
-#include "get_bits.h"
+
+#include "bitstream.h"
 #include "hqxdsp.h"
+#include "vlc.h"
 
 enum HQXACMode {
     HQX_AC_Q0 = 0,
@@ -55,7 +57,7 @@ typedef int (*mb_decode_func)(struct HQXContext *ctx,
                               int slice_no, int x, int y);
 
 typedef struct HQXSlice {
-    GetBitContext gb;
+    BitstreamContext bc;
     DECLARE_ALIGNED(16, int16_t, block)[16][64];
 } HQXSlice;
 

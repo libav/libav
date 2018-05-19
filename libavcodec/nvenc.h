@@ -19,25 +19,44 @@
 #ifndef AVCODEC_NVENC_H
 #define AVCODEC_NVENC_H
 
-#include <cuda.h>
 #include <nvEncodeAPI.h>
+
+#include "config.h"
 
 #include "libavutil/fifo.h"
 #include "libavutil/opt.h"
 
 #include "avcodec.h"
 
-typedef struct NVENCInputSurface {
-    NV_ENC_INPUT_PTR in;
-    NV_ENC_BUFFER_FORMAT format;
-    int locked;
-} NVENCInputSurface;
+#if CONFIG_CUDA
+#include <cuda.h>
+#else
 
-typedef struct NVENCOutputSurface {
+#if defined(_WIN32)
+#define CUDAAPI __stdcall
+#else
+#define CUDAAPI
+#endif
+
+typedef enum cudaError_enum {
+    CUDA_SUCCESS = 0
+} CUresult;
+typedef int CUdevice;
+typedef void* CUcontext;
+typedef void* CUdeviceptr;
+#endif
+
+#define MAX_REGISTERED_FRAMES 64
+
+typedef struct NVENCFrame {
+    NV_ENC_INPUT_PTR  in;
+    AVFrame          *in_ref;
+    NV_ENC_MAP_INPUT_RESOURCE in_map;
+    int reg_idx;
+
     NV_ENC_OUTPUT_PTR out;
-    NVENCInputSurface *in;
-    int busy;
-} NVENCOutputSurface;
+    NV_ENC_BUFFER_FORMAT format;
+} NVENCFrame;
 
 typedef CUresult(CUDAAPI *PCUINIT)(unsigned int Flags);
 typedef CUresult(CUDAAPI *PCUDEVICEGETCOUNT)(int *count);
@@ -46,13 +65,16 @@ typedef CUresult(CUDAAPI *PCUDEVICEGETNAME)(char *name, int len, CUdevice dev);
 typedef CUresult(CUDAAPI *PCUDEVICECOMPUTECAPABILITY)(int *major, int *minor, CUdevice dev);
 typedef CUresult(CUDAAPI *PCUCTXCREATE)(CUcontext *pctx, unsigned int flags, CUdevice dev);
 typedef CUresult(CUDAAPI *PCUCTXPOPCURRENT)(CUcontext *pctx);
+typedef CUresult(CUDAAPI *PCUCTXPUSHCURRENT)(CUcontext ctx);
 typedef CUresult(CUDAAPI *PCUCTXDESTROY)(CUcontext ctx);
 
 typedef NVENCSTATUS (NVENCAPI *PNVENCODEAPICREATEINSTANCE)(NV_ENCODE_API_FUNCTION_LIST *functionList);
 
 typedef struct NVENCLibraryContext
 {
+#if !CONFIG_CUDA
     void *cuda;
+#endif
     void *nvenc;
 
     PCUINIT cu_init;
@@ -62,6 +84,7 @@ typedef struct NVENCLibraryContext
     PCUDEVICECOMPUTECAPABILITY cu_device_compute_capability;
     PCUCTXCREATE cu_ctx_create;
     PCUCTXPOPCURRENT cu_ctx_pop_current;
+    PCUCTXPUSHCURRENT cu_ctx_push_current;
     PCUCTXDESTROY cu_ctx_destroy;
 
     NV_ENCODE_API_FUNCTION_LIST nvenc_funcs;
@@ -69,6 +92,9 @@ typedef struct NVENCLibraryContext
 
 enum {
     PRESET_DEFAULT,
+    PRESET_SLOW,
+    PRESET_MEDIUM,
+    PRESET_FAST,
     PRESET_HP,
     PRESET_HQ,
     PRESET_BD ,
@@ -88,8 +114,16 @@ enum {
 };
 
 enum {
+    NV_ENC_HEVC_PROFILE_MAIN,
+    NV_ENC_HEVC_PROFILE_MAIN_10,
+    NV_ENC_HEVC_PROFILE_REXT,
+};
+
+enum {
     NVENC_LOWLATENCY = 1,
-    NVENC_LOSSLESS,
+    NVENC_LOSSLESS   = 2,
+    NVENC_ONE_PASS   = 4,
+    NVENC_TWO_PASSES = 8,
 };
 
 enum {
@@ -105,14 +139,28 @@ typedef struct NVENCContext {
     NV_ENC_CONFIG config;
 
     CUcontext cu_context;
+    CUcontext cu_context_internal;
 
     int nb_surfaces;
-    NVENCInputSurface *in;
-    NVENCOutputSurface *out;
+    NVENCFrame *frames;
     AVFifoBuffer *timestamps;
-    AVFifoBuffer *pending, *ready;
+    AVFifoBuffer *pending, *ready, *unused_surface_queue;
 
-    int64_t last_dts;
+    struct {
+        CUdeviceptr ptr;
+        NV_ENC_REGISTERED_PTR regptr;
+        int mapped;
+    } registered_frames[MAX_REGISTERED_FRAMES];
+    int nb_registered_frames;
+
+    /* the actual data pixel format, different from
+     * AVCodecContext.pix_fmt when using hwaccel frames on input */
+    enum AVPixelFormat data_pix_fmt;
+
+    /* timestamps of the first two frames, for computing the first dts
+     * when B-frames are present */
+    int64_t initial_pts[2];
+    int first_packet_output;
 
     void *nvenc_ctx;
 
@@ -123,6 +171,20 @@ typedef struct NVENCContext {
     int rc;
     int device;
     int flags;
+    int async_depth;
+    int rc_lookahead;
+    int aq;
+    int no_scenecut;
+    int b_adapt;
+    int temporal_aq;
+    int zerolatency;
+    int nonref_p;
+    int strict_gop;
+    int aq_strength;
+    int quality;
+    int init_qp_p;
+    int init_qp_b;
+    int init_qp_i;
 } NVENCContext;
 
 int ff_nvenc_encode_init(AVCodecContext *avctx);
@@ -131,5 +193,7 @@ int ff_nvenc_encode_close(AVCodecContext *avctx);
 
 int ff_nvenc_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
                           const AVFrame *frame, int *got_packet);
+
+extern const enum AVPixelFormat ff_nvenc_pix_fmts[];
 
 #endif /* AVCODEC_NVENC_H */

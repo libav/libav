@@ -21,6 +21,33 @@ test -d "$samples" || die "samples location not specified"
 
 : ${branch:=master}
 
+src=${workdir}/src
+: ${build:=${workdir}/build}
+: ${inst:=${workdir}/install}
+
+configuration='
+    --enable-gpl
+    --prefix="${inst}"
+    --samples="${samples}"
+    ${ignore_tests:+--ignore-tests="$ignore_tests"}
+    ${arch:+--arch="$arch"}
+    ${cpu:+--cpu="$cpu"}
+    ${toolchain:+--toolchain="$toolchain"}
+    ${cross_prefix:+--cross-prefix="$cross_prefix"}
+    ${as:+--as="$as"}
+    ${cc:+--cc="$cc"}
+    ${ld:+--ld="$ld"}
+    ${target_os:+--target-os="$target_os"}
+    ${sysroot:+--sysroot="$sysroot"}
+    ${target_exec:+--target-exec="$target_exec"}
+    ${target_path:+--target-path="$target_path"}
+    ${target_samples:+--target-samples="$target_samples"}
+    ${extra_cflags:+--extra-cflags="$extra_cflags"}
+    ${extra_ldflags:+--extra-ldflags="$extra_ldflags"}
+    ${extra_libs:+--extra-libs="$extra_libs"}
+    ${extra_conf}
+'
+
 lock(){
     lock=$1/fate.lock
     (set -C; exec >$lock) 2>/dev/null || return
@@ -37,32 +64,13 @@ checkout(){
 update()(
     cd ${src} || return
     case "$repo" in
-        git:*) git fetch --force; git reset --hard "origin/$branch" ;;
+        git:*) git fetch --quiet --force; git reset --quiet --hard "origin/$branch" ;;
     esac
 )
 
 configure()(
     cd ${build} || return
-    ${src}/configure                                                    \
-        --prefix="${inst}"                                              \
-        --samples="${samples}"                                          \
-        --enable-gpl                                                    \
-        ${arch:+--arch=$arch}                                           \
-        ${cpu:+--cpu="$cpu"}                                            \
-        ${toolchain:+--toolchain="$toolchain"}                          \
-        ${cross_prefix:+--cross-prefix="$cross_prefix"}                 \
-        ${as:+--as="$as"}                                               \
-        ${cc:+--cc="$cc"}                                               \
-        ${ld:+--ld="$ld"}                                               \
-        ${target_os:+--target-os="$target_os"}                          \
-        ${sysroot:+--sysroot="$sysroot"}                                \
-        ${target_exec:+--target-exec="$target_exec"}                    \
-        ${target_path:+--target-path="$target_path"}                    \
-        ${target_samples:+--target-samples="$target_samples"}           \
-        ${extra_cflags:+--extra-cflags="$extra_cflags"}                 \
-        ${extra_ldflags:+--extra-ldflags="$extra_ldflags"}              \
-        ${extra_libs:+--extra-libs="$extra_libs"}                       \
-        ${extra_conf}
+    eval ${src}/configure ${configuration}
 )
 
 compile()(
@@ -73,7 +81,7 @@ compile()(
 fate()(
     test "$build_only" = "yes" && return
     cd ${build} || return
-    ${make} ${makeopts} -k fate
+    ${make} ${makeopts_fate-${makeopts}} -k fate
 )
 
 clean(){
@@ -83,7 +91,12 @@ clean(){
 report(){
     date=$(date -u +%Y%m%d%H%M%S)
     echo "fate:1:${date}:${slot}:${version}:$1:$2:${branch}:${comment}" >report
-    cat ${build}/config.fate ${build}/tests/data/fate/*.rep >>report
+    if test -e ${build}/avbuild/config.fate; then
+        cat ${build}/avbuild/config.fate >> report 2> /dev/null
+    else
+        eval echo config:failed:failed:failed:failed:failed:${configuration} >> report 2> /dev/null
+    fi
+    cat ${build}/tests/data/fate/*.rep >> report 2> /dev/null
     test -n "$fate_recv" && $tar report *.log | gzip | $fate_recv
 }
 
@@ -97,15 +110,11 @@ mkdir -p ${workdir} || die "Error creating ${workdir}"
 lock ${workdir}     || die "${workdir} locked"
 cd ${workdir}       || die "cd ${workdir} failed"
 
-src=${workdir}/src
-: ${build:=${workdir}/build}
-: ${inst:=${workdir}/install}
-
 test -d "$src" && update || checkout || die "Error fetching source"
 
 cd ${workdir}
 
-version=$(${src}/version.sh ${src})
+version=$(${src}/avbuild/version.sh ${src})
 test "$version" = "$(cat version-$slot 2>/dev/null)" && exit 0
 echo ${version} >version-$slot
 

@@ -31,12 +31,13 @@
 #include "libavutil/opt.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/timer.h"
+
 #include "avcodec.h"
+#include "bitstream.h"
+#include "golomb.h"
 #include "internal.h"
-#include "get_bits.h"
 #include "put_bits.h"
 #include "rangecoder.h"
-#include "golomb.h"
 #include "mathops.h"
 #include "ffv1.h"
 
@@ -65,7 +66,7 @@ static av_noinline int get_symbol(RangeCoder *c, uint8_t *state, int is_signed)
     return get_symbol_inline(c, state, is_signed);
 }
 
-static inline int get_vlc_symbol(GetBitContext *gb, VlcState *const state,
+static inline int get_vlc_symbol(BitstreamContext *bc, VlcState *const state,
                                  int bits)
 {
     int k, i, v, ret;
@@ -79,16 +80,11 @@ static inline int get_vlc_symbol(GetBitContext *gb, VlcState *const state,
 
     assert(k <= 8);
 
-    v = get_sr_golomb(gb, k, 12, bits);
+    v = get_sr_golomb(bc, k, 12, bits);
     ff_dlog(NULL, "v:%d bias:%d error:%d drift:%d count:%d k:%d",
             v, state->bias, state->error_sum, state->drift, state->count, k);
 
-#if 0 // JPEG LS
-    if (k == 0 && 2 * state->drift <= -state->count)
-        v ^= (-1);
-#else
     v ^= ((2 * state->drift + state->count) >> 31);
-#endif
 
     ret = fold(v + state->bias, bits);
 
@@ -120,7 +116,7 @@ static av_always_inline void decode_line(FFV1Context *s, int w,
 
         av_assert2(context < p->context_count);
 
-        if (s->ac) {
+        if (s->ac != AC_GOLOMB_RICE) {
             diff = get_symbol_inline(c, p->state[context], 1);
         } else {
             if (context == 0 && run_mode == 0)
@@ -128,13 +124,13 @@ static av_always_inline void decode_line(FFV1Context *s, int w,
 
             if (run_mode) {
                 if (run_count == 0 && run_mode == 1) {
-                    if (get_bits1(&s->gb)) {
+                    if (bitstream_read_bit(&s->bc)) {
                         run_count = 1 << ff_log2_run[run_index];
                         if (x + run_count <= w)
                             run_index++;
                     } else {
                         if (ff_log2_run[run_index])
-                            run_count = get_bits(&s->gb, ff_log2_run[run_index]);
+                            run_count = bitstream_read(&s->bc, ff_log2_run[run_index]);
                         else
                             run_count = 0;
                         if (run_index)
@@ -146,17 +142,17 @@ static av_always_inline void decode_line(FFV1Context *s, int w,
                 if (run_count < 0) {
                     run_mode  = 0;
                     run_count = 0;
-                    diff      = get_vlc_symbol(&s->gb, &p->vlc_state[context],
+                    diff      = get_vlc_symbol(&s->bc, &p->vlc_state[context],
                                                bits);
                     if (diff >= 0)
                         diff++;
                 } else
                     diff = 0;
             } else
-                diff = get_vlc_symbol(&s->gb, &p->vlc_state[context], bits);
+                diff = get_vlc_symbol(&s->bc, &p->vlc_state[context], bits);
 
             ff_dlog(s->avctx, "count:%d index:%d, mode:%d, x:%d pos:%d\n",
-                    run_count, run_index, run_mode, x, get_bits_count(&s->gb));
+                    run_count, run_index, run_mode, x, bitstream_tell(&s->bc));
         }
 
         if (sign)
@@ -274,7 +270,7 @@ static int decode_slice_header(FFV1Context *f, FFV1Context *fs)
     unsigned ps, i, context_count;
     memset(state, 128, sizeof(state));
 
-    if (fs->ac > 1) {
+    if (fs->ac == AC_RANGE_CUSTOM_TAB) {
         for (i = 1; i < 256; i++) {
             fs->c.one_state[i]        = f->state_transition[i];
             fs->c.zero_state[256 - i] = 256 - fs->c.one_state[i];
@@ -364,19 +360,19 @@ static int decode_slice(AVCodecContext *c, void *arg)
     x      = fs->slice_x;
     y      = fs->slice_y;
 
-    if (!fs->ac) {
+    if (fs->ac == AC_GOLOMB_RICE) {
         if (f->version == 3 && f->minor_version > 1 || f->version > 3)
             get_rac(&fs->c, (uint8_t[]) { 129 });
         fs->ac_byte_count = f->version > 2 || (!x && !y) ? fs->c.bytestream - fs->c.bytestream_start - 1 : 0;
-        init_get_bits(&fs->gb, fs->c.bytestream_start + fs->ac_byte_count,
-                      (fs->c.bytestream_end - fs->c.bytestream_start -
-                       fs->ac_byte_count) * 8);
+        bitstream_init8(&fs->bc, fs->c.bytestream_start + fs->ac_byte_count,
+                        (fs->c.bytestream_end - fs->c.bytestream_start -
+                         fs->ac_byte_count));
     }
 
     av_assert1(width && height);
     if (f->colorspace == 0) {
-        const int chroma_width  = -((-width) >> f->chroma_h_shift);
-        const int chroma_height = -((-height) >> f->chroma_v_shift);
+        const int chroma_width  = AV_CEIL_RSHIFT(width,  f->chroma_h_shift);
+        const int chroma_height = AV_CEIL_RSHIFT(height, f->chroma_v_shift);
         const int cx            = x >> f->chroma_h_shift;
         const int cy            = y >> f->chroma_v_shift;
         decode_plane(fs, p->data[0] + ps * x + y * p->linesize[0], width,
@@ -401,7 +397,7 @@ static int decode_slice(AVCodecContext *c, void *arg)
                                p->data[2] + ps * x + y * p->linesize[2] };
         decode_rgb_frame(fs, planes, width, height, p->linesize);
     }
-    if (fs->ac && f->version > 2) {
+    if (fs->ac != AC_GOLOMB_RICE && f->version > 2) {
         int v;
         get_rac(&fs->c, (uint8_t[]) { 129 });
         v = fs->c.bytestream_end - fs->c.bytestream - 2 - 5 * f->ec;
@@ -477,9 +473,9 @@ static int read_extra_header(FFV1Context *f)
         c->bytestream_end -= 4;
         f->minor_version   = get_symbol(c, state, 0);
     }
-    f->ac = f->avctx->coder_type = get_symbol(c, state, 0);
+    f->ac = get_symbol(c, state, 0);
 
-    if (f->ac > 1) {
+    if (f->ac == AC_RANGE_CUSTOM_TAB) {
         for (i = 1; i < 256; i++)
             f->state_transition[i] = get_symbol(c, state, 1) + c->one_state[i];
     }
@@ -537,6 +533,13 @@ static int read_extra_header(FFV1Context *f)
         }
     }
 
+    av_log(f->avctx, AV_LOG_VERBOSE,
+           "FFV1 version %d.%d colorspace %d - %d bits - %d/%d planes, %s transparent - tile geometry %dx%d - %s\n",
+           f->version, f->minor_version, f->colorspace, f->avctx->bits_per_raw_sample,
+           f->plane_count, f->chroma_planes, f->transparency ? "" : "not",
+           f->num_h_slices, f->num_v_slices,
+           f->ec ? "per-slice crc" : "no crc");
+
     return 0;
 }
 
@@ -559,9 +562,9 @@ static int read_header(FFV1Context *f)
         }
         f->version = v;
 
-        f->ac = f->avctx->coder_type = get_symbol(c, state, 0);
+        f->ac = get_symbol(c, state, 0);
 
-        if (f->ac > 1) {
+        if (f->ac == AC_RANGE_CUSTOM_TAB) {
             for (i = 1; i < 256; i++)
                 f->state_transition[i] =
                     get_symbol(c, state, 1) + c->one_state[i];
@@ -597,6 +600,12 @@ static int read_header(FFV1Context *f)
     }
 
     if (f->colorspace == 0) {
+        if (f->transparency && f->avctx->bits_per_raw_sample > 8) {
+            av_log(f->avctx, AV_LOG_ERROR,
+                   "Transparency not supported for bit depth %d\n",
+                   f->avctx->bits_per_raw_sample);
+            return AVERROR(ENOSYS);
+        }
         if (!f->transparency && !f->chroma_planes) {
             if (f->avctx->bits_per_raw_sample <= 8)
                 f->avctx->pix_fmt = AV_PIX_FMT_GRAY8;
@@ -694,6 +703,11 @@ static int read_header(FFV1Context *f)
             av_log(f->avctx, AV_LOG_ERROR,
                    "chroma subsampling not supported in this colorspace\n");
             return AVERROR(ENOSYS);
+        }
+        if (f->transparency) {
+            av_log(f->avctx, AV_LOG_ERROR,
+                   "Transparency not supported in this colorspace\n");
+                   return AVERROR(ENOSYS);
         }
         switch (f->avctx->bits_per_raw_sample) {
         case 0:
@@ -958,6 +972,6 @@ AVCodec ff_ffv1_decoder = {
     .init           = ffv1_decode_init,
     .close          = ffv1_decode_close,
     .decode         = ffv1_decode_frame,
-    .capabilities   = CODEC_CAP_DR1 /*| CODEC_CAP_DRAW_HORIZ_BAND*/ |
-                      CODEC_CAP_SLICE_THREADS,
+    .capabilities   = AV_CODEC_CAP_DR1 /*| AV_CODEC_CAP_DRAW_HORIZ_BAND*/ |
+                      AV_CODEC_CAP_SLICE_THREADS,
 };

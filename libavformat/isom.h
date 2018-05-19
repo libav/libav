@@ -24,6 +24,12 @@
 #ifndef AVFORMAT_ISOM_H
 #define AVFORMAT_ISOM_H
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include "libavutil/spherical.h"
+#include "libavutil/stereo3d.h"
+
 #include "avio.h"
 #include "internal.h"
 #include "dv.h"
@@ -105,6 +111,8 @@ typedef struct MOVStreamContext {
     MOVStts *ctts_data;
     unsigned int stsc_count;
     MOVStsc *stsc_data;
+    unsigned int stsc_index;
+    int stsc_sample;
     unsigned int stps_count;
     unsigned *stps_data;  ///< partial sync sample for mpeg-2 open gop
     int ctts_index;
@@ -126,7 +134,6 @@ typedef struct MOVStreamContext {
     unsigned drefs_count;
     MOVDref *drefs;
     int dref_id;
-    int wrong_dts;        ///< dts are wrong due to huge ctts offset (iMovie files)
     int width;            ///< tkhd width
     int height;           ///< tkhd height
     int dts_shift;        ///< dts shift when ctts is negative
@@ -137,7 +144,16 @@ typedef struct MOVStreamContext {
     unsigned int rap_group_count;
     MOVSbgp *rap_group;
 
+    /** extradata array (and size) for multiple stsd */
+    uint8_t **extradata;
+    int *extradata_size;
+    int last_stsd_index;
+    int stsd_count;
+
     int32_t *display_matrix;
+    AVStereo3D *stereo3d;
+    AVSphericalMapping *spherical;
+    size_t spherical_size;
 } MOVStreamContext;
 
 typedef struct MOVContext {
@@ -159,6 +175,9 @@ typedef struct MOVContext {
     int64_t next_root_atom; ///< offset of the next root atom
     int export_all;
     int export_xmp;
+    int enable_drefs;
+
+    int32_t movie_display_matrix[3][3]; ///< display matrix from mvhd
 } MOVContext;
 
 int ff_mp4_read_descr_len(AVIOContext *pb);
@@ -220,8 +239,21 @@ void ff_mp4_parse_es_descr(AVIOContext *pb, int *es_id);
 
 
 int ff_mov_read_esds(AVFormatContext *fc, AVIOContext *pb);
-enum AVCodecID ff_mov_get_lpcm_codec_id(int bps, int flags);
 
 int ff_mov_read_stsd_entries(MOVContext *c, AVIOContext *pb, int entries);
+
+/**
+ * Compute codec id for 'lpcm' tag.
+ * See CoreAudioTypes and AudioStreamBasicDescription at Apple.
+ */
+static inline enum AVCodecID ff_mov_get_lpcm_codec_id(int bps, int flags)
+{
+    /* lpcm flags:
+     * 0x1 = float
+     * 0x2 = big-endian
+     * 0x4 = signed
+     */
+    return ff_get_pcm_codec_id(bps, flags & 1, flags & 2, flags & 4 ? -1 : 0);
+}
 
 #endif /* AVFORMAT_ISOM_H */

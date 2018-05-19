@@ -27,12 +27,7 @@
 
 // The idiosyncrasies of GSM-in-WAV are explained at http://kbs.cs.tu-berlin.de/~jutta/toast.html
 
-#include "config.h"
-#if HAVE_GSM_H
 #include <gsm.h>
-#else
-#include <gsm/gsm.h>
-#endif
 
 #include "libavutil/common.h"
 
@@ -122,6 +117,7 @@ AVCodec ff_libgsm_encoder = {
     .close          = libgsm_encode_close,
     .sample_fmts    = (const enum AVSampleFormat[]){ AV_SAMPLE_FMT_S16,
                                                      AV_SAMPLE_FMT_NONE },
+    .wrapper_name   = "libgsm",
 };
 
 AVCodec ff_libgsm_ms_encoder = {
@@ -134,4 +130,5 @@ AVCodec ff_libgsm_ms_encoder = {
     .close          = libgsm_encode_close,
     .sample_fmts    = (const enum AVSampleFormat[]){ AV_SAMPLE_FMT_S16,
                                                      AV_SAMPLE_FMT_NONE },
+    .wrapper_name   = "libgsm",
 };

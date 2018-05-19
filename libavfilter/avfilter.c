@@ -19,9 +19,12 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
+#include "libavutil/buffer.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/common.h"
+#include "libavutil/hwcontext.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/internal.h"
 #include "libavutil/opt.h"
@@ -195,6 +198,8 @@ int avfilter_config_links(AVFilterContext *filter)
                         link->src->inputs[0]->sample_aspect_ratio : (AVRational){1,1};
 
                 if (link->src->nb_inputs) {
+                    if (!link->frame_rate.num && !link->frame_rate.den)
+                        link->frame_rate = link->src->inputs[0]->frame_rate;
                     if (!link->w)
                         link->w = link->src->inputs[0]->w;
                     if (!link->h)
@@ -205,6 +210,15 @@ int avfilter_config_links(AVFilterContext *filter)
                            "width and height\n");
                     return AVERROR(EINVAL);
                 }
+            }
+
+            if (link->src->nb_inputs && link->src->inputs[0]->hw_frames_ctx &&
+                !(link->src->filter->flags_internal & FF_FILTER_FLAG_HWFRAME_AWARE)) {
+                av_assert0(!link->hw_frames_ctx &&
+                           "should not be set by non-hwframe-aware filter");
+                link->hw_frames_ctx = av_buffer_ref(link->src->inputs[0]->hw_frames_ctx);
+                if (!link->hw_frames_ctx)
+                    return AVERROR(ENOMEM);
             }
 
             if ((config_link = link->dstpad->config_props))
@@ -278,10 +292,7 @@ int ff_poll_frame(AVFilterLink *link)
 
 static AVFilter *first_filter;
 
-#if !FF_API_NOCONST_GET_NAME
-const
-#endif
-AVFilter *avfilter_get_by_name(const char *name)
+const AVFilter *avfilter_get_by_name(const char *name)
 {
     const AVFilter *f = NULL;
 
@@ -309,17 +320,6 @@ const AVFilter *avfilter_next(const AVFilter *prev)
 {
     return prev ? prev->next : first_filter;
 }
-
-#if FF_API_OLD_FILTER_REGISTER
-AVFilter **av_filter_next(AVFilter **filter)
-{
-    return filter ? &(*filter)->next : &first_filter;
-}
-
-void avfilter_uninit(void)
-{
-}
-#endif
 
 int avfilter_pad_count(const AVFilterPad *pads)
 {
@@ -368,6 +368,8 @@ static const AVOption avfilter_options[] = {
     { "thread_type", "Allowed thread types", OFFSET(thread_type), AV_OPT_TYPE_FLAGS,
         { .i64 = AVFILTER_THREAD_SLICE }, 0, INT_MAX, FLAGS, "thread_type" },
         { "slice", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AVFILTER_THREAD_SLICE }, .unit = "thread_type" },
+    { "extra_hw_frames", "Number of extra hardware frames to allocate for the user",
+        OFFSET(extra_hw_frames), AV_OPT_TYPE_INT, { .i64 = -1 }, -1, INT_MAX, FLAGS },
     { NULL },
 };
 
@@ -445,12 +447,6 @@ AVFilterContext *ff_filter_alloc(const AVFilter *filter, const char *inst_name)
         if (!ret->outputs)
             goto err;
     }
-#if FF_API_FOO_COUNT
-FF_DISABLE_DEPRECATION_WARNINGS
-    ret->output_count = ret->nb_outputs;
-    ret->input_count  = ret->nb_inputs;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
 
     return ret;
 
@@ -467,14 +463,6 @@ err:
     return NULL;
 }
 
-#if FF_API_AVFILTER_OPEN
-int avfilter_open(AVFilterContext **filter_ctx, AVFilter *filter, const char *inst_name)
-{
-    *filter_ctx = ff_filter_alloc(filter, inst_name);
-    return *filter_ctx ? 0 : AVERROR(ENOMEM);
-}
-#endif
-
 static void free_link(AVFilterLink *link)
 {
     if (!link)
@@ -484,6 +472,8 @@ static void free_link(AVFilterLink *link)
         link->src->outputs[link->srcpad - link->src->output_pads] = NULL;
     if (link->dst)
         link->dst->inputs[link->dstpad - link->dst->input_pads] = NULL;
+
+    av_buffer_unref(&link->hw_frames_ctx);
 
     ff_formats_unref(&link->in_formats);
     ff_formats_unref(&link->out_formats);
@@ -513,6 +503,8 @@ void avfilter_free(AVFilterContext *filter)
 
     if (filter->filter->priv_class)
         av_opt_free(filter->priv);
+
+    av_buffer_unref(&filter->hw_device_ctx);
 
     av_freep(&filter->name);
     av_freep(&filter->input_pads);
@@ -556,13 +548,6 @@ static int process_unnamed_options(AVFilterContext *ctx, AVDictionary **options,
 
     return 0;
 }
-
-#if FF_API_AVFILTER_INIT_FILTER
-int avfilter_init_filter(AVFilterContext *filter, const char *args, void *opaque)
-{
-    return avfilter_init_str(filter, args);
-}
-#endif
 
 int avfilter_init_dict(AVFilterContext *ctx, AVDictionary **options)
 {
@@ -612,87 +597,11 @@ int avfilter_init_str(AVFilterContext *filter, const char *args)
             return AVERROR(EINVAL);
         }
 
-#if FF_API_OLD_FILTER_OPTS
-        if (!strcmp(filter->filter->name, "scale") &&
-            strchr(args, ':') && strchr(args, ':') < strchr(args, '=')) {
-            /* old w:h:flags=<flags> syntax */
-            char *copy = av_strdup(args);
-            char *p;
-
-            av_log(filter, AV_LOG_WARNING, "The <w>:<h>:flags=<flags> option "
-                   "syntax is deprecated. Use either <w>:<h>:<flags> or "
-                   "w=<w>:h=<h>:flags=<flags>.\n");
-
-            if (!copy) {
-                ret = AVERROR(ENOMEM);
-                goto fail;
-            }
-
-            p = strrchr(copy, ':');
-            if (p) {
-                *p++ = 0;
-                ret = av_dict_parse_string(&options, p, "=", ":", 0);
-            }
-            if (ret >= 0)
-                ret = process_unnamed_options(filter, &options, copy);
-            av_freep(&copy);
-
-            if (ret < 0)
-                goto fail;
-        } else
-#endif
-
         if (strchr(args, '=')) {
             /* assume a list of key1=value1:key2=value2:... */
             ret = av_dict_parse_string(&options, args, "=", ":", 0);
             if (ret < 0)
                 goto fail;
-#if FF_API_OLD_FILTER_OPTS
-        } else if (!strcmp(filter->filter->name, "format")     ||
-                   !strcmp(filter->filter->name, "noformat")   ||
-                   !strcmp(filter->filter->name, "frei0r")     ||
-                   !strcmp(filter->filter->name, "frei0r_src") ||
-                   !strcmp(filter->filter->name, "ocv")) {
-            /* a hack for compatibility with the old syntax
-             * replace colons with |s */
-            char *copy = av_strdup(args);
-            char *p    = copy;
-            int nb_leading = 0; // number of leading colons to skip
-
-            if (!copy) {
-                ret = AVERROR(ENOMEM);
-                goto fail;
-            }
-
-            if (!strcmp(filter->filter->name, "frei0r") ||
-                !strcmp(filter->filter->name, "ocv"))
-                nb_leading = 1;
-            else if (!strcmp(filter->filter->name, "frei0r_src"))
-                nb_leading = 3;
-
-            while (nb_leading--) {
-                p = strchr(p, ':');
-                if (!p) {
-                    p = copy + strlen(copy);
-                    break;
-                }
-                p++;
-            }
-
-            if (strchr(p, ':')) {
-                av_log(filter, AV_LOG_WARNING, "This syntax is deprecated. Use "
-                       "'|' to separate the list items.\n");
-            }
-
-            while ((p = strchr(p, ':')))
-                *p++ = '|';
-
-            ret = process_unnamed_options(filter, &options, copy);
-            av_freep(&copy);
-
-            if (ret < 0)
-                goto fail;
-#endif
         } else {
             ret = process_unnamed_options(filter, &options, args);
             if (ret < 0)
@@ -799,4 +708,25 @@ fail:
 const AVClass *avfilter_get_class(void)
 {
     return &avfilter_class;
+}
+
+int ff_filter_init_hw_frames(AVFilterContext *avctx, AVFilterLink *link,
+                             int default_pool_size)
+{
+    AVHWFramesContext *frames;
+
+    // Must already be set by caller.
+    av_assert0(link->hw_frames_ctx);
+
+    frames = (AVHWFramesContext*)link->hw_frames_ctx->data;
+
+    if (frames->initial_pool_size == 0) {
+        // Dynamic allocation is necessarily supported.
+    } else if (avctx->extra_hw_frames >= 0) {
+        frames->initial_pool_size += avctx->extra_hw_frames;
+    } else {
+        frames->initial_pool_size = default_pool_size;
+    }
+
+    return 0;
 }

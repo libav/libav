@@ -30,7 +30,7 @@
 #include "get_bits.h"
 #include "internal.h"
 #include "mss34dsp.h"
-#include "unary.h"
+#include "unary_legacy.h"
 
 #define HEADER_SIZE 8
 
@@ -136,7 +136,7 @@ typedef struct MSS4Context {
     uint16_t   quant_mat[2][64];
 
     int        *prev_dc[3];
-    int        dc_stride[3];
+    ptrdiff_t  dc_stride[3];
     int        dc_cache[4][4];
 
     int        prev_vec[3][4];
@@ -680,5 +680,5 @@ AVCodec ff_mts2_decoder = {
     .init           = mss4_decode_init,
     .close          = mss4_decode_end,
     .decode         = mss4_decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
 };

@@ -26,7 +26,7 @@
 #include <stdint.h>
 
 #include "avcodec.h"
-#include "get_bits.h"
+#include "bitstream.h"
 #include "put_bits.h"
 #include "rangecoder.h"
 
@@ -35,6 +35,10 @@
 
 #define MAX_QUANT_TABLES 8
 #define MAX_CONTEXT_INPUTS 5
+
+#define AC_GOLOMB_RICE          0
+#define AC_RANGE_DEFAULT_TAB    1
+#define AC_RANGE_CUSTOM_TAB     2
 
 extern const uint8_t ff_log2_run[41];
 
@@ -66,7 +70,7 @@ typedef struct FFV1Context {
     AVClass *class;
     AVCodecContext *avctx;
     RangeCoder c;
-    GetBitContext gb;
+    BitstreamContext bc;
     PutBitContext pb;
     uint64_t rc_stat[256][2];
     uint64_t (*rc_stat2[MAX_QUANT_TABLES])[32][2];
@@ -78,6 +82,7 @@ typedef struct FFV1Context {
     int transparency;
     int flags;
     int picture_number;
+    int key_frame;
     const AVFrame *frame;
     AVFrame *last_picture;
 
@@ -98,6 +103,7 @@ typedef struct FFV1Context {
     int ec;
     int slice_damaged;
     int key_frame_ok;
+    int context_model;
 
     int bits_per_raw_sample;
     int packed_at_lsb;

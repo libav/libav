@@ -33,10 +33,10 @@
 static int parse_config_ALS(GetBitContext *gb, MPEG4AudioConfig *c)
 {
     if (get_bits_left(gb) < 112)
-        return -1;
+        return AVERROR_INVALIDDATA;
 
     if (get_bits_long(gb, 32) != MKBETAG('A','L','S','\0'))
-        return -1;
+        return AVERROR_INVALIDDATA;
 
     // override AudioSpecificConfig channel configuration and sample rate
     // which are buggy in old ALS conformance files
@@ -116,8 +116,9 @@ int avpriv_mpeg4audio_get_config(MPEG4AudioConfig *c, const uint8_t *buf,
 
         specific_config_bitindex = get_bits_count(&gb);
 
-        if (parse_config_ALS(&gb, c))
-            return -1;
+        ret = parse_config_ALS(&gb, c);
+        if (ret < 0)
+            return ret;
     }
 
     if (c->ext_object_type != AOT_SBR && sync_extension) {
@@ -143,44 +144,4 @@ int avpriv_mpeg4audio_get_config(MPEG4AudioConfig *c, const uint8_t *buf,
         c->ps = 0;
 
     return specific_config_bitindex;
-}
-
-static av_always_inline unsigned int copy_bits(PutBitContext *pb,
-                                               GetBitContext *gb,
-                                               int bits)
-{
-    unsigned int el = get_bits(gb, bits);
-    put_bits(pb, bits, el);
-    return el;
-}
-
-int avpriv_copy_pce_data(PutBitContext *pb, GetBitContext *gb)
-{
-    int five_bit_ch, four_bit_ch, comment_size, bits;
-    int offset = put_bits_count(pb);
-
-    copy_bits(pb, gb, 10);                  //Tag, Object Type, Frequency
-    five_bit_ch  = copy_bits(pb, gb, 4);    //Front
-    five_bit_ch += copy_bits(pb, gb, 4);    //Side
-    five_bit_ch += copy_bits(pb, gb, 4);    //Back
-    four_bit_ch  = copy_bits(pb, gb, 2);    //LFE
-    four_bit_ch += copy_bits(pb, gb, 3);    //Data
-    five_bit_ch += copy_bits(pb, gb, 4);    //Coupling
-    if (copy_bits(pb, gb, 1))               //Mono Mixdown
-        copy_bits(pb, gb, 4);
-    if (copy_bits(pb, gb, 1))               //Stereo Mixdown
-        copy_bits(pb, gb, 4);
-    if (copy_bits(pb, gb, 1))               //Matrix Mixdown
-        copy_bits(pb, gb, 3);
-    for (bits = five_bit_ch*5+four_bit_ch*4; bits > 16; bits -= 16)
-        copy_bits(pb, gb, 16);
-    if (bits)
-        copy_bits(pb, gb, bits);
-    avpriv_align_put_bits(pb);
-    align_get_bits(gb);
-    comment_size = copy_bits(pb, gb, 8);
-    for (; comment_size > 0; comment_size--)
-        copy_bits(pb, gb, 8);
-
-    return put_bits_count(pb) - offset;
 }

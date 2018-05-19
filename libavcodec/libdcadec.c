@@ -54,7 +54,7 @@ static int dcadec_decode_frame(AVCodecContext *avctx, void *data,
     }
     mrk = AV_RB32(input);
     if (mrk != DCA_SYNCWORD_CORE_BE && mrk != DCA_SYNCWORD_SUBSTREAM) {
-        s->buffer = av_fast_realloc(s->buffer, &s->buffer_size, avpkt->size + FF_INPUT_BUFFER_PADDING_SIZE);
+        s->buffer = av_fast_realloc(s->buffer, &s->buffer_size, avpkt->size + AV_INPUT_BUFFER_PADDING_SIZE);
         if (!s->buffer)
             return AVERROR(ENOMEM);
 
@@ -198,8 +198,9 @@ AVCodec ff_libdcadec_decoder = {
     .decode         = dcadec_decode_frame,
     .close          = dcadec_close,
     .flush          = dcadec_flush,
-    .capabilities   = CODEC_CAP_DR1 | CODEC_CAP_CHANNEL_CONF,
+    .capabilities   = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_CHANNEL_CONF,
     .sample_fmts    = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_S32P, AV_SAMPLE_FMT_S16P,
                                                       AV_SAMPLE_FMT_NONE },
     .profiles       = NULL_IF_CONFIG_SMALL(profiles),
+    .wrapper_name   = "libdcadec",
 };

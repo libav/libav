@@ -25,16 +25,17 @@
  */
 
 #include "avcodec.h"
-#include "get_bits.h"
+#include "bitstream.h"
 #include "internal.h"
 #include "mathops.h"
+#include "vlc.h"
 
 
 typedef struct WNV1Context {
     AVCodecContext *avctx;
 
     int shift;
-    GetBitContext gb;
+    BitstreamContext bc;
 } WNV1Context;
 
 static const uint16_t code_tab[16][2] = {
@@ -49,10 +50,10 @@ static VLC code_vlc;
 /* returns modified base_value */
 static inline int wnv1_get_code(WNV1Context *w, int base_value)
 {
-    int v = get_vlc2(&w->gb, code_vlc.table, CODE_VLC_BITS, 1);
+    int v = bitstream_read_vlc(&w->bc, code_vlc.table, CODE_VLC_BITS, 1);
 
     if (v == 15)
-        return ff_reverse[get_bits(&w->gb, 8 - w->shift)];
+        return ff_reverse[bitstream_read(&w->bc, 8 - w->shift)];
     else
         return base_value + ((v - 7) << w->shift);
 }
@@ -75,7 +76,7 @@ static int decode_frame(AVCodecContext *avctx,
         return AVERROR_INVALIDDATA;
     }
 
-    rbuf = av_malloc(buf_size + FF_INPUT_BUFFER_PADDING_SIZE);
+    rbuf = av_malloc(buf_size + AV_INPUT_BUFFER_PADDING_SIZE);
     if (!rbuf) {
         av_log(avctx, AV_LOG_ERROR, "Cannot allocate temporary buffer\n");
         return AVERROR(ENOMEM);
@@ -90,7 +91,7 @@ static int decode_frame(AVCodecContext *avctx,
 
     for (i = 8; i < buf_size; i++)
         rbuf[i] = ff_reverse[buf[i]];
-    init_get_bits(&l->gb, rbuf + 8, (buf_size - 8) * 8);
+    bitstream_init8(&l->bc, rbuf + 8, buf_size - 8);
 
     if (buf[2] >> 4 == 6)
         l->shift = 2;
@@ -157,5 +158,5 @@ AVCodec ff_wnv1_decoder = {
     .priv_data_size = sizeof(WNV1Context),
     .init           = decode_init,
     .decode         = decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
 };

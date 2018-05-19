@@ -86,7 +86,7 @@ const char ff_id3v2_3_tags[][4] = {
     { 0 },
 };
 
-const char *ff_id3v2_picture_types[21] = {
+const char * const ff_id3v2_picture_types[21] = {
     "Other",
     "32x32 pixels 'file icon'",
     "Other file icon",
@@ -276,7 +276,7 @@ static void read_ttag(AVFormatContext *s, AVIOContext *pb, int taglen,
     }
 
     if (!(strcmp(key, "TCON") && strcmp(key, "TCO"))                         &&
-        (sscanf(dst, "(%d)", &genre) == 1 || sscanf(dst, "%d", &genre) == 1) &&
+        (sscanf(dst, "(%u)", &genre) == 1 || sscanf(dst, "%u", &genre) == 1) &&
         genre <= ID3v1_GENRE_MAX) {
         av_freep(&dst);
         dst = av_strdup(ff_id3v1_genre_str[genre]);
@@ -495,10 +495,10 @@ static void read_apic(AVFormatContext *s, AVIOContext *pb, int taglen,
         goto fail;
     }
 
-    apic->buf = av_buffer_alloc(taglen + FF_INPUT_BUFFER_PADDING_SIZE);
+    apic->buf = av_buffer_alloc(taglen + AV_INPUT_BUFFER_PADDING_SIZE);
     if (!apic->buf || avio_read(pb, apic->buf->data, taglen) != taglen)
         goto fail;
-    memset(apic->buf->data + taglen, 0, FF_INPUT_BUFFER_PADDING_SIZE);
+    memset(apic->buf->data + taglen, 0, AV_INPUT_BUFFER_PADDING_SIZE);
 
     new_extra->tag  = "APIC";
     new_extra->data = apic;
@@ -761,8 +761,8 @@ int ff_id3v2_parse_apic(AVFormatContext *s, ID3v2ExtraMeta **extra_meta)
             return AVERROR(ENOMEM);
 
         st->disposition      |= AV_DISPOSITION_ATTACHED_PIC;
-        st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
-        st->codec->codec_id   = apic->id;
+        st->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
+        st->codecpar->codec_id   = apic->id;
 
         if (apic->description[0])
             av_dict_set(&st->metadata, "title", apic->description, 0);
@@ -772,7 +772,7 @@ int ff_id3v2_parse_apic(AVFormatContext *s, ID3v2ExtraMeta **extra_meta)
         av_init_packet(&st->attached_pic);
         st->attached_pic.buf          = apic->buf;
         st->attached_pic.data         = apic->buf->data;
-        st->attached_pic.size         = apic->buf->size - FF_INPUT_BUFFER_PADDING_SIZE;
+        st->attached_pic.size         = apic->buf->size - AV_INPUT_BUFFER_PADDING_SIZE;
         st->attached_pic.stream_index = st->index;
         st->attached_pic.flags       |= AV_PKT_FLAG_KEY;
 

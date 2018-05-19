@@ -130,12 +130,18 @@ typedef struct VP8ThreadData {
 typedef struct VP8Frame {
     ThreadFrame tf;
     AVBufferRef *seg_map;
+
+    AVBufferRef *hwaccel_priv_buf;
+    void *hwaccel_picture_private;
 } VP8Frame;
 
 #define MAX_THREADS 8
 typedef struct VP8Context {
     VP8ThreadData *thread_data;
     AVCodecContext *avctx;
+    enum AVPixelFormat pix_fmt;
+    int actually_webp;
+
     VP8Frame *framep[4];
     VP8Frame *next_framep[4];
     VP8Frame *curframe;
@@ -143,8 +149,8 @@ typedef struct VP8Context {
 
     uint16_t mb_width;   /* number of horizontal MB */
     uint16_t mb_height;  /* number of vertical MB */
-    int linesize;
-    int uvlinesize;
+    ptrdiff_t linesize;
+    ptrdiff_t uvlinesize;
 
     uint8_t keyframe;
     uint8_t deblock_filter;
@@ -165,6 +171,7 @@ typedef struct VP8Context {
         uint8_t enabled;
         uint8_t absolute_vals;
         uint8_t update_map;
+        uint8_t update_feature_data;
         int8_t base_quant[4];
         int8_t filter_level[4];     ///< base loop filter level
     } segmentation;
@@ -192,8 +199,19 @@ typedef struct VP8Context {
         int16_t chroma_qmul[2];
     } qmat[4];
 
+    // Raw quantisation values, which may be needed by hwaccel decode.
+    struct {
+        int yac_qi;
+        int ydc_delta;
+        int y2dc_delta;
+        int y2ac_delta;
+        int uvdc_delta;
+        int uvac_delta;
+    } quant;
+
     struct {
         uint8_t enabled;    ///< whether each mb can have a different strength based on mode/ref
+        uint8_t update;
 
         /**
          * filter strength adjustment for the following macroblock modes:
@@ -221,9 +239,23 @@ typedef struct VP8Context {
 
     VP56RangeCoder c;   ///< header context, includes mb modes and motion vectors
 
+    /* This contains the entropy coder state at the end of the header
+     * block, in the form specified by the standard.  For use by
+     * hwaccels, so that a hardware decoder has the information to
+     * start decoding at the macroblock layer.
+     */
+    struct {
+        const uint8_t *input;
+        uint32_t range;
+        uint32_t value;
+        int bit_count;
+    } coder_state_at_header_end;
+
+    int header_partition_size;
+
     /**
      * These are all of the updatable probabilities for binary decisions.
-     * They are only implictly reset on keyframes, making it quite likely
+     * They are only implicitly reset on keyframes, making it quite likely
      * for an interframe to desync if a prior frame's header was corrupt
      * or missing outright!
      */
@@ -258,6 +290,7 @@ typedef struct VP8Context {
      */
     int num_coeff_partitions;
     VP56RangeCoder coeff_partition[8];
+    int coeff_partition_size[8];
     VideoDSPContext vdsp;
     VP8DSPContext vp8dsp;
     H264PredContext hpc;
@@ -271,7 +304,7 @@ typedef struct VP8Context {
     /**
      * This describes the macroblock memory layout.
      * 0 -> Only width+height*2+1 macroblocks allocated (frame/single thread).
-     * 1 -> Macroblocks for entire frame alloced (sliced thread).
+     * 1 -> Macroblocks for entire frame allocated (sliced thread).
      */
     int mb_layout;
 

@@ -22,11 +22,13 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavutil/intreadwrite.h"
+#include <string.h>
+
 #include "libavutil/imgutils.h"
+#include "libavutil/internal.h"
+#include "libavutil/intreadwrite.h"
 
 #include "avcodec.h"
-#include "get_bits.h"
 #include "internal.h"
 
 typedef struct YopDecContext {
@@ -251,5 +253,5 @@ AVCodec ff_yop_decoder = {
     .priv_data_size = sizeof(YopDecContext),
     .init           = yop_decode_init,
     .decode         = yop_decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
 };

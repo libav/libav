@@ -368,14 +368,16 @@ static int rtp_open(URLContext *h, const char *uri, int flags)
 
     build_udp_url(s, buf, sizeof(buf),
                   hostname, rtp_port, s->local_rtpport, sources, block);
-    if (ffurl_open(&s->rtp_hd, buf, flags, &h->interrupt_callback, NULL) < 0)
+    if (ffurl_open(&s->rtp_hd, buf, flags, &h->interrupt_callback, NULL,
+                   h->protocols, h) < 0)
         goto fail;
     if (s->local_rtpport >= 0 && s->local_rtcpport < 0)
         s->local_rtcpport = ff_udp_get_local_port(s->rtp_hd) + 1;
 
     build_udp_url(s, buf, sizeof(buf),
                   hostname, s->rtcp_port, s->local_rtcpport, sources, block);
-    if (ffurl_open(&s->rtcp_hd, buf, flags, &h->interrupt_callback, NULL) < 0)
+    if (ffurl_open(&s->rtcp_hd, buf, flags, &h->interrupt_callback, NULL,
+                   h->protocols, h) < 0)
         goto fail;
 
     /* just to ease handle access. XXX: need to suppress direct handle
@@ -434,7 +436,6 @@ static int rtp_read(URLContext *h, uint8_t *buf, int size)
         if (h->flags & AVIO_FLAG_NONBLOCK)
             return AVERROR(EAGAIN);
     }
-    return len;
 }
 
 static int rtp_write(URLContext *h, const uint8_t *buf, int size)
@@ -573,7 +574,7 @@ static int rtp_get_multi_file_handle(URLContext *h, int **handles,
     return 0;
 }
 
-URLProtocol ff_rtp_protocol = {
+const URLProtocol ff_rtp_protocol = {
     .name                      = "rtp",
     .url_open                  = rtp_open,
     .url_read                  = rtp_read,

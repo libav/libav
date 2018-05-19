@@ -798,9 +798,9 @@ static int planarCopyWrapper(SwsContext *c, const uint8_t *src[],
     const AVPixFmtDescriptor *desc_dst = av_pix_fmt_desc_get(c->dstFormat);
     int plane, i, j;
     for (plane = 0; plane < 4; plane++) {
-        int length = (plane == 0 || plane == 3) ? c->srcW  : -((-c->srcW  ) >> c->chrDstHSubSample);
-        int y =      (plane == 0 || plane == 3) ? srcSliceY: -((-srcSliceY) >> c->chrDstVSubSample);
-        int height = (plane == 0 || plane == 3) ? srcSliceH: -((-srcSliceH) >> c->chrDstVSubSample);
+        int length = (plane == 0 || plane == 3) ? c->srcW  : AV_CEIL_RSHIFT(c->srcW,   c->chrDstHSubSample);
+        int y =      (plane == 0 || plane == 3) ? srcSliceY: AV_CEIL_RSHIFT(srcSliceY, c->chrDstVSubSample);
+        int height = (plane == 0 || plane == 3) ? srcSliceH: AV_CEIL_RSHIFT(srcSliceH, c->chrDstVSubSample);
         const uint8_t *srcPtr = src[plane];
         uint8_t *dstPtr = dst[plane] + dstStride[plane] * y;
         int shiftonly = plane == 1 || plane == 2 || (!c->srcRange && plane == 0);
@@ -813,18 +813,18 @@ static int planarCopyWrapper(SwsContext *c, const uint8_t *src[],
             int val = (plane == 3) ? 255 : 128;
             if (is16BPS(c->dstFormat))
                 length *= 2;
-            if (is9_OR_10BPS(c->dstFormat)) {
+            if (is9_15BPS(c->dstFormat)) {
                 fill_plane9or10(dst[plane], dstStride[plane],
                                 length, height, y, val,
-                                desc_dst->comp[plane].depth_minus1 + 1,
+                                desc_dst->comp[plane].depth,
                                 isBE(c->dstFormat));
             } else
                 fillPlane(dst[plane], dstStride[plane], length, height, y,
                           val);
         } else {
-            if (is9_OR_10BPS(c->srcFormat)) {
-                const int src_depth = desc_src->comp[plane].depth_minus1 + 1;
-                const int dst_depth = desc_dst->comp[plane].depth_minus1 + 1;
+            if (is9_15BPS(c->srcFormat)) {
+                const int src_depth = desc_src->comp[plane].depth;
+                const int dst_depth = desc_dst->comp[plane].depth;
                 const uint16_t *srcPtr2 = (const uint16_t *) srcPtr;
 
                 if (is16BPS(c->dstFormat)) {
@@ -862,7 +862,7 @@ static int planarCopyWrapper(SwsContext *c, const uint8_t *src[],
                             COPY9_OR_10TO16(AV_RL16, AV_WL16);
                         }
                     }
-                } else if (is9_OR_10BPS(c->dstFormat)) {
+                } else if (is9_15BPS(c->dstFormat)) {
                     uint16_t *dstPtr2 = (uint16_t *) dstPtr;
 #define COPY9_OR_10TO9_OR_10(loop) \
                     for (i = 0; i < height; i++) { \
@@ -914,8 +914,8 @@ static int planarCopyWrapper(SwsContext *c, const uint8_t *src[],
                         COPY9_OR_10TO8(AV_RL16);
                     }
                 }
-            } else if (is9_OR_10BPS(c->dstFormat)) {
-                const int dst_depth = desc_dst->comp[plane].depth_minus1 + 1;
+            } else if (is9_15BPS(c->dstFormat)) {
+                const int dst_depth = desc_dst->comp[plane].depth;
                 uint16_t *dstPtr2 = (uint16_t *) dstPtr;
 
                 if (is16BPS(c->srcFormat)) {
@@ -943,7 +943,7 @@ static int planarCopyWrapper(SwsContext *c, const uint8_t *src[],
                             COPY16TO9_OR_10(AV_RL16, AV_WL16);
                         }
                     }
-                } else /* 8bit */ {
+                } else /* 8 bits */ {
 #define COPY8TO9_OR_10(wfunc) \
                     if (shiftonly) { \
                         for (i = 0; i < height; i++) { \
@@ -1006,7 +1006,7 @@ static int planarCopyWrapper(SwsContext *c, const uint8_t *src[],
             } else {
                 if (is16BPS(c->srcFormat) && is16BPS(c->dstFormat))
                     length *= 2;
-                else if (!desc_src->comp[0].depth_minus1)
+                else if (desc_src->comp[0].depth == 1)
                     length >>= 3; // monowhite/black
                 for (i = 0; i < height; i++) {
                     memcpy(dstPtr, srcPtr, length);
@@ -1087,7 +1087,7 @@ void ff_get_unscaled_swscale(SwsContext *c)
     if (srcFormat == AV_PIX_FMT_GBRP && isPlanar(srcFormat) && isByteRGB(dstFormat))
         c->swscale = planarRgbToRgbWrapper;
 
-    if (av_pix_fmt_desc_get(srcFormat)->comp[0].depth_minus1 == 7 &&
+    if (av_pix_fmt_desc_get(srcFormat)->comp[0].depth == 8 &&
         isPackedRGB(srcFormat) && dstFormat == AV_PIX_FMT_GBRP)
         c->swscale = rgbToPlanarRgbWrapper;
 
@@ -1097,8 +1097,10 @@ void ff_get_unscaled_swscale(SwsContext *c)
         IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_BGR555) ||
         IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_BGR565) ||
         IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_BGRA64) ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_GRAY12) ||
         IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_GRAY16) ||
         IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_YA16)   ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_GBRAP12)||
         IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_GBRAP16)||
         IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_RGB444) ||
         IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_RGB48)  ||
@@ -1156,7 +1158,15 @@ void ff_get_unscaled_swscale(SwsContext *c)
          c->chrDstHSubSample == c->chrSrcHSubSample &&
          c->chrDstVSubSample == c->chrSrcVSubSample &&
          dstFormat != AV_PIX_FMT_NV12 && dstFormat != AV_PIX_FMT_NV21 &&
-         srcFormat != AV_PIX_FMT_NV12 && srcFormat != AV_PIX_FMT_NV21))
+         dstFormat != AV_PIX_FMT_P010LE && dstFormat != AV_PIX_FMT_P010BE &&
+         dstFormat != AV_PIX_FMT_YUV420P12LE && dstFormat != AV_PIX_FMT_YUV420P12BE &&
+         dstFormat != AV_PIX_FMT_YUV422P12LE && dstFormat != AV_PIX_FMT_YUV422P12BE &&
+         dstFormat != AV_PIX_FMT_YUV444P12LE && dstFormat != AV_PIX_FMT_YUV444P12BE &&
+         srcFormat != AV_PIX_FMT_NV12 && srcFormat != AV_PIX_FMT_NV21 &&
+         srcFormat != AV_PIX_FMT_P010LE && srcFormat != AV_PIX_FMT_P010BE &&
+         srcFormat != AV_PIX_FMT_YUV420P12LE && srcFormat != AV_PIX_FMT_YUV420P12BE &&
+         srcFormat != AV_PIX_FMT_YUV422P12LE && srcFormat != AV_PIX_FMT_YUV422P12BE &&
+         srcFormat != AV_PIX_FMT_YUV444P12LE && srcFormat != AV_PIX_FMT_YUV444P12BE))
     {
         if (isPacked(c->srcFormat))
             c->swscale = packedCopyWrapper;
@@ -1180,20 +1190,19 @@ static void reset_ptr(const uint8_t *src[], enum AVPixelFormat format)
     }
 }
 
-static int check_image_pointers(uint8_t *data[4], enum AVPixelFormat pix_fmt,
-                                const int linesizes[4])
-{
-    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(pix_fmt);
-    int i;
-
-    for (i = 0; i < 4; i++) {
-        int plane = desc->comp[i].plane;
-        if (!data[plane] || !linesizes[plane])
-            return 0;
-    }
-
-    return 1;
-}
+#define CHECK_IMAGE_POINTERS(data, pix_fmt, linesizes, msg)            \
+    do {                                                               \
+        const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(pix_fmt); \
+        int i;                                                         \
+                                                                       \
+        for (i = 0; i < 4; i++) {                                      \
+            int plane = desc->comp[i].plane;                           \
+            if (!data[plane] || !linesizes[plane]) {                   \
+                av_log(c, AV_LOG_ERROR, msg);                          \
+                return 0;                                              \
+            }                                                          \
+        }                                                              \
+    } while (0)
 
 /**
  * swscale wrapper, so we don't need to export the SwsContext.
@@ -1213,14 +1222,8 @@ int attribute_align_arg sws_scale(struct SwsContext *c,
     if (srcSliceH == 0)
         return 0;
 
-    if (!check_image_pointers(srcSlice, c->srcFormat, srcStride)) {
-        av_log(c, AV_LOG_ERROR, "bad src image pointers\n");
-        return 0;
-    }
-    if (!check_image_pointers(dst, c->dstFormat, dstStride)) {
-        av_log(c, AV_LOG_ERROR, "bad dst image pointers\n");
-        return 0;
-    }
+    CHECK_IMAGE_POINTERS(srcSlice, c->srcFormat, srcStride, "bad src image pointers\n");
+    CHECK_IMAGE_POINTERS(dst, c->dstFormat, dstStride, "bad dst image pointers\n");
 
     if (c->sliceDir == 0 && srcSliceY != 0 && srcSliceY + srcSliceH != c->srcH) {
         av_log(c, AV_LOG_ERROR, "Slices start in the middle!\n");

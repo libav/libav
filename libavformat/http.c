@@ -181,7 +181,7 @@ static int http_open_cnx_internal(URLContext *h, AVDictionary **options)
 
     if (!s->hd) {
         err = ffurl_open(&s->hd, buf, AVIO_FLAG_READ_WRITE,
-                         &h->interrupt_callback, options);
+                         &h->interrupt_callback, options, h->protocols, h);
         if (err < 0)
             return err;
     }
@@ -287,9 +287,16 @@ static int http_open(URLContext *h, const char *uri, int flags,
 
     if (s->headers) {
         int len = strlen(s->headers);
-        if (len < 2 || strcmp("\r\n", s->headers + len - 2))
+        if (len < 2 || strcmp("\r\n", s->headers + len - 2)) {
             av_log(h, AV_LOG_WARNING,
                    "No trailing CRLF found in HTTP header.\n");
+            ret = av_reallocp(&s->headers, len + 3);
+            if (ret < 0)
+                return ret;
+            s->headers[len]     = '\r';
+            s->headers[len + 1] = '\n';
+            s->headers[len + 2] = '\0';
+        }
     }
 
     ret = http_open_cnx(h, options);
@@ -675,6 +682,9 @@ static int http_connect(URLContext *h, const char *path, const char *local_path,
     s->willclose        = 0;
     s->end_chunked_post = 0;
     s->end_header       = 0;
+#if CONFIG_ZLIB
+    s->compressed       = 0;
+#endif
     if (post && !s->post_data && !send_expect_100) {
         /* Pretend that it did work. We didn't read any header yet, since
          * we've still to send the POST data, but the code calling this
@@ -777,8 +787,9 @@ static int http_read_stream(URLContext *h, uint8_t *buf, int size)
 
                 av_log(NULL, AV_LOG_TRACE, "Chunked encoding data size: %"PRId64"'\n",
                         s->chunksize);
-
-                if (!s->chunksize)
+                if (s->chunksize < 0)
+                    return AVERROR_INVALIDDATA;
+                else if (!s->chunksize)
                     return 0;
                 break;
             }
@@ -1006,7 +1017,7 @@ static const AVClass flavor ## _context_class = {   \
 #if CONFIG_HTTP_PROTOCOL
 HTTP_CLASS(http);
 
-URLProtocol ff_http_protocol = {
+const URLProtocol ff_http_protocol = {
     .name                = "http",
     .url_open2           = http_open,
     .url_read            = http_read,
@@ -1024,7 +1035,7 @@ URLProtocol ff_http_protocol = {
 #if CONFIG_HTTPS_PROTOCOL
 HTTP_CLASS(https);
 
-URLProtocol ff_https_protocol = {
+const URLProtocol ff_https_protocol = {
     .name                = "https",
     .url_open2           = http_open,
     .url_read            = http_read,
@@ -1072,7 +1083,7 @@ static int http_proxy_open(URLContext *h, const char *uri, int flags)
                 NULL);
 redo:
     ret = ffurl_open(&s->hd, lower_url, AVIO_FLAG_READ_WRITE,
-                     &h->interrupt_callback, NULL);
+                     &h->interrupt_callback, NULL, h->protocols, h);
     if (ret < 0)
         return ret;
 
@@ -1135,7 +1146,7 @@ static int http_proxy_write(URLContext *h, const uint8_t *buf, int size)
     return ffurl_write(s->hd, buf, size);
 }
 
-URLProtocol ff_httpproxy_protocol = {
+const URLProtocol ff_httpproxy_protocol = {
     .name                = "httpproxy",
     .url_open            = http_proxy_open,
     .url_read            = http_buf_read,

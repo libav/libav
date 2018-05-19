@@ -1,5 +1,5 @@
 /*
- * MPEG1 / MPEG2 video parser
+ * MPEG-1 / MPEG-2 video parser
  * Copyright (c) 2000,2001 Fabrice Bellard
  * Copyright (c) 2002-2004 Michael Niedermayer <michaelni@gmx.at>
  *
@@ -44,6 +44,8 @@ static void mpegvideo_extract_headers(AVCodecParserContext *s,
     int top_field_first, repeat_first_field, progressive_frame;
     int horiz_size_ext, vert_size_ext, bit_rate_ext;
     int did_set_size=0;
+    int chroma_format;
+    enum AVPixelFormat pix_fmt = AV_PIX_FMT_NONE;
 //FIXME replace the crap with get_bits()
     s->repeat_pict = 0;
 
@@ -65,6 +67,7 @@ static void mpegvideo_extract_headers(AVCodecParserContext *s,
                     ff_set_dimensions(avctx, pc->width, pc->height);
                     did_set_size=1;
                 }
+                pix_fmt = AV_PIX_FMT_YUV420P;
                 frame_rate_index = buf[3] & 0xf;
                 pc->frame_rate = avctx->framerate = ff_mpeg12_frame_rate_tab[frame_rate_index];
                 avctx->bit_rate = ((buf[4]<<10) | (buf[5]<<2) | (buf[6]>>6))*400;
@@ -85,9 +88,23 @@ static void mpegvideo_extract_headers(AVCodecParserContext *s,
                         pc->progressive_sequence = buf[1] & (1 << 3);
                         avctx->has_b_frames= !(buf[5] >> 7);
 
+                        chroma_format = (buf[1] >> 1) & 3;
+                        switch (chroma_format) {
+                        case 1: pix_fmt = AV_PIX_FMT_YUV420P; break;
+                        case 2: pix_fmt = AV_PIX_FMT_YUV422P; break;
+                        case 3: pix_fmt = AV_PIX_FMT_YUV444P; break;
+                        }
+
                         pc->width  |=(horiz_size_ext << 12);
                         pc->height |=( vert_size_ext << 12);
-                        avctx->bit_rate += (bit_rate_ext << 18) * 400;
+
+                        bit_rate_ext <<= 18;
+                        if (bit_rate_ext < INT_MAX / 400 &&
+                            bit_rate_ext * 400 < INT_MAX - avctx->bit_rate) {
+                            avctx->bit_rate += bit_rate_ext * 400;
+                        } else
+                            avctx->bit_rate = 0;
+
                         if(did_set_size)
                             ff_set_dimensions(avctx, pc->width, pc->height);
                         avctx->framerate.num = pc->frame_rate.num * (frame_rate_ext_n + 1) * 2;
@@ -138,10 +155,14 @@ static void mpegvideo_extract_headers(AVCodecParserContext *s,
         }
     }
  the_end: ;
-#if FF_API_AVCTX_TIMEBASE
-    if (avctx->framerate.num)
-        avctx->time_base = av_inv_q(avctx->framerate);
-#endif
+
+    if (pix_fmt != AV_PIX_FMT_NONE) {
+        s->format = pix_fmt;
+        s->width  = pc->width;
+        s->height = pc->height;
+        s->coded_width  = FFALIGN(pc->width,  16);
+        s->coded_height = FFALIGN(pc->height, 16);
+    }
 }
 
 static int mpegvideo_parse(AVCodecParserContext *s,

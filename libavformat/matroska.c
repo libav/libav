@@ -1,6 +1,6 @@
 /*
  * Matroska common data
- * Copyright (c) 2003-2004 The ffmpeg Project
+ * Copyright (c) 2003-2004 The FFmpeg project
  *
  * This file is part of Libav.
  *
@@ -55,8 +55,8 @@ const CodecTags ff_mkv_codec_tags[]={
     {"A_VORBIS"         , AV_CODEC_ID_VORBIS},
     {"A_WAVPACK4"       , AV_CODEC_ID_WAVPACK},
 
-    {"S_TEXT/UTF8"      , AV_CODEC_ID_TEXT},
     {"S_TEXT/UTF8"      , AV_CODEC_ID_SRT},
+    {"S_TEXT/UTF8"      , AV_CODEC_ID_TEXT},
     {"S_TEXT/ASCII"     , AV_CODEC_ID_TEXT},
     {"S_TEXT/ASS"       , AV_CODEC_ID_SSA},
     {"S_TEXT/SSA"       , AV_CODEC_ID_SSA},
@@ -66,6 +66,7 @@ const CodecTags ff_mkv_codec_tags[]={
     {"S_DVBSUB"         , AV_CODEC_ID_DVB_SUBTITLE},
     {"S_HDMV/PGS"       , AV_CODEC_ID_HDMV_PGS_SUBTITLE},
 
+    {"V_AV1"            , AV_CODEC_ID_AV1},
     {"V_DIRAC"          , AV_CODEC_ID_DIRAC},
     {"V_MJPEG"          , AV_CODEC_ID_MJPEG},
     {"V_MPEG1"          , AV_CODEC_ID_MPEG1VIDEO},
@@ -114,25 +115,12 @@ const AVMetadataConv ff_mkv_metadata_conv[] = {
 
 int ff_mkv_stereo3d_conv(AVStream *st, MatroskaVideoStereoModeType stereo_mode)
 {
-    AVPacketSideData *sd, *tmp;
     AVStereo3D *stereo;
+    int ret;
 
     stereo = av_stereo3d_alloc();
     if (!stereo)
         return AVERROR(ENOMEM);
-
-    tmp = av_realloc_array(st->side_data, st->nb_side_data + 1, sizeof(*tmp));
-    if (!tmp) {
-        av_freep(&stereo);
-        return AVERROR(ENOMEM);
-    }
-    st->side_data = tmp;
-    st->nb_side_data++;
-
-    sd = &st->side_data[st->nb_side_data - 1];
-    sd->type = AV_PKT_DATA_STEREO3D;
-    sd->data = (uint8_t *)stereo;
-    sd->size = sizeof(*stereo);
 
     // note: the missing breaks are intentional
     switch (stereo_mode) {
@@ -169,6 +157,13 @@ int ff_mkv_stereo3d_conv(AVStream *st, MatroskaVideoStereoModeType stereo_mode)
     case MATROSKA_VIDEO_STEREOMODE_TYPE_BOTH_EYES_BLOCK_LR:
         stereo->type = AV_STEREO3D_FRAMESEQUENCE;
         break;
+    }
+
+    ret = av_stream_add_side_data(st, AV_PKT_DATA_STEREO3D, (uint8_t *)stereo,
+                                  sizeof(*stereo));
+    if (ret < 0) {
+        av_freep(&stereo);
+        return ret;
     }
 
     return 0;

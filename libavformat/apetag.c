@@ -31,8 +31,9 @@
 
 #define APE_TAG_VERSION               2000
 #define APE_TAG_FOOTER_BYTES          32
+#define APE_TAG_HEADER_BYTES          32
 #define APE_TAG_FLAG_CONTAINS_HEADER  (1 << 31)
-#define APE_TAG_FLAG_CONTAINS_FOOTER  (1 << 30)
+#define APE_TAG_FLAG_LACKS_FOOTER     (1 << 30)
 #define APE_TAG_FLAG_IS_HEADER        (1 << 29)
 #define APE_TAG_FLAG_IS_BINARY        (1 << 1)
 
@@ -57,7 +58,7 @@ static int ape_tag_read_field(AVFormatContext *s)
         av_log(s, AV_LOG_WARNING, "Invalid APE tag key '%s'.\n", key);
         return -1;
     }
-    if (size > INT32_MAX - FF_INPUT_BUFFER_PADDING_SIZE) {
+    if (size > INT32_MAX - AV_INPUT_BUFFER_PADDING_SIZE) {
         av_log(s, AV_LOG_ERROR, "APE tag size too large.\n");
         return AVERROR_INVALIDDATA;
     }
@@ -87,22 +88,22 @@ static int ape_tag_read_field(AVFormatContext *s)
             }
 
             st->disposition      |= AV_DISPOSITION_ATTACHED_PIC;
-            st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
-            st->codec->codec_id   = id;
+            st->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
+            st->codecpar->codec_id   = id;
 
             st->attached_pic              = pkt;
             st->attached_pic.stream_index = st->index;
             st->attached_pic.flags       |= AV_PKT_FLAG_KEY;
         } else {
-            st->codec->extradata = av_malloc(size + FF_INPUT_BUFFER_PADDING_SIZE);
-            if (!st->codec->extradata)
+            st->codecpar->extradata = av_malloc(size + AV_INPUT_BUFFER_PADDING_SIZE);
+            if (!st->codecpar->extradata)
                 return AVERROR(ENOMEM);
-            if (avio_read(pb, st->codec->extradata, size) != size) {
-                av_freep(&st->codec->extradata);
+            if (avio_read(pb, st->codecpar->extradata, size) != size) {
+                av_freep(&st->codecpar->extradata);
                 return AVERROR(EIO);
             }
-            st->codec->extradata_size = size;
-            st->codec->codec_type = AVMEDIA_TYPE_ATTACHMENT;
+            st->codecpar->extradata_size = size;
+            st->codecpar->codec_type = AVMEDIA_TYPE_ATTACHMENT;
         }
     } else {
         value = av_malloc(size+1);
@@ -154,7 +155,6 @@ int64_t ff_ape_parse_tag(AVFormatContext *s)
         av_log(s, AV_LOG_ERROR, "Invalid tag size %"PRIu32".\n", tag_bytes);
         return 0;
     }
-    tag_start = file_size - tag_bytes - APE_TAG_FOOTER_BYTES;
 
     fields = avio_rl32(pb);    /* number of fields */
     if (fields > 65536) {
@@ -170,6 +170,11 @@ int64_t ff_ape_parse_tag(AVFormatContext *s)
 
     avio_seek(pb, file_size - tag_bytes, SEEK_SET);
 
+    if (val & APE_TAG_FLAG_CONTAINS_HEADER)
+        tag_bytes += APE_TAG_HEADER_BYTES;
+
+    tag_start = file_size - tag_bytes;
+
     for (i=0; i<fields; i++)
         if (ape_tag_read_field(s) < 0) break;
 
@@ -182,7 +187,7 @@ int ff_ape_write_tag(AVFormatContext *s)
     int64_t start, end;
     int size, count = 0;
 
-    if (!s->pb->seekable)
+    if (!(s->pb->seekable & AVIO_SEEKABLE_NORMAL))
         return 0;
 
     start = avio_tell(s->pb);
@@ -194,8 +199,7 @@ int ff_ape_write_tag(AVFormatContext *s)
     avio_wl32(s->pb, 0);                // reserve space for tag count
 
     // flags
-    avio_wl32(s->pb, APE_TAG_FLAG_CONTAINS_HEADER | APE_TAG_FLAG_CONTAINS_FOOTER |
-                     APE_TAG_FLAG_IS_HEADER);
+    avio_wl32(s->pb, APE_TAG_FLAG_CONTAINS_HEADER | APE_TAG_FLAG_IS_HEADER);
     ffio_fill(s->pb, 0, 8);             // reserved
 
     while ((e = av_dict_get(s->metadata, "", e, AV_DICT_IGNORE_SUFFIX))) {
@@ -217,7 +221,7 @@ int ff_ape_write_tag(AVFormatContext *s)
     avio_wl32(s->pb, count);            // tag count
 
     // flags
-    avio_wl32(s->pb, APE_TAG_FLAG_CONTAINS_HEADER | APE_TAG_FLAG_CONTAINS_FOOTER);
+    avio_wl32(s->pb, APE_TAG_FLAG_CONTAINS_HEADER);
     ffio_fill(s->pb, 0, 8);             // reserved
 
     // update values in the header

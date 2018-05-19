@@ -28,11 +28,11 @@
 #include "libavutil/channel_layout.h"
 #include "libavutil/float_dsp.h"
 #include "libavutil/mathematics.h"
-#include "avcodec.h"
-#define BITSTREAM_READER_LE
-#include "get_bits.h"
-#include "internal.h"
 
+#define BITSTREAM_READER_LE
+#include "avcodec.h"
+#include "bitstream.h"
+#include "internal.h"
 #include "lsp.h"
 #include "acelp_vectors.h"
 #include "acelp_pitch_delay.h"
@@ -139,7 +139,7 @@ const float ff_pow_0_5[] = {
     1.0/(1 << 13), 1.0/(1 << 14), 1.0/(1 << 15), 1.0/(1 << 16)
 };
 
-static void dequant(float *out, const int *idx, const float *cbs[])
+static void dequant(float *out, const int *idx, const float * const cbs[])
 {
     int i;
     int stride  = 2;
@@ -188,28 +188,28 @@ static void pitch_sharpening(int pitch_lag_int, float beta,
 /**
  * Extract decoding parameters from the input bitstream.
  * @param parms          parameters structure
- * @param pgb            pointer to initialized GetBitContext structure
+ * @param bc             pointer to initialized BitstreamContext structure
  */
-static void decode_parameters(SiprParameters* parms, GetBitContext *pgb,
+static void decode_parameters(SiprParameters* parms, BitstreamContext *bc,
                               const SiprModeParam *p)
 {
     int i, j;
 
     if (p->ma_predictor_bits)
-        parms->ma_pred_switch       = get_bits(pgb, p->ma_predictor_bits);
+        parms->ma_pred_switch = bitstream_read(bc, p->ma_predictor_bits);
 
     for (i = 0; i < 5; i++)
-        parms->vq_indexes[i]        = get_bits(pgb, p->vq_indexes_bits[i]);
+        parms->vq_indexes[i] = bitstream_read(bc, p->vq_indexes_bits[i]);
 
     for (i = 0; i < p->subframe_count; i++) {
-        parms->pitch_delay[i]       = get_bits(pgb, p->pitch_delay_bits[i]);
+        parms->pitch_delay[i] = bitstream_read(bc, p->pitch_delay_bits[i]);
         if (p->gp_index_bits)
-            parms->gp_index[i]      = get_bits(pgb, p->gp_index_bits);
+            parms->gp_index[i] = bitstream_read(bc, p->gp_index_bits);
 
         for (j = 0; j < p->number_of_fc_indexes; j++)
-            parms->fc_indexes[i][j] = get_bits(pgb, p->fc_index_bits[j]);
+            parms->fc_indexes[i][j] = bitstream_read(bc, p->fc_index_bits[j]);
 
-        parms->gc_index[i]          = get_bits(pgb, p->gc_index_bits);
+        parms->gc_index[i] = bitstream_read(bc, p->gc_index_bits);
     }
 }
 
@@ -527,7 +527,7 @@ static int sipr_decode_frame(AVCodecContext *avctx, void *data,
     const uint8_t *buf=avpkt->data;
     SiprParameters parm;
     const SiprModeParam *mode_par = &modes[ctx->mode];
-    GetBitContext gb;
+    BitstreamContext bc;
     float *samples;
     int subframe_size = ctx->mode == MODE_16k ? L_SUBFR_16k : SUBFR_SIZE;
     int i, ret;
@@ -549,10 +549,10 @@ static int sipr_decode_frame(AVCodecContext *avctx, void *data,
     }
     samples = (float *)frame->data[0];
 
-    init_get_bits(&gb, buf, mode_par->bits_per_frame);
+    bitstream_init(&bc, buf, mode_par->bits_per_frame);
 
     for (i = 0; i < mode_par->frames_per_packet; i++) {
-        decode_parameters(&parm, &gb, mode_par);
+        decode_parameters(&parm, &bc, mode_par);
 
         ctx->decode_frame(ctx, &parm, samples);
 
@@ -572,5 +572,5 @@ AVCodec ff_sipr_decoder = {
     .priv_data_size = sizeof(SiprContext),
     .init           = sipr_decoder_init,
     .decode         = sipr_decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
 };

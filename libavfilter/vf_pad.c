@@ -33,7 +33,6 @@
 #include "libavutil/eval.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/colorspace.h"
-#include "libavutil/avassert.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/parseutils.h"
 #include "libavutil/mathematics.h"
@@ -167,12 +166,17 @@ static int config_input(AVFilterLink *inlink)
                                       NULL, NULL, NULL, NULL, NULL, 0, ctx)) < 0)
         goto eval_fail;
     s->h = var_values[VAR_OUT_H] = var_values[VAR_OH] = res;
+    if (!s->h)
+        var_values[VAR_OUT_H] = var_values[VAR_OH] = s->h = inlink->h;
+
     /* evaluate the width again, as it may depend on the evaluated output height */
     if ((ret = av_expr_parse_and_eval(&res, (expr = s->w_expr),
                                       var_names, var_values,
                                       NULL, NULL, NULL, NULL, NULL, 0, ctx)) < 0)
         goto eval_fail;
     s->w = var_values[VAR_OUT_W] = var_values[VAR_OW] = res;
+    if (!s->w)
+        var_values[VAR_OUT_W] = var_values[VAR_OW] = s->w = inlink->w;
 
     /* evaluate x and y */
     av_expr_parse_and_eval(&res, (expr = s->x_expr),
@@ -196,11 +200,6 @@ static int config_input(AVFilterLink *inlink)
         av_log(ctx, AV_LOG_ERROR, "Negative values are not acceptable.\n");
         return AVERROR(EINVAL);
     }
-
-    if (!s->w)
-        s->w = inlink->w;
-    if (!s->h)
-        s->h = inlink->h;
 
     s->w &= ~((1 << s->hsub) - 1);
     s->h &= ~((1 << s->vsub) - 1);

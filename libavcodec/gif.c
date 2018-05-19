@@ -130,12 +130,12 @@ static av_cold int gif_encode_init(AVCodecContext *avctx)
 {
     GIFContext *s = avctx->priv_data;
 
-    avctx->coded_frame = av_frame_alloc();
-    if (!avctx->coded_frame)
-        return AVERROR(ENOMEM);
-
+#if FF_API_CODED_FRAME
+FF_DISABLE_DEPRECATION_WARNINGS
     avctx->coded_frame->pict_type = AV_PICTURE_TYPE_I;
     avctx->coded_frame->key_frame = 1;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
 
     s->lzw = av_mallocz(ff_lzw_encode_state_size);
     if (!s->lzw)
@@ -153,7 +153,7 @@ static int gif_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     uint8_t *outbuf_ptr, *end;
     int ret;
 
-    if ((ret = ff_alloc_packet(pkt, avctx->width*avctx->height*7/5 + FF_MIN_BUFFER_SIZE)) < 0) {
+    if ((ret = ff_alloc_packet(pkt, avctx->width*avctx->height*7/5 + AV_INPUT_BUFFER_MIN_SIZE)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "Error getting output packet.\n");
         return ret;
     }
@@ -173,8 +173,6 @@ static int gif_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
 static int gif_encode_close(AVCodecContext *avctx)
 {
     GIFContext *s = avctx->priv_data;
-
-    av_frame_free(&avctx->coded_frame);
 
     av_freep(&s->lzw);
     av_freep(&s->buf);

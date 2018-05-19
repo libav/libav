@@ -8,7 +8,7 @@
  *
  * based on http://ubiqx.org/libcifs/source/Auth/MD5.c
  *          from Christopher R. Hertel (crh@ubiqx.mn.org)
- * Simplified, cleaned and IMO redundant comments removed by michael.
+ * Simplified, cleaned and IMO redundant comments removed by Michael.
  *
  * If you use gcc, then version 4.1 or later and -fomit-frame-pointer is
  * strongly recommended.
@@ -31,20 +31,17 @@
  */
 
 #include <stdint.h>
+
 #include "bswap.h"
 #include "intreadwrite.h"
-#include "md5.h"
 #include "mem.h"
+#include "md5.h"
 
-typedef struct AVMD5{
+typedef struct AVMD5 {
     uint64_t len;
     uint8_t  block[64];
     uint32_t ABCD[4];
 } AVMD5;
-
-#if FF_API_CONTEXT_SIZE
-const int av_md5_size = sizeof(AVMD5);
-#endif
 
 struct AVMD5 *av_md5_alloc(void)
 {
@@ -80,16 +77,21 @@ static const uint32_t T[64] = { // T[i]= fabs(sin(i+1)<<32)
     0xf7537e82, 0xbd3af235, 0x2ad7d2bb, 0xeb86d391,
 };
 
-#define CORE(i, a, b, c, d) do {                                        \
-        t = S[i >> 4][i & 3];                                           \
+#define CORE(i, a, b, c, d)                                             \
+    do {                                                                \
+        t  = S[i >> 4][i & 3];                                          \
         a += T[i];                                                      \
                                                                         \
         if (i < 32) {                                                   \
-            if (i < 16) a += (d ^ (b & (c ^ d))) + X[       i  & 15];   \
-            else        a += (c ^ (d & (c ^ b))) + X[(1 + 5*i) & 15];   \
+            if (i < 16)                                                     \
+                a += (d ^ (b & (c ^ d))) + AV_RL32(X + (i          & 15));  \
+            else                                                            \
+                a += (c ^ (d & (c ^ b))) + AV_RL32(X + ((1 + 5 * i) & 15)); \
         } else {                                                        \
-            if (i < 48) a += (b ^ c ^ d)         + X[(5 + 3*i) & 15];   \
-            else        a += (c ^ (b | ~d))      + X[(    7*i) & 15];   \
+            if (i < 48)                                                 \
+                a += (b ^ c ^ d)    + AV_RL32(X + ((5 + 3 * i) & 15));  \
+            else                                                        \
+                a += (c ^ (b | ~d)) + AV_RL32(X + ((7     * i) & 15));  \
         }                                                               \
         a = b + (a << t | a >> (32 - t));                               \
     } while (0)
@@ -97,18 +99,14 @@ static const uint32_t T[64] = { // T[i]= fabs(sin(i+1)<<32)
 static void body(uint32_t ABCD[4], uint32_t X[16])
 {
     int t;
-    int i av_unused;
     unsigned int a = ABCD[3];
     unsigned int b = ABCD[2];
     unsigned int c = ABCD[1];
     unsigned int d = ABCD[0];
 
-#if HAVE_BIGENDIAN
-    for (i = 0; i < 16; i++)
-        X[i] = av_bswap32(X[i]);
-#endif
-
 #if CONFIG_SMALL
+    int i;
+
     for (i = 0; i < 64; i++) {
         CORE(i, a, b, c, d);
         t = d;
@@ -119,10 +117,13 @@ static void body(uint32_t ABCD[4], uint32_t X[16])
     }
 #else
 #define CORE2(i)                                                        \
-    CORE( i,   a,b,c,d); CORE((i+1),d,a,b,c);                           \
-    CORE((i+2),c,d,a,b); CORE((i+3),b,c,d,a)
-#define CORE4(i) CORE2(i); CORE2((i+4)); CORE2((i+8)); CORE2((i+12))
-    CORE4(0); CORE4(16); CORE4(32); CORE4(48);
+    CORE(i, a, b, c, d); CORE((i + 1), d, a, b, c);                     \
+    CORE((i + 2), c, d, a, b); CORE((i + 3), b, c, d, a)
+#define CORE4(i) CORE2(i); CORE2((i + 4)); CORE2((i + 8)); CORE2((i + 12))
+    CORE4(0);
+    CORE4(16);
+    CORE4(32);
+    CORE4(48);
 #endif
 
     ABCD[0] += d;
@@ -141,11 +142,15 @@ void av_md5_init(AVMD5 *ctx)
     ctx->ABCD[3] = 0x67452301;
 }
 
+#if FF_API_CRYPTO_SIZE_T
 void av_md5_update(AVMD5 *ctx, const uint8_t *src, const int len)
+#else
+void av_md5_update(AVMD5 *ctx, const uint8_t *src, size_t len)
+#endif
 {
     int i, j;
 
-    j = ctx->len & 63;
+    j         = ctx->len & 63;
     ctx->len += len;
 
     for (i = 0; i < len; i++) {
@@ -166,13 +171,17 @@ void av_md5_final(AVMD5 *ctx, uint8_t *dst)
     while ((ctx->len & 63) != 56)
         av_md5_update(ctx, "", 1);
 
-    av_md5_update(ctx, (uint8_t *)&finalcount, 8);
+    av_md5_update(ctx, (uint8_t *) &finalcount, 8);
 
     for (i = 0; i < 4; i++)
-        AV_WL32(dst + 4*i, ctx->ABCD[3 - i]);
+        AV_WL32(dst + 4 * i, ctx->ABCD[3 - i]);
 }
 
+#if FF_API_CRYPTO_SIZE_T
 void av_md5_sum(uint8_t *dst, const uint8_t *src, const int len)
+#else
+void av_md5_sum(uint8_t *dst, const uint8_t *src, size_t len)
+#endif
 {
     AVMD5 ctx;
 
@@ -180,33 +189,3 @@ void av_md5_sum(uint8_t *dst, const uint8_t *src, const int len)
     av_md5_update(&ctx, src, len);
     av_md5_final(&ctx, dst);
 }
-
-#ifdef TEST
-#include <stdio.h>
-
-static void print_md5(uint8_t *md5)
-{
-    int i;
-    for (i = 0; i < 16; i++)
-        printf("%02x", md5[i]);
-    printf("\n");
-}
-
-int main(void){
-    uint8_t md5val[16];
-    int i;
-    uint8_t in[1000];
-
-    for (i = 0; i < 1000; i++)
-        in[i] = i * i;
-    av_md5_sum(md5val, in, 1000); print_md5(md5val);
-    av_md5_sum(md5val, in,   63); print_md5(md5val);
-    av_md5_sum(md5val, in,   64); print_md5(md5val);
-    av_md5_sum(md5val, in,   65); print_md5(md5val);
-    for (i = 0; i < 1000; i++)
-        in[i] = i % 127;
-    av_md5_sum(md5val, in,  999); print_md5(md5val);
-
-    return 0;
-}
-#endif

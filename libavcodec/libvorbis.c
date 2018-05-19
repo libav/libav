@@ -72,7 +72,12 @@ static const AVCodecDefault defaults[] = {
     { NULL },
 };
 
-static const AVClass class = { "libvorbis", av_default_item_name, options, LIBAVUTIL_VERSION_INT };
+static const AVClass class = {
+    .class_name = "libvorbis",
+    .item_name  = av_default_item_name,
+    .option     = options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
 
 
 static int vorbis_error_to_averror(int ov_err)
@@ -91,14 +96,14 @@ static av_cold int libvorbis_setup(vorbis_info *vi, AVCodecContext *avctx)
     double cfreq;
     int ret;
 
-    if (avctx->flags & CODEC_FLAG_QSCALE || !avctx->bit_rate) {
+    if (avctx->flags & AV_CODEC_FLAG_QSCALE || !avctx->bit_rate) {
         /* variable bitrate
          * NOTE: we use the oggenc range of -1 to 10 for global_quality for
          *       user convenience, but libvorbis uses -0.1 to 1.0.
          */
         float q = avctx->global_quality / (float)FF_QP2LAMBDA;
         /* default to 3 if the user did not set quality or bitrate */
-        if (!(avctx->flags & CODEC_FLAG_QSCALE))
+        if (!(avctx->flags & AV_CODEC_FLAG_QSCALE))
             q = 3.0;
         if ((ret = vorbis_encode_setup_vbr(vi, avctx->channels,
                                            avctx->sample_rate,
@@ -206,7 +211,7 @@ static av_cold int libvorbis_encode_init(AVCodecContext *avctx)
                                 xiph_len(header_comm.bytes) +
                                 header_code.bytes;
     p = avctx->extradata = av_malloc(avctx->extradata_size +
-                                     FF_INPUT_BUFFER_PADDING_SIZE);
+                                     AV_INPUT_BUFFER_PADDING_SIZE);
     if (!p) {
         ret = AVERROR(ENOMEM);
         goto error;
@@ -346,9 +351,10 @@ AVCodec ff_libvorbis_encoder = {
     .init           = libvorbis_encode_init,
     .encode2        = libvorbis_encode_frame,
     .close          = libvorbis_encode_close,
-    .capabilities   = CODEC_CAP_DELAY,
+    .capabilities   = AV_CODEC_CAP_DELAY,
     .sample_fmts    = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_FLTP,
                                                       AV_SAMPLE_FMT_NONE },
     .priv_class     = &class,
     .defaults       = defaults,
+    .wrapper_name   = "libvorbis",
 };

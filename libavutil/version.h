@@ -53,8 +53,8 @@
  * @{
  */
 
-#define LIBAVUTIL_VERSION_MAJOR 54
-#define LIBAVUTIL_VERSION_MINOR 15
+#define LIBAVUTIL_VERSION_MAJOR 56
+#define LIBAVUTIL_VERSION_MINOR  7
 #define LIBAVUTIL_VERSION_MICRO  0
 
 #define LIBAVUTIL_VERSION_INT   AV_VERSION_INT(LIBAVUTIL_VERSION_MAJOR, \
@@ -78,41 +78,23 @@
  * @{
  */
 
-#ifndef FF_API_PIX_FMT
-#define FF_API_PIX_FMT                  (LIBAVUTIL_VERSION_MAJOR < 55)
+#ifndef FF_API_CRYPTO_CONTEXT
+#define FF_API_CRYPTO_CONTEXT           (LIBAVUTIL_VERSION_MAJOR < 57)
 #endif
-#ifndef FF_API_CONTEXT_SIZE
-#define FF_API_CONTEXT_SIZE             (LIBAVUTIL_VERSION_MAJOR < 55)
+#ifndef FF_API_PLUS1_MINUS1
+#define FF_API_PLUS1_MINUS1             (LIBAVUTIL_VERSION_MAJOR < 57)
 #endif
-#ifndef FF_API_PIX_FMT_DESC
-#define FF_API_PIX_FMT_DESC             (LIBAVUTIL_VERSION_MAJOR < 55)
+#ifndef FF_API_ERROR_FRAME
+#define FF_API_ERROR_FRAME              (LIBAVUTIL_VERSION_MAJOR < 57)
 #endif
-#ifndef FF_API_AV_REVERSE
-#define FF_API_AV_REVERSE               (LIBAVUTIL_VERSION_MAJOR < 55)
+#ifndef FF_API_VAAPI
+#define FF_API_VAAPI                    (LIBAVUTIL_VERSION_MAJOR < 57)
 #endif
-#ifndef FF_API_AUDIOCONVERT
-#define FF_API_AUDIOCONVERT             (LIBAVUTIL_VERSION_MAJOR < 55)
+#ifndef FF_API_PKT_PTS
+#define FF_API_PKT_PTS                  (LIBAVUTIL_VERSION_MAJOR < 57)
 #endif
-#ifndef FF_API_CPU_FLAG_MMX2
-#define FF_API_CPU_FLAG_MMX2            (LIBAVUTIL_VERSION_MAJOR < 55)
-#endif
-#ifndef FF_API_LLS_PRIVATE
-#define FF_API_LLS_PRIVATE              (LIBAVUTIL_VERSION_MAJOR < 55)
-#endif
-#ifndef FF_API_AVFRAME_LAVC
-#define FF_API_AVFRAME_LAVC             (LIBAVUTIL_VERSION_MAJOR < 55)
-#endif
-#ifndef FF_API_VDPAU
-#define FF_API_VDPAU                    (LIBAVUTIL_VERSION_MAJOR < 55)
-#endif
-#ifndef FF_API_XVMC
-#define FF_API_XVMC                     (LIBAVUTIL_VERSION_MAJOR < 55)
-#endif
-#ifndef FF_API_OPT_TYPE_METADATA
-#define FF_API_OPT_TYPE_METADATA        (LIBAVUTIL_VERSION_MAJOR < 55)
-#endif
-#ifndef FF_API_DLOG
-#define FF_API_DLOG                     (LIBAVUTIL_VERSION_MAJOR < 55)
+#ifndef FF_API_CRYPTO_SIZE_T
+#define FF_API_CRYPTO_SIZE_T            (LIBAVUTIL_VERSION_MAJOR < 57)
 #endif
 
 

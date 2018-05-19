@@ -92,6 +92,8 @@ typedef struct AC3DecodeContext {
     int lfe_mix_level_exists;               ///< indicates if lfemixlevcod is specified (lfemixlevcode)
     int lfe_mix_level;                      ///< LFE mix level index                    (lfemixlevcod)
     int eac3;                               ///< indicates if current frame is E-AC-3
+    int eac3_frame_dependent_found;         ///< bitstream has E-AC-3 dependent frame(s)
+    int eac3_subsbtreamid_found;            ///< bitstream has E-AC-3 additional substream(s)
     int dolby_surround_mode;                ///< dolby surround mode                    (dsurmod)
     int dolby_surround_ex_mode;             ///< dolby surround ex mode                 (dsurexmod)
     int dolby_headphone_mode;               ///< dolby headphone mode                   (dheadphonmod)
@@ -145,7 +147,7 @@ typedef struct AC3DecodeContext {
     int fbw_channels;                           ///< number of full-bandwidth channels
     int channels;                               ///< number of total channels
     int lfe_ch;                                 ///< index of LFE channel
-    float downmix_coeffs[AC3_MAX_CHANNELS][2];  ///< stereo downmix coefficients
+    float *downmix_coeffs[2];                   ///< stereo downmix coefficients
     int downmixed;                              ///< indicates if coeffs are currently downmixed
     int output_mode;                            ///< output channel configuration
     int out_channels;                           ///< number of output channels
@@ -217,7 +219,7 @@ typedef struct AC3DecodeContext {
     DECLARE_ALIGNED(32, float, window)[AC3_BLOCK_SIZE];                              ///< window coefficients
     DECLARE_ALIGNED(32, float, tmp_output)[AC3_BLOCK_SIZE];                          ///< temporary storage for output before windowing
     DECLARE_ALIGNED(32, float, output)[AC3_MAX_CHANNELS][AC3_BLOCK_SIZE];            ///< output after imdct transform and windowing
-    DECLARE_ALIGNED(32, uint8_t, input_buffer)[AC3_FRAME_BUFFER_SIZE + FF_INPUT_BUFFER_PADDING_SIZE]; ///< temp buffer to prevent overread
+    DECLARE_ALIGNED(32, uint8_t, input_buffer)[AC3_FRAME_BUFFER_SIZE + AV_INPUT_BUFFER_PADDING_SIZE]; ///< temp buffer to prevent overread
 ///@}
 } AC3DecodeContext;
 

@@ -33,6 +33,7 @@
 #include "libavformat/internal.h"
 #include <unistd.h>
 #include <fcntl.h>
+#include <stdatomic.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/time.h>
@@ -42,7 +43,6 @@
 #else
 #include <linux/videodev2.h>
 #endif
-#include "libavutil/atomic.h"
 #include "libavutil/avassert.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/internal.h"
@@ -70,7 +70,7 @@ struct video_data {
     int top_field_first;
 
     int buffers;
-    volatile int buffers_queued;
+    atomic_int buffers_queued;
     void **buf_start;
     unsigned int *buf_len;
     char *standard;
@@ -421,13 +421,6 @@ static int mmap_init(AVFormatContext *ctx)
     return 0;
 }
 
-#if FF_API_DESTRUCT_PACKET
-static void dummy_release_buffer(AVPacket *pkt)
-{
-    av_assert0(0);
-}
-#endif
-
 static void mmap_release_buffer(void *opaque, uint8_t *data)
 {
     struct v4l2_buffer buf = { 0 };
@@ -448,7 +441,7 @@ static void mmap_release_buffer(void *opaque, uint8_t *data)
         av_log(NULL, AV_LOG_ERROR, "ioctl(VIDIOC_QBUF): %s\n",
                errbuf);
     }
-    avpriv_atomic_int_add_and_fetch(&s->buffers_queued, 1);
+    atomic_fetch_add(&s->buffers_queued, 1);
 }
 
 static int mmap_read_frame(AVFormatContext *ctx, AVPacket *pkt)
@@ -489,9 +482,9 @@ static int mmap_read_frame(AVFormatContext *ctx, AVPacket *pkt)
         av_log(ctx, AV_LOG_ERROR, "Invalid buffer index received.\n");
         return AVERROR(EINVAL);
     }
-    avpriv_atomic_int_add_and_fetch(&s->buffers_queued, -1);
+    atomic_fetch_add(&s->buffers_queued, -1);
     // always keep at least one buffer queued
-    av_assert0(avpriv_atomic_int_get(&s->buffers_queued) >= 1);
+    av_assert0(atomic_load(&s->buffers_queued) >= 1);
 
     if (s->frame_size > 0 && buf.bytesused != s->frame_size) {
         av_log(ctx, AV_LOG_ERROR,
@@ -502,7 +495,7 @@ static int mmap_read_frame(AVFormatContext *ctx, AVPacket *pkt)
     }
 
     /* Image is at s->buff_start[buf.index] */
-    if (avpriv_atomic_int_get(&s->buffers_queued) == FFMAX(s->buffers / 8, 1)) {
+    if (atomic_load(&s->buffers_queued) == FFMAX(s->buffers / 8, 1)) {
         /* when we start getting low on queued buffers, fall back on copying data */
         res = av_new_packet(pkt, buf.bytesused);
         if (res < 0) {
@@ -515,20 +508,15 @@ static int mmap_read_frame(AVFormatContext *ctx, AVPacket *pkt)
         if (res < 0) {
             res = AVERROR(errno);
             av_log(ctx, AV_LOG_ERROR, "ioctl(VIDIOC_QBUF)\n");
-            av_free_packet(pkt);
+            av_packet_unref(pkt);
             return res;
         }
-        avpriv_atomic_int_add_and_fetch(&s->buffers_queued, 1);
+        atomic_fetch_add(&s->buffers_queued, 1);
     } else {
         struct buff_data *buf_descriptor;
 
         pkt->data     = s->buf_start[buf.index];
         pkt->size     = buf.bytesused;
-#if FF_API_DESTRUCT_PACKET
-FF_DISABLE_DEPRECATION_WARNINGS
-        pkt->destruct = dummy_release_buffer;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
 
         buf_descriptor = av_malloc(sizeof(struct buff_data));
         if (!buf_descriptor) {
@@ -580,7 +568,7 @@ static int mmap_start(AVFormatContext *ctx)
             return err;
         }
     }
-    s->buffers_queued = s->buffers;
+    atomic_store(&s->buffers_queued, s->buffers);
 
     type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     res = ioctl(s->fd, VIDIOC_STREAMON, &type);
@@ -783,16 +771,16 @@ static int v4l2_read_header(AVFormatContext *s1)
     }
 
     if (s->pixel_format) {
-        AVCodec *codec = avcodec_find_decoder_by_name(s->pixel_format);
+        const AVCodecDescriptor *desc = avcodec_descriptor_get_by_name(s->pixel_format);
 
-        if (codec) {
-            s1->video_codec_id = codec->id;
+        if (desc) {
+            s1->video_codec_id = desc->id;
             st->need_parsing   = AVSTREAM_PARSE_HEADERS;
         }
 
         pix_fmt = av_get_pix_fmt(s->pixel_format);
 
-        if (pix_fmt == AV_PIX_FMT_NONE && !codec) {
+        if (pix_fmt == AV_PIX_FMT_NONE && !desc) {
             av_log(s1, AV_LOG_ERROR, "No such input format: %s.\n",
                    s->pixel_format);
 
@@ -839,9 +827,9 @@ static int v4l2_read_header(AVFormatContext *s1)
     if ((res = v4l2_set_parameters(s1) < 0))
         return res;
 
-    st->codec->pix_fmt = fmt_v4l2ff(desired_format, codec_id);
-    s->frame_size =
-        avpicture_get_size(st->codec->pix_fmt, s->width, s->height);
+    st->codecpar->format = fmt_v4l2ff(desired_format, codec_id);
+    s->frame_size = av_image_get_buffer_size(st->codecpar->format,
+                                             s->width, s->height, 1);
 
     if ((res = mmap_init(s1)) ||
         (res = mmap_start(s1)) < 0) {
@@ -851,33 +839,40 @@ static int v4l2_read_header(AVFormatContext *s1)
 
     s->top_field_first = first_field(s->fd);
 
-    st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
-    st->codec->codec_id = codec_id;
+    st->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
+    st->codecpar->codec_id = codec_id;
     if (codec_id == AV_CODEC_ID_RAWVIDEO)
-        st->codec->codec_tag =
-            avcodec_pix_fmt_to_codec_tag(st->codec->pix_fmt);
-    st->codec->width = s->width;
-    st->codec->height = s->height;
-    st->codec->bit_rate = s->frame_size * av_q2d(st->avg_frame_rate) * 8;
+        st->codecpar->codec_tag =
+            avcodec_pix_fmt_to_codec_tag(st->codecpar->format);
+    st->codecpar->width = s->width;
+    st->codecpar->height = s->height;
+    st->codecpar->bit_rate = s->frame_size * av_q2d(st->avg_frame_rate) * 8;
 
     return 0;
 }
 
 static int v4l2_read_packet(AVFormatContext *s1, AVPacket *pkt)
 {
+#if FF_API_CODED_FRAME && FF_API_LAVF_AVCTX
+FF_DISABLE_DEPRECATION_WARNINGS
     struct video_data *s = s1->priv_data;
     AVFrame *frame = s1->streams[0]->codec->coded_frame;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
     int res;
 
-    av_init_packet(pkt);
     if ((res = mmap_read_frame(s1, pkt)) < 0) {
         return res;
     }
 
+#if FF_API_CODED_FRAME && FF_API_LAVF_AVCTX
+FF_DISABLE_DEPRECATION_WARNINGS
     if (frame && s->interlaced) {
         frame->interlaced_frame = 1;
         frame->top_field_first = s->top_field_first;
     }
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
 
     return pkt->size;
 }
@@ -886,7 +881,7 @@ static int v4l2_read_close(AVFormatContext *s1)
 {
     struct video_data *s = s1->priv_data;
 
-    if (avpriv_atomic_int_get(&s->buffers_queued) != s->buffers)
+    if (atomic_load(&s->buffers_queued) != s->buffers)
         av_log(s1, AV_LOG_WARNING, "Some buffers are still owned by the caller on "
                "close.\n");
 

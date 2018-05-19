@@ -209,9 +209,9 @@ static const char *drawtext_get_name(void *ctx)
 }
 
 static const AVClass drawtext_class = {
-    "DrawTextContext",
-    drawtext_get_name,
-    drawtext_options
+    .class_name = "DrawTextContext",
+    .item_name  = drawtext_get_name,
+    .option     = drawtext_options,
 };
 
 #undef __FTERRORS_H__
@@ -219,11 +219,10 @@ static const AVClass drawtext_class = {
 #define FT_ERRORDEF(e, v, s) { (e), (s) },
 #define FT_ERROR_END_LIST { 0, NULL } };
 
-struct ft_error
-{
+static const struct ft_error {
     int err;
     const char *err_msg;
-} static ft_errors[] =
+} ft_errors[] =
 #include FT_ERRORS_H
 
 #define FT_ERRMSG(e) ft_errors[e].err_msg
@@ -467,10 +466,6 @@ static av_cold int init(AVFilterContext *ctx)
     }
     s->tabsize *= glyph->advance;
 
-#if !HAVE_LOCALTIME_R
-    av_log(ctx, AV_LOG_WARNING, "strftime() expansion unavailable!\n");
-#endif
-
     return 0;
 }
 
@@ -525,28 +520,15 @@ static inline int is_newline(uint32_t c)
     return c == '\n' || c == '\r' || c == '\f' || c == '\v';
 }
 
-static int dtext_prepare_text(AVFilterContext *ctx)
+static int expand_strftime(DrawTextContext *s)
 {
-    DrawTextContext *s = ctx->priv;
-    uint32_t code = 0, prev_code = 0;
-    int x = 0, y = 0, i = 0, ret;
-    int text_height, baseline;
-    char *text = s->text;
-    uint8_t *p;
-    int str_w = 0, len;
-    int y_min = 32000, y_max = -32000;
-    FT_Vector delta;
-    Glyph *glyph = NULL, *prev_glyph = NULL;
-    Glyph dummy = { 0 };
-    int width  = ctx->inputs[0]->w;
-    int height = ctx->inputs[0]->h;
-    time_t now = time(0);
     struct tm ltime;
+    time_t now   = time(0);
     uint8_t *buf = s->expanded_text;
     int buf_size = s->expanded_text_size;
 
     if (!buf)
-        buf_size = 2*strlen(s->text)+1;
+        buf_size = 2 * strlen(s->text) + 1;
 
     localtime_r(&now, &ltime);
 
@@ -559,8 +541,33 @@ static int dtext_prepare_text(AVFilterContext *ctx)
 
     if (!buf)
         return AVERROR(ENOMEM);
-    text = s->expanded_text = buf;
+    s->expanded_text      = buf;
     s->expanded_text_size = buf_size;
+
+    return 0;
+}
+
+static int dtext_prepare_text(AVFilterContext *ctx)
+{
+    DrawTextContext *s = ctx->priv;
+    uint32_t code = 0, prev_code = 0;
+    int x = 0, y = 0, i = 0, ret;
+    int text_height, baseline;
+    char *text;
+    uint8_t *p;
+    int str_w = 0, len;
+    int y_min = 32000, y_max = -32000;
+    FT_Vector delta;
+    Glyph *glyph = NULL, *prev_glyph = NULL;
+    Glyph dummy = { 0 };
+    int width  = ctx->inputs[0]->w;
+    int height = ctx->inputs[0]->h;
+
+    ret = expand_strftime(s);
+    if (ret < 0)
+        return ret;
+
+    text = s->expanded_text ? s->expanded_text : s->text;
 
     if ((len = strlen(text)) > s->nb_positions) {
         FT_Vector *p = av_realloc(s->positions,
@@ -818,7 +825,7 @@ static int draw_glyphs(DrawTextContext *s, AVFrame *frame,
                        const uint8_t rgbcolor[4], const uint8_t yuvcolor[4],
                        int x, int y)
 {
-    char *text = HAVE_LOCALTIME_R ? s->expanded_text : s->text;
+    char *text = s->expanded_text;
     uint32_t code = 0;
     int i;
     uint8_t *p;
@@ -833,7 +840,7 @@ static int draw_glyphs(DrawTextContext *s, AVFrame *frame,
             continue;
 
         dummy.code = code;
-        glyph = av_tree_find(s->glyphs, &dummy, (void *)glyph_cmp, NULL);
+        glyph = av_tree_find(s->glyphs, &dummy, glyph_cmp, NULL);
 
         if (glyph->bitmap.pixel_mode != FT_PIXEL_MODE_MONO &&
             glyph->bitmap.pixel_mode != FT_PIXEL_MODE_GRAY)

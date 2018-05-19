@@ -252,7 +252,8 @@ static int vp6_build_huff_tree(VP56Context *s, uint8_t coeff_model[],
 
     ff_free_vlc(vlc);
     /* then build the huffman tree according to probabilities */
-    return ff_huff_build_tree(s->avctx, vlc, size, nodes, vp6_huff_cmp,
+    return ff_huff_build_tree(s->avctx, vlc, size, FF_HUFFMAN_BITS,
+                              nodes, vp6_huff_cmp,
                               FF_HUFFMAN_FLAG_HNODE_FIRST);
 }
 
@@ -402,11 +403,11 @@ static void vp6_parse_coeff_huffman(VP56Context *s)
             } else {
                 if (get_bits_left(&s->gb) <= 0)
                     return;
-                coeff = get_vlc2(&s->gb, vlc_coeff->table, 9, 3);
+                coeff = get_vlc2(&s->gb, vlc_coeff->table, FF_HUFFMAN_BITS, 3);
                 if (coeff == 0) {
                     if (coeff_idx) {
                         int pt = (coeff_idx >= 6);
-                        run += get_vlc2(&s->gb, s->runv_vlc[pt].table, 9, 3);
+                        run += get_vlc2(&s->gb, s->runv_vlc[pt].table, FF_HUFFMAN_BITS, 3);
                         if (run >= 9)
                             run += get_bits(&s->gb, 6);
                     } else
@@ -513,7 +514,7 @@ static void vp6_parse_coeff(VP56Context *s)
     }
 }
 
-static int vp6_block_variance(uint8_t *src, int stride)
+static int vp6_block_variance(uint8_t *src, ptrdiff_t stride)
 {
     int sum = 0, square_sum = 0;
     int y, x;
@@ -528,7 +529,7 @@ static int vp6_block_variance(uint8_t *src, int stride)
     return (16*square_sum - sum*sum) >> 8;
 }
 
-static void vp6_filter_hv4(uint8_t *dst, uint8_t *src, int stride,
+static void vp6_filter_hv4(uint8_t *dst, uint8_t *src, ptrdiff_t stride,
                            int delta, const int16_t *weights)
 {
     int x, y;
@@ -546,7 +547,7 @@ static void vp6_filter_hv4(uint8_t *dst, uint8_t *src, int stride,
 }
 
 static void vp6_filter_diag2(VP56Context *s, uint8_t *dst, uint8_t *src,
-                             int stride, int h_weight, int v_weight)
+                             ptrdiff_t stride, int h_weight, int v_weight)
 {
     uint8_t *tmp = s->edge_emu_buffer+16;
     s->h264chroma.put_h264_chroma_pixels_tab[0](tmp, src, stride, 9, h_weight, 0);
@@ -554,7 +555,7 @@ static void vp6_filter_diag2(VP56Context *s, uint8_t *dst, uint8_t *src,
 }
 
 static void vp6_filter(VP56Context *s, uint8_t *dst, uint8_t *src,
-                       int offset1, int offset2, int stride,
+                       int offset1, int offset2, ptrdiff_t stride,
                        VP56mv mv, int mask, int select, int luma)
 {
     int filter4 = 0;
@@ -611,6 +612,7 @@ static av_cold int vp6_decode_init(AVCodecContext *avctx)
     if ((ret = ff_vp56_init(avctx, avctx->codec->id == AV_CODEC_ID_VP6,
                             avctx->codec->id == AV_CODEC_ID_VP6A)) < 0)
         return ret;
+    ff_vp6dsp_init(&s->vp56dsp);
 
     s->vp56_coord_div = vp6_coord_div;
     s->parse_vector_adjustment = vp6_parse_vector_adjustment;
@@ -649,7 +651,7 @@ AVCodec ff_vp6_decoder = {
     .init           = vp6_decode_init,
     .close          = vp6_decode_free,
     .decode         = ff_vp56_decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
 };
 
 /* flash version, not flipped upside-down */
@@ -662,7 +664,7 @@ AVCodec ff_vp6f_decoder = {
     .init           = vp6_decode_init,
     .close          = vp6_decode_free,
     .decode         = ff_vp56_decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
 };
 
 /* flash version, not flipped upside-down, with alpha channel */
@@ -675,5 +677,5 @@ AVCodec ff_vp6a_decoder = {
     .init           = vp6_decode_init,
     .close          = vp6_decode_free,
     .decode         = ff_vp56_decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
 };

@@ -209,6 +209,9 @@ The expression is evaluated through the eval API and can contain the following
 constants:
 
 @table @option
+@item FRAME_RATE
+frame rate, only defined for constant frame-rate video
+
 @item PTS
 the presentation timestamp in input
 
@@ -495,9 +498,9 @@ Split a 5.1 WAV file into per-channel files:
 @example
 avconv -i in.wav -filter_complex
 'channelsplit=channel_layout=5.1[FL][FR][FC][LFE][SL][SR]'
--map '[FL]' front_left.wav -map '[FR]' front_right.wav -map '[FC]'
-front_center.wav -map '[LFE]' lfe.wav -map '[SL]' side_left.wav -map '[SR]'
-side_right.wav
+-map '[FL]' front_left.wav -map '[FR]' front_right.wav
+-map '[FC]' front_center.wav -map '[LFE]' low_frequency_effects.wav
+-map '[SL]' side_left.wav -map '[SR]' side_right.wav
 @end example
 
 @section channelmap
@@ -530,7 +533,7 @@ the input.
 
 To fix a 5.1 WAV improperly encoded in AAC's native channel order
 @example
-avconv -i in.wav -filter 'channelmap=1|2|0|5|3|4:channel_layout=5.1' out.wav
+avconv -i in.wav -filter 'channelmap=1|2|0|5|3|4:5.1' out.wav
 @end example
 
 @section compand
@@ -643,6 +646,53 @@ avconv -i fl -i fr -i fc -i sl -i sr -i lfe -filter_complex
 'join=inputs=6:channel_layout=5.1:map=0.0-FL|1.0-FR|2.0-FC|3.0-SL|4.0-SR|5.0-LFE'
 out
 @end example
+
+@section hdcd
+
+Decodes High Definition Compatible Digital (HDCD) data. A 16-bit PCM stream with
+embedded HDCD codes is expanded into a 20-bit PCM stream.
+
+The filter supports the Peak Extend and Low-level Gain Adjustment features
+of HDCD, and detects the Transient Filter flag.
+
+@example
+avconv -i HDCD16.flac -af hdcd OUT24.flac
+@end example
+
+When using the filter with WAV, note that the default encoding for WAV is 16-bit,
+so the resulting 20-bit stream will be truncated back to 16-bit. Use something
+like @command{-c:a pcm_s24le} after the filter to get 24-bit PCM output.
+@example
+avconv -i HDCD16.wav -af hdcd OUT16.wav
+avconv -i HDCD16.wav -af hdcd -c:a pcm_s24le OUT24.wav
+@end example
+
+The filter accepts the following options:
+
+@table @option
+@item analyze_mode
+Replace audio with a solid tone and adjust the amplitude to signal some
+specific aspect of the decoding process. The output file can be loaded in
+an audio editor alongside the original to aid analysis.
+
+Modes are:
+@table @samp
+@item 0, off
+Disabled
+@item 1, lle
+Gain adjustment level at each sample
+@item 2, pe
+Samples where peak extend occurs
+@item 3, cdt
+Samples where the code detect timer is active
+@item 4, tgm
+Samples where the target gain does not match between channels
+@item 5, pel
+Any samples above peak extend level
+@item 6, ltgm
+Gain adjustment level at each sample, in each channel
+@end table
+@end table
 
 @section resample
 Convert the audio sample format, sample rate and channel layout. It is
@@ -1538,7 +1588,7 @@ For more information, see
 @section gradfun
 
 Fix the banding artifacts that are sometimes introduced into nearly flat
-regions by truncation to 8bit colordepth.
+regions by truncation to 8-bit colordepth.
 Interpolate the gradients that should go where the bands are, and
 dither them.
 
@@ -1605,6 +1655,115 @@ A floating point number which specifies luma temporal strength. It defaults to
 @item chroma_tmp
 A floating point number which specifies chroma temporal strength. It defaults to
 @var{luma_tmp}*@var{chroma_spatial}/@var{luma_spatial}.
+@end table
+
+@section hwdownload
+
+Download hardware frames to system memory.
+
+The input must be in hardware frames, and the output a non-hardware format.
+Not all formats will be supported on the output - it may be necessary to insert
+an additional @option{format} filter immediately following in the graph to get
+the output in a supported format.
+
+@section hwmap
+
+Map hardware frames to system memory or to another device.
+
+This filter has several different modes of operation; which one is used depends
+on the input and output formats:
+@itemize
+@item
+Hardware frame input, normal frame output
+
+Map the input frames to system memory and pass them to the output.  If the
+original hardware frame is later required (for example, after overlaying
+something else on part of it), the @option{hwmap} filter can be used again
+in the next mode to retrieve it.
+@item
+Normal frame input, hardware frame output
+
+If the input is actually a software-mapped hardware frame, then unmap it -
+that is, return the original hardware frame.
+
+Otherwise, a device must be provided.  Create new hardware surfaces on that
+device for the output, then map them back to the software format at the input
+and give those frames to the preceding filter.  This will then act like the
+@option{hwupload} filter, but may be able to avoid an additional copy when
+the input is already in a compatible format.
+@item
+Hardware frame input and output
+
+A device must be supplied for the output, either directly or with the
+@option{derive_device} option.  The input and output devices must be of
+different types and compatible - the exact meaning of this is
+system-dependent, but typically it means that they must refer to the same
+underlying hardware context (for example, refer to the same graphics card).
+
+If the input frames were originally created on the output device, then unmap
+to retrieve the original frames.
+
+Otherwise, map the frames to the output device - create new hardware frames
+on the output corresponding to the frames on the input.
+@end itemize
+
+The following additional parameters are accepted:
+
+@table @option
+@item mode
+Set the frame mapping mode.  Some combination of:
+@table @var
+@item read
+The mapped frame should be readable.
+@item write
+The mapped frame should be writeable.
+@item overwrite
+The mapping will always overwrite the entire frame.
+
+This may improve performance in some cases, as the original contents of the
+frame need not be loaded.
+@item direct
+The mapping must not involve any copying.
+
+Indirect mappings to copies of frames are created in some cases where either
+direct mapping is not possible or it would have unexpected properties.
+Setting this flag ensures that the mapping is direct and will fail if that is
+not possible.
+@end table
+Defaults to @var{read+write} if not specified.
+
+@item derive_device @var{type}
+Rather than using the device supplied at initialisation, instead derive a new
+device of type @var{type} from the device the input frames exist on.
+
+@item reverse
+In a hardware to hardware mapping, map in reverse - create frames in the sink
+and map them back to the source.  This may be necessary in some cases where
+a mapping in one direction is required but only the opposite direction is
+supported by the devices being used.
+
+This option is dangerous - it may break the preceding filter in undefined
+ways if there are any additional constraints on that filter's output.
+Do not use it without fully understanding the implications of its use.
+@end table
+
+@section hwupload
+
+Upload system memory frames to hardware surfaces.
+
+The device to upload to must be supplied when the filter is initialised.  If
+using avconv, select the appropriate device with the @option{-filter_hw_device}
+option.
+
+@section hwupload_cuda
+
+Upload system memory frames to a CUDA device.
+
+It accepts the following optional parameters:
+
+@table @option
+@item device
+The number of the CUDA device to use
 @end table
 
 @section interlace
@@ -1886,7 +2045,7 @@ libopencv function @code{cvSmooth}.
 Overlay one video on top of another.
 
 It takes two inputs and has one output. The first input is the "main"
-video on which the second input is overlayed.
+video on which the second input is overlaid.
 
 It accepts the following parameters:
 
@@ -2167,6 +2326,44 @@ scale="trunc(3/2*iw/hsub)*hsub:trunc(3/2*ih/vsub)*vsub"
 scale=w='min(500\, iw*3/2):h=-1'
 @end example
 
+@section scale_npp
+
+Use the NVIDIA Performance Primitives (libnpp) to perform scaling and/or pixel
+format conversion on CUDA video frames. Setting the output width and height
+works in the same way as for the @var{scale} filter.
+
+The following additional options are accepted:
+@table @option
+@item format
+The pixel format of the output CUDA frames. If set to the string "same" (the
+default), the input format will be kept. Note that automatic format negotiation
+and conversion is not yet supported for hardware frames
+
+@item interp_algo
+The interpolation algorithm used for resizing. One of the following:
+@table @option
+@item nn
+Nearest neighbour.
+
+@item linear
+@item cubic
+@item cubic2p_bspline
+2-parameter cubic (B=1, C=0)
+
+@item cubic2p_catmullrom
+2-parameter cubic (B=0, C=1/2)
+
+@item cubic2p_b05c03
+2-parameter cubic (B=1/2, C=3/10)
+
+@item super
+Supersampling
+
+@item lanczos
+@end table
+
+@end table
+
 @section select
 Select frames to pass in output.
 
@@ -2275,7 +2472,7 @@ select='not(mod(n\,100))'
 # Select only frames contained in the 10-20 time interval
 select='gte(t\,10)*lte(t\,20)'
 
-# Select only I frames contained in the 10-20 time interval
+# Select only I-frames contained in the 10-20 time interval
 select='gte(t\,10)*lte(t\,20)*eq(pict_type\,I)'
 
 # Select frames with a minimum distance of 10 seconds
@@ -2861,6 +3058,10 @@ The time base used for input timestamps.
 @item sar
 The sample (pixel) aspect ratio of the input video.
 
+@item hw_frames_ctx
+When using a hardware pixel format, this should be a reference to an
+AVHWFramesContext describing input frames.
+
 @end table
 
 For example:
@@ -2901,7 +3102,7 @@ number or a valid video frame rate abbreviation. The default value is
 
 The following graph description will generate a red source
 with an opacity of 0.2, with size "qcif" and a frame rate of 10
-frames per second, which will be overlayed over the source connected
+frames per second, which will be overlaid over the source connected
 to the pad with identifier "in":
 
 @example
@@ -3014,7 +3215,7 @@ A '|'-separated list of parameters to pass to the frei0r source.
 An example:
 @example
 # Generate a frei0r partik0l source with size 200x200 and framerate 10
-# which is overlayed on the overlay filter main input
+# which is overlaid on the overlay filter's main input
 frei0r_src=size=200x200:framerate=10:filter_name=partik0l:filter_params=1234 [overlay]; [in][overlay] overlay
 @end example
 

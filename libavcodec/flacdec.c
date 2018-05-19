@@ -34,8 +34,8 @@
 #include <limits.h>
 
 #include "avcodec.h"
+#include "bitstream.h"
 #include "internal.h"
-#include "get_bits.h"
 #include "bytestream.h"
 #include "golomb.h"
 #include "flac.h"
@@ -46,7 +46,7 @@ typedef struct FLACContext {
     FLACSTREAMINFO
 
     AVCodecContext *avctx;                  ///< parent AVCodecContext
-    GetBitContext gb;                       ///< GetBitContext initialized to start at the current frame
+    BitstreamContext bc;                    ///< BitstreamContext initialized to start at the current frame
 
     int blocksize;                          ///< number of samples in the current frame
     int sample_shift;                       ///< shift required to make output samples 16-bit or 32-bit
@@ -199,44 +199,48 @@ static int get_metadata_size(const uint8_t *buf, int buf_size)
 
 static int decode_residuals(FLACContext *s, int32_t *decoded, int pred_order)
 {
+    BitstreamContext bc = s->bc;
     int i, tmp, partition, method_type, rice_order;
     int rice_bits, rice_esc;
     int samples;
 
-    method_type = get_bits(&s->gb, 2);
+    method_type = bitstream_read(&bc, 2);
+    rice_order  = bitstream_read(&bc, 4);
+
+    samples   = s->blocksize >> rice_order;
+    rice_bits = 4 + method_type;
+    rice_esc  = (1 << rice_bits) - 1;
+
+    decoded += pred_order;
+    i        = pred_order;
+
     if (method_type > 1) {
         av_log(s->avctx, AV_LOG_ERROR, "illegal residual coding method %d\n",
                method_type);
         return AVERROR_INVALIDDATA;
     }
 
-    rice_order = get_bits(&s->gb, 4);
-
-    samples= s->blocksize >> rice_order;
     if (pred_order > samples) {
         av_log(s->avctx, AV_LOG_ERROR, "invalid predictor order: %i > %i\n",
                pred_order, samples);
         return AVERROR_INVALIDDATA;
     }
 
-    rice_bits = 4 + method_type;
-    rice_esc  = (1 << rice_bits) - 1;
-
-    decoded += pred_order;
-    i= pred_order;
     for (partition = 0; partition < (1 << rice_order); partition++) {
-        tmp = get_bits(&s->gb, rice_bits);
+        tmp = bitstream_read(&bc, rice_bits);
         if (tmp == rice_esc) {
-            tmp = get_bits(&s->gb, 5);
+            tmp = bitstream_read(&bc, 5);
             for (; i < samples; i++)
-                *decoded++ = get_sbits_long(&s->gb, tmp);
+                *decoded++ = bitstream_read_signed(&bc, tmp);
         } else {
             for (; i < samples; i++) {
-                *decoded++ = get_sr_golomb_flac(&s->gb, tmp, INT_MAX, 0);
+                *decoded++ = get_sr_golomb_flac(&bc, tmp, INT_MAX, 0);
             }
         }
         i= 0;
     }
+
+    s->bc = bc;
 
     return 0;
 }
@@ -249,7 +253,7 @@ static int decode_subframe_fixed(FLACContext *s, int32_t *decoded,
 
     /* warm up samples */
     for (i = 0; i < pred_order; i++) {
-        decoded[i] = get_sbits_long(&s->gb, bps);
+        decoded[i] = bitstream_read_signed(&s->bc, bps);
     }
 
     if ((ret = decode_residuals(s, decoded, pred_order)) < 0)
@@ -300,15 +304,15 @@ static int decode_subframe_lpc(FLACContext *s, int32_t *decoded, int pred_order,
 
     /* warm up samples */
     for (i = 0; i < pred_order; i++) {
-        decoded[i] = get_sbits_long(&s->gb, bps);
+        decoded[i] = bitstream_read_signed(&s->bc, bps);
     }
 
-    coeff_prec = get_bits(&s->gb, 4) + 1;
+    coeff_prec = bitstream_read(&s->bc, 4) + 1;
     if (coeff_prec == 16) {
         av_log(s->avctx, AV_LOG_ERROR, "invalid coeff precision\n");
         return AVERROR_INVALIDDATA;
     }
-    qlevel = get_sbits(&s->gb, 5);
+    qlevel = bitstream_read_signed(&s->bc, 5);
     if (qlevel < 0) {
         av_log(s->avctx, AV_LOG_ERROR, "qlevel %d not supported, maybe buggy stream\n",
                qlevel);
@@ -316,7 +320,7 @@ static int decode_subframe_lpc(FLACContext *s, int32_t *decoded, int pred_order,
     }
 
     for (i = 0; i < pred_order; i++) {
-        coeffs[pred_order - i - 1] = get_sbits(&s->gb, coeff_prec);
+        coeffs[pred_order - i - 1] = bitstream_read_signed(&s->bc, coeff_prec);
     }
 
     if ((ret = decode_residuals(s, decoded, pred_order)) < 0)
@@ -342,24 +346,24 @@ static inline int decode_subframe(FLACContext *s, int channel)
             bps++;
     }
 
-    if (get_bits1(&s->gb)) {
+    if (bitstream_read_bit(&s->bc)) {
         av_log(s->avctx, AV_LOG_ERROR, "invalid subframe padding\n");
         return AVERROR_INVALIDDATA;
     }
-    type = get_bits(&s->gb, 6);
+    type = bitstream_read(&s->bc, 6);
 
-    if (get_bits1(&s->gb)) {
-        int left = get_bits_left(&s->gb);
+    if (bitstream_read_bit(&s->bc)) {
+        int left = bitstream_bits_left(&s->bc);
         wasted = 1;
         if ( left < 0 ||
-            (left < bps && !show_bits_long(&s->gb, left)) ||
-                           !show_bits_long(&s->gb, bps)) {
+            (left < bps && !bitstream_peek(&s->bc, left)) ||
+                           !bitstream_peek(&s->bc, bps)) {
             av_log(s->avctx, AV_LOG_ERROR,
                    "Invalid number of wasted bits > available bits (%d) - left=%d\n",
                    bps, left);
             return AVERROR_INVALIDDATA;
         }
-        while (!get_bits1(&s->gb))
+        while (!bitstream_read_bit(&s->bc))
             wasted++;
         bps -= wasted;
     }
@@ -370,12 +374,12 @@ static inline int decode_subframe(FLACContext *s, int channel)
 
 //FIXME use av_log2 for types
     if (type == 0) {
-        tmp = get_sbits_long(&s->gb, bps);
+        tmp = bitstream_read_signed(&s->bc, bps);
         for (i = 0; i < s->blocksize; i++)
             decoded[i] = tmp;
     } else if (type == 1) {
         for (i = 0; i < s->blocksize; i++)
-            decoded[i] = get_sbits_long(&s->gb, bps);
+            decoded[i] = bitstream_read_signed(&s->bc, bps);
     } else if ((type >= 8) && (type <= 12)) {
         if ((ret = decode_subframe_fixed(s, decoded, type & ~0x8, bps)) < 0)
             return ret;
@@ -399,10 +403,10 @@ static inline int decode_subframe(FLACContext *s, int channel)
 static int decode_frame(FLACContext *s)
 {
     int i, ret;
-    GetBitContext *gb = &s->gb;
+    BitstreamContext *bc = &s->bc;
     FLACFrameInfo fi;
 
-    if ((ret = ff_flac_decode_frame_header(s->avctx, gb, &fi, 0)) < 0) {
+    if ((ret = ff_flac_decode_frame_header(s->avctx, bc, &fi, 0)) < 0) {
         av_log(s->avctx, AV_LOG_ERROR, "invalid frame header\n");
         return ret;
     }
@@ -471,10 +475,10 @@ static int decode_frame(FLACContext *s)
             return ret;
     }
 
-    align_get_bits(gb);
+    bitstream_align(bc);
 
     /* frame footer */
-    skip_bits(gb, 16); /* data crc */
+    bitstream_skip(bc, 16); /* data crc */
 
     return 0;
 }
@@ -513,12 +517,12 @@ static int flac_decode_frame(AVCodecContext *avctx, void *data,
     }
 
     /* decode frame */
-    init_get_bits(&s->gb, buf, buf_size*8);
+    bitstream_init8(&s->bc, buf, buf_size);
     if ((ret = decode_frame(s)) < 0) {
         av_log(s->avctx, AV_LOG_ERROR, "decode_frame() failed\n");
         return ret;
     }
-    bytes_read = (get_bits_count(&s->gb)+7)/8;
+    bytes_read = (bitstream_tell(&s->bc) + 7) / 8;
 
     /* get output buffer */
     frame->nb_samples = s->blocksize;
@@ -562,7 +566,7 @@ AVCodec ff_flac_decoder = {
     .init           = flac_decode_init,
     .close          = flac_decode_close,
     .decode         = flac_decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
     .sample_fmts    = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_S16,
                                                       AV_SAMPLE_FMT_S16P,
                                                       AV_SAMPLE_FMT_S32,

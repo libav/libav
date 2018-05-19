@@ -21,13 +21,14 @@
 
 /**
  * @file
- * H.264 / AVC / MPEG4 part10 direct mb/block decoding.
+ * H.264 / AVC / MPEG-4 part10 direct mb/block decoding.
  * @author Michael Niedermayer <michaelni@gmx.at>
  */
 
 #include "internal.h"
 #include "avcodec.h"
-#include "h264.h"
+#include "h264dec.h"
+#include "h264_ps.h"
 #include "mpegutils.h"
 #include "rectangle.h"
 #include "thread.h"
@@ -159,11 +160,11 @@ void ff_h264_direct_ref_list_init(const H264Context *const h, H264SliceContext *
     }
 }
 
-static void await_reference_mb_row(const H264Context *const h, H264Picture *ref,
+static void await_reference_mb_row(const H264Context *const h, H264Ref *ref,
                                    int mb_y)
 {
     int ref_field         = ref->reference - 1;
-    int ref_field_picture = ref->field_picture;
+    int ref_field_picture = ref->parent->field_picture;
     int ref_height        = 16 * h->mb_height >> ref_field_picture;
 
     if (!HAVE_THREADS || !(h->avctx->active_thread_type & FF_THREAD_FRAME))
@@ -172,7 +173,7 @@ static void await_reference_mb_row(const H264Context *const h, H264Picture *ref,
     /* FIXME: It can be safe to access mb stuff
      * even if pixels aren't deblocked yet. */
 
-    ff_thread_await_progress(&ref->tf,
+    ff_thread_await_progress(&ref->parent->tf,
                              FFMIN(16 * mb_y >> ref_field_picture,
                                    ref_height - 1),
                              ref_field_picture && ref_field);
@@ -196,7 +197,7 @@ static void pred_spatial_direct_motion(const H264Context *const h, H264SliceCont
 
     assert(sl->ref_list[1][0].reference & 3);
 
-    await_reference_mb_row(h, sl->ref_list[1][0].parent,
+    await_reference_mb_row(h, &sl->ref_list[1][0],
                            sl->mb_y + !!IS_INTERLACED(*mb_type));
 
 #define MB_TYPE_16x16_OR_INTRA (MB_TYPE_16x16 | MB_TYPE_INTRA4x4 | \
@@ -310,7 +311,7 @@ single_col:
                 *mb_type |= MB_TYPE_DIRECT2 |
                             (mb_type_col[0] & (MB_TYPE_16x8 | MB_TYPE_8x16));
             } else {
-                if (!h->sps.direct_8x8_inference_flag) {
+                if (!h->ps.sps->direct_8x8_inference_flag) {
                     /* FIXME: Save sub mb types from previous frames (or derive
                      * from MVs) so we know exactly what block size to use. */
                     sub_mb_type += (MB_TYPE_8x8 - MB_TYPE_16x16); /* B_SUB_4x4 */
@@ -320,7 +321,7 @@ single_col:
         }
     }
 
-    await_reference_mb_row(h, sl->ref_list[1][0].parent, mb_y);
+    await_reference_mb_row(h, &sl->ref_list[1][0], mb_y);
 
     l1mv0  = &sl->ref_list[1][0].parent->motion_val[0][h->mb2b_xy[mb_xy]];
     l1mv1  = &sl->ref_list[1][0].parent->motion_val[1][h->mb2b_xy[mb_xy]];
@@ -479,7 +480,7 @@ static void pred_temp_direct_motion(const H264Context *const h, H264SliceContext
 
     assert(sl->ref_list[1][0].reference & 3);
 
-    await_reference_mb_row(h, sl->ref_list[1][0].parent,
+    await_reference_mb_row(h, &sl->ref_list[1][0],
                            sl->mb_y + !!IS_INTERLACED(*mb_type));
 
     if (IS_INTERLACED(sl->ref_list[1][0].parent->mb_type[mb_xy])) { // AFL/AFR/FR/FL -> AFL/FL
@@ -533,7 +534,7 @@ single_col:
                 *mb_type |= MB_TYPE_L0L1 | MB_TYPE_DIRECT2 |
                             (mb_type_col[0] & (MB_TYPE_16x8 | MB_TYPE_8x16));
             } else {
-                if (!h->sps.direct_8x8_inference_flag) {
+                if (!h->ps.sps->direct_8x8_inference_flag) {
                     /* FIXME: save sub mb types from previous frames (or derive
                      * from MVs) so we know exactly what block size to use */
                     sub_mb_type = MB_TYPE_8x8 | MB_TYPE_P0L0 | MB_TYPE_P0L1 |
@@ -544,7 +545,7 @@ single_col:
         }
     }
 
-    await_reference_mb_row(h, sl->ref_list[1][0].parent, mb_y);
+    await_reference_mb_row(h, &sl->ref_list[1][0], mb_y);
 
     l1mv0  = &sl->ref_list[1][0].parent->motion_val[0][h->mb2b_xy[mb_xy]];
     l1mv1  = &sl->ref_list[1][0].parent->motion_val[1][h->mb2b_xy[mb_xy]];
@@ -574,7 +575,7 @@ single_col:
 
         if (IS_INTERLACED(*mb_type) != IS_INTERLACED(mb_type_col[0])) {
             int y_shift = 2 * !IS_INTERLACED(*mb_type);
-            assert(h->sps.direct_8x8_inference_flag);
+            assert(h->ps.sps->direct_8x8_inference_flag);
 
             for (i8 = 0; i8 < 4; i8++) {
                 const int x8 = i8 & 1;

@@ -29,18 +29,19 @@
 #include "internal.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/intreadwrite.h"
+#include "libavutil/imgutils.h"
 #include "libavutil/internal.h"
 
 static av_cold int raw_encode_init(AVCodecContext *avctx)
 {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(avctx->pix_fmt);
 
-    avctx->coded_frame            = av_frame_alloc();
-    if (!avctx->coded_frame)
-        return AVERROR(ENOMEM);
-
+#if FF_API_CODED_FRAME
+FF_DISABLE_DEPRECATION_WARNINGS
     avctx->coded_frame->pict_type = AV_PICTURE_TYPE_I;
     avctx->coded_frame->key_frame = 1;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
     avctx->bits_per_coded_sample = av_get_bits_per_pixel(desc);
     if(!avctx->codec_tag)
         avctx->codec_tag = avcodec_pix_fmt_to_codec_tag(avctx->pix_fmt);
@@ -50,15 +51,18 @@ static av_cold int raw_encode_init(AVCodecContext *avctx)
 static int raw_encode(AVCodecContext *avctx, AVPacket *pkt,
                       const AVFrame *frame, int *got_packet)
 {
-    int ret = avpicture_get_size(avctx->pix_fmt, avctx->width, avctx->height);
+    int ret = av_image_get_buffer_size(avctx->pix_fmt,
+                                       avctx->width, avctx->height, 1);
 
     if (ret < 0)
         return ret;
 
     if ((ret = ff_alloc_packet(pkt, ret)) < 0)
         return ret;
-    if ((ret = avpicture_layout((const AVPicture *)frame, avctx->pix_fmt, avctx->width,
-                                avctx->height, pkt->data, pkt->size)) < 0)
+    if ((ret = av_image_copy_to_buffer(pkt->data, pkt->size,
+                                       frame->data, frame->linesize,
+                                       frame->format,
+                                       frame->width, frame->height, 1)) < 0)
         return ret;
 
     if(avctx->codec_tag == AV_RL32("yuv2") && ret > 0 &&
@@ -72,18 +76,11 @@ static int raw_encode(AVCodecContext *avctx, AVPacket *pkt,
     return 0;
 }
 
-static av_cold int raw_encode_close(AVCodecContext *avctx)
-{
-    av_frame_free(&avctx->coded_frame);
-    return 0;
-}
-
 AVCodec ff_rawvideo_encoder = {
     .name           = "rawvideo",
     .long_name      = NULL_IF_CONFIG_SMALL("raw video"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_RAWVIDEO,
     .init           = raw_encode_init,
-    .close          = raw_encode_close,
     .encode2        = raw_encode,
 };

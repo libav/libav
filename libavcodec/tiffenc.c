@@ -254,7 +254,9 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     case AV_PIX_FMT_RGB24:
     case AV_PIX_FMT_GRAY8:
     case AV_PIX_FMT_PAL8:
-        pfd    = av_pix_fmt_desc_get(avctx->pix_fmt);
+        pfd = av_pix_fmt_desc_get(avctx->pix_fmt);
+        if (!pfd)
+            return AVERROR_BUG;
         s->bpp = av_get_bits_per_pixel(pfd);
         if (pfd->flags & AV_PIX_FMT_FLAG_PAL)
             s->photometric_interpretation = TIFF_PHOTOMETRIC_PALETTE;
@@ -309,7 +311,7 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     strips = (s->height - 1) / s->rps + 1;
 
     packet_size = avctx->height * ((avctx->width * s->bpp + 7) >> 3) * 2 +
-                  avctx->height * 4 + FF_MIN_BUFFER_SIZE;
+                  avctx->height * 4 + AV_INPUT_BUFFER_MIN_SIZE;
 
     if (!pkt->data &&
         (ret = av_new_packet(pkt, packet_size)) < 0) {
@@ -446,7 +448,7 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     ADD_ENTRY(s,  TIFF_YRES,         TIFF_RATIONAL, 1,      res);
     ADD_ENTRY1(s, TIFF_RES_UNIT,     TIFF_SHORT,    2);
 
-    if (!(avctx->flags & CODEC_FLAG_BITEXACT))
+    if (!(avctx->flags & AV_CODEC_FLAG_BITEXACT))
         ADD_ENTRY(s, TIFF_SOFTWARE_NAME, TIFF_STRING,
                   strlen(LIBAVCODEC_IDENT) + 1, LIBAVCODEC_IDENT);
 
@@ -490,19 +492,23 @@ fail:
 
 static av_cold int encode_init(AVCodecContext *avctx)
 {
-    avctx->coded_frame = av_frame_alloc();
-    if (!avctx->coded_frame)
-        return AVERROR(ENOMEM);
+#if !CONFIG_ZLIB
+    TiffEncoderContext *s = avctx->priv_data;
 
+    if (s->compr == TIFF_DEFLATE) {
+        av_log(avctx, AV_LOG_ERROR,
+               "Deflate compression needs zlib compiled in\n");
+        return AVERROR(ENOSYS);
+    }
+#endif
+
+#if FF_API_CODED_FRAME
+FF_DISABLE_DEPRECATION_WARNINGS
     avctx->coded_frame->pict_type = AV_PICTURE_TYPE_I;
     avctx->coded_frame->key_frame = 1;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
 
-    return 0;
-}
-
-static av_cold int encode_close(AVCodecContext *avctx)
-{
-    av_frame_free(&avctx->coded_frame);
     return 0;
 }
 
@@ -513,9 +519,7 @@ static const AVOption options[] = {
     { "packbits",         NULL, 0,             AV_OPT_TYPE_CONST, { .i64 = TIFF_PACKBITS }, 0,        0,            VE, "compression_algo" },
     { "raw",              NULL, 0,             AV_OPT_TYPE_CONST, { .i64 = TIFF_RAW      }, 0,        0,            VE, "compression_algo" },
     { "lzw",              NULL, 0,             AV_OPT_TYPE_CONST, { .i64 = TIFF_LZW      }, 0,        0,            VE, "compression_algo" },
-#if CONFIG_ZLIB
     { "deflate",          NULL, 0,             AV_OPT_TYPE_CONST, { .i64 = TIFF_DEFLATE  }, 0,        0,            VE, "compression_algo" },
-#endif
     { NULL },
 };
 
@@ -533,7 +537,6 @@ AVCodec ff_tiff_encoder = {
     .id             = AV_CODEC_ID_TIFF,
     .priv_data_size = sizeof(TiffEncoderContext),
     .init           = encode_init,
-    .close          = encode_close,
     .encode2        = encode_frame,
     .pix_fmts       = (const enum AVPixelFormat[]) {
         AV_PIX_FMT_RGB24, AV_PIX_FMT_RGB48LE, AV_PIX_FMT_PAL8,

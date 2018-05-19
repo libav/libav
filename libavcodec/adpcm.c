@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2003 The ffmpeg Project
+ * Copyright (c) 2001-2003 The FFmpeg project
  *
  * first version by Francois Revol (revol@free.fr)
  * fringe ADPCM codecs (e.g., DK3, DK4, Westwood)
@@ -29,8 +29,9 @@
  * License along with Libav; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
+
 #include "avcodec.h"
-#include "get_bits.h"
+#include "bitstream.h"
 #include "put_bits.h"
 #include "bytestream.h"
 #include "adpcm.h"
@@ -366,32 +367,33 @@ static int xa_decode(AVCodecContext *avctx, int16_t *out0, int16_t *out1,
 static void adpcm_swf_decode(AVCodecContext *avctx, const uint8_t *buf, int buf_size, int16_t *samples)
 {
     ADPCMDecodeContext *c = avctx->priv_data;
-    GetBitContext gb;
+    BitstreamContext bc;
     const int *table;
     int k0, signmask, nb_bits, count;
     int size = buf_size*8;
     int i;
 
-    init_get_bits(&gb, buf, size);
+    bitstream_init(&bc, buf, size);
 
     //read bits & initial values
-    nb_bits = get_bits(&gb, 2)+2;
+    nb_bits = bitstream_read(&bc, 2)+2;
     table = swf_index_tables[nb_bits-2];
     k0 = 1 << (nb_bits-2);
     signmask = 1 << (nb_bits-1);
 
-    while (get_bits_count(&gb) <= size - 22*avctx->channels) {
+    while (bitstream_tell(&bc) <= size - 22 * avctx->channels) {
         for (i = 0; i < avctx->channels; i++) {
-            *samples++ = c->status[i].predictor = get_sbits(&gb, 16);
-            c->status[i].step_index = get_bits(&gb, 6);
+            *samples++              =
+            c->status[i].predictor  = bitstream_read_signed(&bc, 16);
+            c->status[i].step_index = bitstream_read(&bc, 6);
         }
 
-        for (count = 0; get_bits_count(&gb) <= size - nb_bits*avctx->channels && count < 4095; count++) {
+        for (count = 0; bitstream_tell(&bc) <= size - nb_bits * avctx->channels && count < 4095; count++) {
             int i;
 
             for (i = 0; i < avctx->channels; i++) {
                 // similar to IMA adpcm
-                int delta = get_bits(&gb, nb_bits);
+                int delta = bitstream_read(&bc, nb_bits);
                 int step = ff_adpcm_step_table[c->status[i].step_index];
                 long vpdiff = 0; // vpdiff = (delta+0.5)*step/4
                 int k = k0;
@@ -1298,7 +1300,7 @@ AVCodec ff_ ## name_ ## _decoder = {                        \
     .priv_data_size = sizeof(ADPCMDecodeContext),           \
     .init           = adpcm_decode_init,                    \
     .decode         = adpcm_decode_frame,                   \
-    .capabilities   = CODEC_CAP_DR1,                        \
+    .capabilities   = AV_CODEC_CAP_DR1,                     \
     .sample_fmts    = sample_fmts_,                         \
 }
 

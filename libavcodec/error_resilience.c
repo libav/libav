@@ -35,13 +35,12 @@
 #include "mpegvideo.h"
 #include "rectangle.h"
 #include "thread.h"
-#include "version.h"
 
 /**
  * @param stride the number of MVs to get to the next row
  * @param mv_step the number of MVs per row or column in a macroblock
  */
-static void set_mv_strides(ERContext *s, int *mv_step, int *stride)
+static void set_mv_strides(ERContext *s, ptrdiff_t *mv_step, ptrdiff_t *stride)
 {
     if (s->avctx->codec_id == AV_CODEC_ID_H264) {
         assert(s->quarter_sample);
@@ -92,7 +91,7 @@ static void put_dc(ERContext *s, uint8_t *dest_y, uint8_t *dest_cb,
     }
 }
 
-static void filter181(int16_t *data, int width, int height, int stride)
+static void filter181(int16_t *data, int width, int height, ptrdiff_t stride)
 {
     int x, y;
 
@@ -134,7 +133,7 @@ static void filter181(int16_t *data, int width, int height, int stride)
  * @param h     height in 8 pixel blocks
  */
 static void guess_dc(ERContext *s, int16_t *dc, int w,
-                     int h, int stride, int is_luma)
+                     int h, ptrdiff_t stride, int is_luma)
 {
     int b_x, b_y;
 
@@ -220,9 +219,10 @@ static void guess_dc(ERContext *s, int16_t *dc, int w,
  * @param h     height in 8 pixel blocks
  */
 static void h_block_filter(ERContext *s, uint8_t *dst, int w,
-                           int h, int stride, int is_luma)
+                           int h, ptrdiff_t stride, int is_luma)
 {
-    int b_x, b_y, mvx_stride, mvy_stride;
+    int b_x, b_y;
+    ptrdiff_t mvx_stride, mvy_stride;
     const uint8_t *cm = ff_crop_tab + MAX_NEG_CROP;
     set_mv_strides(s, &mvx_stride, &mvy_stride);
     mvx_stride >>= is_luma;
@@ -288,9 +288,10 @@ static void h_block_filter(ERContext *s, uint8_t *dst, int w,
  * @param h     height in 8 pixel blocks
  */
 static void v_block_filter(ERContext *s, uint8_t *dst, int w, int h,
-                           int stride, int is_luma)
+                           ptrdiff_t stride, int is_luma)
 {
-    int b_x, b_y, mvx_stride, mvy_stride;
+    int b_x, b_y;
+    ptrdiff_t mvx_stride, mvy_stride;
     const uint8_t *cm = ff_crop_tab + MAX_NEG_CROP;
     set_mv_strides(s, &mvx_stride, &mvy_stride);
     mvx_stride >>= is_luma;
@@ -359,11 +360,12 @@ static void guess_mv(ERContext *s)
 #define MV_FROZEN    3
 #define MV_CHANGED   2
 #define MV_UNCHANGED 1
-    const int mb_stride = s->mb_stride;
+    const ptrdiff_t mb_stride = s->mb_stride;
     const int mb_width  = s->mb_width;
     const int mb_height = s->mb_height;
     int i, depth, num_avail;
-    int mb_x, mb_y, mot_step, mot_stride;
+    int mb_x, mb_y;
+    ptrdiff_t mot_step, mot_stride;
 
     set_mv_strides(s, &mot_step, &mot_stride);
 
@@ -673,16 +675,6 @@ static int is_intra_more_likely(ERContext *s)
 
     if (undamaged_count < 5)
         return 0; // almost all MBs damaged -> use temporal prediction
-
-#if FF_API_XVMC
-FF_DISABLE_DEPRECATION_WARNINGS
-    // prevent dsp.sad() check, that requires access to the image
-    if (CONFIG_MPEG_XVMC_DECODER    &&
-        s->avctx->xvmc_acceleration &&
-        s->cur_pic.f->pict_type == AV_PICTURE_TYPE_I)
-        return 1;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif /* FF_API_XVMC */
 
     skip_amount     = FFMAX(undamaged_count / 50, 1); // check only up to 50 MBs
     is_intra_likely = 0;
@@ -1047,7 +1039,7 @@ void ff_er_frame_end(ERContext *s)
                 s->mv[0][0][1] = s->cur_pic.motion_val[dir][mb_x * 2 + mb_y * 2 * s->b8_stride][1];
             }
 
-            s->decode_mb(s->opaque, 0 /* FIXME h264 partitioned slices need this set */,
+            s->decode_mb(s->opaque, 0 /* FIXME H.264 partitioned slices need this set */,
                          mv_dir, mv_type, &s->mv, mb_x, mb_y, 0, 0);
         }
     }
@@ -1099,13 +1091,6 @@ void ff_er_frame_end(ERContext *s)
     } else
         guess_mv(s);
 
-#if FF_API_XVMC
-FF_DISABLE_DEPRECATION_WARNINGS
-    /* the filters below are not XvMC compatible, skip them */
-    if (CONFIG_MPEG_XVMC_DECODER && s->avctx->xvmc_acceleration)
-        goto ec_clean;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif /* FF_API_XVMC */
     /* fill DC for inter blocks */
     for (mb_y = 0; mb_y < s->mb_height; mb_y++) {
         for (mb_x = 0; mb_x < s->mb_width; mb_x++) {
@@ -1199,7 +1184,6 @@ FF_ENABLE_DEPRECATION_WARNINGS
                        s->mb_height, linesize[2], 0);
     }
 
-ec_clean:
     /* clean a few tables */
     for (i = 0; i < s->mb_num; i++) {
         const int mb_xy = s->mb_index2xy[i];

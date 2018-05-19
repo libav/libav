@@ -256,7 +256,7 @@ static av_cold void lame_window_init(AacPsyContext *ctx, AVCodecContext *avctx)
     for (i = 0; i < avctx->channels; i++) {
         AacPsyChannel *pch = &ctx->ch[i];
 
-        if (avctx->flags & CODEC_FLAG_QSCALE)
+        if (avctx->flags & AV_CODEC_FLAG_QSCALE)
             pch->attack_threshold = psy_vbr_map[avctx->global_quality / FF_QP2LAMBDA].st_lrm;
         else
             pch->attack_threshold = lame_calc_attack_threshold(avctx->bit_rate / avctx->channels / 1000);
@@ -300,7 +300,7 @@ static av_cold int psy_3gpp_init(FFPsyContext *ctx) {
     ctx->model_priv_data = av_mallocz(sizeof(AacPsyContext));
     if (!ctx->model_priv_data)
         return AVERROR(ENOMEM);
-    pctx = (AacPsyContext*) ctx->model_priv_data;
+    pctx = ctx->model_priv_data;
 
     pctx->chan_bitrate = chan_bitrate;
     pctx->frame_bits   = chan_bitrate * AAC_BLOCK_SIZE_LONG / ctx->avctx->sample_rate;
@@ -796,7 +796,7 @@ static FFPsyWindowInfo psy_lame_window(FFPsyContext *ctx, const float *audio,
 
     if (la) {
         float hpfsmpl[AAC_BLOCK_SIZE_LONG];
-        float const *pf = hpfsmpl;
+        const float *pf = hpfsmpl;
         float attack_intensity[(AAC_NUM_BLOCKS_SHORT + 1) * PSY_LAME_NUM_SUBBLOCKS];
         float energy_subshort[(AAC_NUM_BLOCKS_SHORT + 1) * PSY_LAME_NUM_SUBBLOCKS];
         float energy_short[AAC_NUM_BLOCKS_SHORT + 1] = { 0 };
@@ -826,7 +826,7 @@ static FFPsyWindowInfo psy_lame_window(FFPsyContext *ctx, const float *audio,
         }
 
         for (i = 0; i < AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS; i++) {
-            float const *const pfe = pf + AAC_BLOCK_SIZE_LONG / (AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS);
+            const float *const pfe = pf + AAC_BLOCK_SIZE_LONG / (AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS);
             float p = 1.0f;
             for (; pf < pfe; pf++)
                 p = FFMAX(p, fabsf(*pf));
@@ -859,9 +859,9 @@ static FFPsyWindowInfo psy_lame_window(FFPsyContext *ctx, const float *audio,
         /* GB: tuned (1) to avoid too many short blocks for test sample TRUMPET */
         /* RH: tuned (2) to let enough short blocks through for test sample FSOL and SNAPS */
         for (i = 1; i < AAC_NUM_BLOCKS_SHORT + 1; i++) {
-            float const u = energy_short[i - 1];
-            float const v = energy_short[i];
-            float const m = FFMAX(u, v);
+            const float u = energy_short[i - 1];
+            const float v = energy_short[i];
+            const float m = FFMAX(u, v);
             if (m < 40000) {                          /* (2) */
                 if (u < 1.7f * v && v < 1.7f * u) {   /* (1) */
                     if (i == 1 && attacks[0] < attacks[i])

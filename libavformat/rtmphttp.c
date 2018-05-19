@@ -129,7 +129,7 @@ static int rtmp_http_read(URLContext *h, uint8_t *buf, int size)
             } else {
                 if (rt->nb_bytes_read == 0) {
                     /* Wait 50ms before retrying to read a server reply in
-                     * order to reduce the number of idle requets. */
+                     * order to reduce the number of idle requests. */
                     av_usleep(50000);
                 }
 
@@ -208,7 +208,7 @@ static int rtmp_http_open(URLContext *h, const char *uri, int flags)
     }
 
     /* alloc the http context */
-    if ((ret = ffurl_alloc(&rt->stream, url, AVIO_FLAG_READ_WRITE, NULL)) < 0)
+    if ((ret = ffurl_alloc(&rt->stream, url, AVIO_FLAG_READ_WRITE, NULL, h->protocols)) < 0)
         goto fail;
 
     /* set options */
@@ -265,7 +265,7 @@ static const AVClass ffrtmphttp_class = {
     .version    = LIBAVUTIL_VERSION_INT,
 };
 
-URLProtocol ff_ffrtmphttp_protocol = {
+const URLProtocol ff_ffrtmphttp_protocol = {
     .name           = "ffrtmphttp",
     .url_open       = rtmp_http_open,
     .url_read       = rtmp_http_read,

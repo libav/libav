@@ -23,9 +23,9 @@
 #include "libavutil/intmath.h"
 #include "libavutil/md5.h"
 #include "libavutil/opt.h"
+
 #include "avcodec.h"
 #include "bswapdsp.h"
-#include "get_bits.h"
 #include "golomb.h"
 #include "internal.h"
 #include "lpc.h"
@@ -305,8 +305,10 @@ static av_cold int flac_encode_init(AVCodecContext *avctx)
                                          FF_LPC_TYPE_LEVINSON, FF_LPC_TYPE_LEVINSON, FF_LPC_TYPE_LEVINSON,
                                          FF_LPC_TYPE_LEVINSON})[level];
 
-    s->options.min_prediction_order = ((int[]){  2,  0,  0,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1})[level];
-    s->options.max_prediction_order = ((int[]){  3,  4,  4,  6,  8,  8,  8,  8, 12, 12, 12, 32, 32})[level];
+    if (s->options.min_prediction_order < 0)
+        s->options.min_prediction_order = ((int[]){  2,  0,  0,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1})[level];
+    if (s->options.max_prediction_order < 0)
+        s->options.max_prediction_order = ((int[]){  3,  4,  4,  6,  8,  8,  8,  8, 12, 12, 12, 32, 32})[level];
 
     if (s->options.prediction_order_method < 0)
         s->options.prediction_order_method = ((int[]){ ORDER_METHOD_EST,    ORDER_METHOD_EST,    ORDER_METHOD_EST,
@@ -325,14 +327,15 @@ static av_cold int flac_encode_init(AVCodecContext *avctx)
     if (s->options.max_partition_order < 0)
         s->options.max_partition_order = ((int[]){  2,  2,  3,  3,  3,  8,  8,  8,  8,  8,  8,  8,  8})[level];
 
-    if (s->options.lpc_type == FF_LPC_TYPE_NONE) {
-        s->options.min_prediction_order = 0;
-    } else if (avctx->min_prediction_order >= 0) {
+#if FF_API_PRIVATE_OPT
+FF_DISABLE_DEPRECATION_WARNINGS
+    if (avctx->min_prediction_order >= 0) {
         if (s->options.lpc_type == FF_LPC_TYPE_FIXED) {
             if (avctx->min_prediction_order > MAX_FIXED_ORDER) {
-                av_log(avctx, AV_LOG_ERROR, "invalid min prediction order: %d\n",
-                       avctx->min_prediction_order);
-                return -1;
+                av_log(avctx, AV_LOG_WARNING,
+                       "invalid min prediction order %d, clamped to %d\n",
+                       avctx->min_prediction_order, MAX_FIXED_ORDER);
+                avctx->min_prediction_order = MAX_FIXED_ORDER;
             }
         } else if (avctx->min_prediction_order < MIN_LPC_ORDER ||
                    avctx->min_prediction_order > MAX_LPC_ORDER) {
@@ -342,14 +345,13 @@ static av_cold int flac_encode_init(AVCodecContext *avctx)
         }
         s->options.min_prediction_order = avctx->min_prediction_order;
     }
-    if (s->options.lpc_type == FF_LPC_TYPE_NONE) {
-        s->options.max_prediction_order = 0;
-    } else if (avctx->max_prediction_order >= 0) {
+    if (avctx->max_prediction_order >= 0) {
         if (s->options.lpc_type == FF_LPC_TYPE_FIXED) {
             if (avctx->max_prediction_order > MAX_FIXED_ORDER) {
-                av_log(avctx, AV_LOG_ERROR, "invalid max prediction order: %d\n",
-                       avctx->max_prediction_order);
-                return -1;
+                av_log(avctx, AV_LOG_WARNING,
+                       "invalid max prediction order %d, clamped to %d\n",
+                       avctx->max_prediction_order, MAX_FIXED_ORDER);
+                avctx->max_prediction_order = MAX_FIXED_ORDER;
             }
         } else if (avctx->max_prediction_order < MIN_LPC_ORDER ||
                    avctx->max_prediction_order > MAX_LPC_ORDER) {
@@ -359,6 +361,26 @@ static av_cold int flac_encode_init(AVCodecContext *avctx)
         }
         s->options.max_prediction_order = avctx->max_prediction_order;
     }
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
+    if (s->options.lpc_type == FF_LPC_TYPE_NONE) {
+        s->options.min_prediction_order = 0;
+        s->options.max_prediction_order = 0;
+    } else if (s->options.lpc_type == FF_LPC_TYPE_FIXED) {
+        if (s->options.min_prediction_order > MAX_FIXED_ORDER) {
+            av_log(avctx, AV_LOG_WARNING,
+                   "invalid min prediction order %d, clamped to %d\n",
+                   s->options.min_prediction_order, MAX_FIXED_ORDER);
+            s->options.min_prediction_order = MAX_FIXED_ORDER;
+        }
+        if (s->options.max_prediction_order > MAX_FIXED_ORDER) {
+            av_log(avctx, AV_LOG_WARNING,
+                   "invalid max prediction order %d, clamped to %d\n",
+                   s->options.max_prediction_order, MAX_FIXED_ORDER);
+            s->options.max_prediction_order = MAX_FIXED_ORDER;
+        }
+    }
+
     if (s->options.max_prediction_order < s->options.min_prediction_order) {
         av_log(avctx, AV_LOG_ERROR, "invalid prediction orders: min=%d max=%d\n",
                s->options.min_prediction_order, s->options.max_prediction_order);
@@ -1214,7 +1236,13 @@ static int flac_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
         av_md5_final(s->md5ctx, s->md5sum);
         write_streaminfo(s, avctx->extradata);
 
+#if FF_API_SIDEDATA_ONLY_PKT
+FF_DISABLE_DEPRECATION_WARNINGS
         if (avctx->side_data_only_packets && !s->flushed) {
+FF_ENABLE_DEPRECATION_WARNINGS
+#else
+        if (!s->flushed) {
+#endif
             uint8_t *side_data = av_packet_new_side_data(avpkt, AV_PKT_DATA_NEW_EXTRADATA,
                                                          avctx->extradata_size);
             if (!side_data)
@@ -1324,14 +1352,17 @@ static const AVOption options[] = {
 { "left_side",  NULL, 0, AV_OPT_TYPE_CONST, { .i64 = FLAC_CHMODE_LEFT_SIDE   }, INT_MIN, INT_MAX, FLAGS, "ch_mode" },
 { "right_side", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = FLAC_CHMODE_RIGHT_SIDE  }, INT_MIN, INT_MAX, FLAGS, "ch_mode" },
 { "mid_side",   NULL, 0, AV_OPT_TYPE_CONST, { .i64 = FLAC_CHMODE_MID_SIDE    }, INT_MIN, INT_MAX, FLAGS, "ch_mode" },
+{ "min_prediction_order", NULL, offsetof(FlacEncodeContext, options.min_prediction_order), AV_OPT_TYPE_INT, { .i64 = -1 }, -1, MAX_LPC_ORDER, FLAGS },
+{ "max_prediction_order", NULL, offsetof(FlacEncodeContext, options.max_prediction_order), AV_OPT_TYPE_INT, { .i64 = -1 }, -1, MAX_LPC_ORDER, FLAGS },
+
 { NULL },
 };
 
 static const AVClass flac_encoder_class = {
-    "FLAC encoder",
-    av_default_item_name,
-    options,
-    LIBAVUTIL_VERSION_INT,
+    .class_name = "FLAC encoder",
+    .item_name  = av_default_item_name,
+    .option     = options,
+    .version    = LIBAVUTIL_VERSION_INT,
 };
 
 AVCodec ff_flac_encoder = {
@@ -1343,7 +1374,7 @@ AVCodec ff_flac_encoder = {
     .init           = flac_encode_init,
     .encode2        = flac_encode_frame,
     .close          = flac_encode_close,
-    .capabilities   = CODEC_CAP_SMALL_LAST_FRAME | CODEC_CAP_DELAY,
+    .capabilities   = AV_CODEC_CAP_SMALL_LAST_FRAME | AV_CODEC_CAP_DELAY,
     .sample_fmts    = (const enum AVSampleFormat[]){ AV_SAMPLE_FMT_S16,
                                                      AV_SAMPLE_FMT_S32,
                                                      AV_SAMPLE_FMT_NONE },

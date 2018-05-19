@@ -1,5 +1,4 @@
 /*
- *
  * This file is part of Libav.
  *
  * Libav is free software; you can redistribute it and/or
@@ -45,7 +44,7 @@ typedef struct ThreadContext {
     pthread_t *workers;
     avfilter_action_func *func;
 
-    /* per-execute perameters */
+    /* per-execute parameters */
     AVFilterContext *ctx;
     void *arg;
     int   *rets;
@@ -200,10 +199,6 @@ static int thread_init_internal(ThreadContext *c, int nb_threads)
 int ff_graph_thread_init(AVFilterGraph *graph)
 {
     int ret;
-
-#if HAVE_W32THREADS
-    w32thread_init();
-#endif
 
     if (graph->nb_threads == 1) {
         graph->thread_type = 0;

@@ -812,15 +812,15 @@ static inline void sad8_1_mmx(uint8_t *blk1, uint8_t *blk2,
     __asm__ volatile (
         ".p2align 4                     \n\t"
         "1:                             \n\t"
-        "movq (%1, %%"REG_a"), %%mm0    \n\t"
-        "movq (%2, %%"REG_a"), %%mm2    \n\t"
-        "movq (%2, %%"REG_a"), %%mm4    \n\t"
-        "add %3, %%"REG_a"              \n\t"
+        "movq (%1, %%"FF_REG_a"), %%mm0 \n\t"
+        "movq (%2, %%"FF_REG_a"), %%mm2 \n\t"
+        "movq (%2, %%"FF_REG_a"), %%mm4 \n\t"
+        "add %3, %%"FF_REG_a"           \n\t"
         "psubusb %%mm0, %%mm2           \n\t"
         "psubusb %%mm4, %%mm0           \n\t"
-        "movq (%1, %%"REG_a"), %%mm1    \n\t"
-        "movq (%2, %%"REG_a"), %%mm3    \n\t"
-        "movq (%2, %%"REG_a"), %%mm5    \n\t"
+        "movq (%1, %%"FF_REG_a"), %%mm1 \n\t"
+        "movq (%2, %%"FF_REG_a"), %%mm3 \n\t"
+        "movq (%2, %%"FF_REG_a"), %%mm5 \n\t"
         "psubusb %%mm1, %%mm3           \n\t"
         "psubusb %%mm5, %%mm1           \n\t"
         "por %%mm2, %%mm0               \n\t"
@@ -835,7 +835,7 @@ static inline void sad8_1_mmx(uint8_t *blk1, uint8_t *blk2,
         "paddw %%mm3, %%mm2             \n\t"
         "paddw %%mm2, %%mm0             \n\t"
         "paddw %%mm0, %%mm6             \n\t"
-        "add %3, %%"REG_a"              \n\t"
+        "add %3, %%"FF_REG_a"           \n\t"
         " js 1b                         \n\t"
         : "+a" (len)
         : "r" (blk1 - len), "r" (blk2 - len), "r" (stride));
@@ -971,18 +971,18 @@ static inline void sad8_2_mmx(uint8_t *blk1a, uint8_t *blk1b, uint8_t *blk2,
     __asm__ volatile (
         ".p2align 4                     \n\t"
         "1:                             \n\t"
-        "movq (%1, %%"REG_a"), %%mm0    \n\t"
-        "movq (%2, %%"REG_a"), %%mm1    \n\t"
-        "movq (%1, %%"REG_a"), %%mm2    \n\t"
-        "movq (%2, %%"REG_a"), %%mm3    \n\t"
+        "movq (%1, %%"FF_REG_a"), %%mm0 \n\t"
+        "movq (%2, %%"FF_REG_a"), %%mm1 \n\t"
+        "movq (%1, %%"FF_REG_a"), %%mm2 \n\t"
+        "movq (%2, %%"FF_REG_a"), %%mm3 \n\t"
         "punpcklbw %%mm7, %%mm0         \n\t"
         "punpcklbw %%mm7, %%mm1         \n\t"
         "punpckhbw %%mm7, %%mm2         \n\t"
         "punpckhbw %%mm7, %%mm3         \n\t"
         "paddw %%mm0, %%mm1             \n\t"
         "paddw %%mm2, %%mm3             \n\t"
-        "movq (%3, %%"REG_a"), %%mm4    \n\t"
-        "movq (%3, %%"REG_a"), %%mm2    \n\t"
+        "movq (%3, %%"FF_REG_a"), %%mm4 \n\t"
+        "movq (%3, %%"FF_REG_a"), %%mm2 \n\t"
         "paddw %%mm5, %%mm1             \n\t"
         "paddw %%mm5, %%mm3             \n\t"
         "psrlw $1, %%mm1                \n\t"
@@ -996,7 +996,7 @@ static inline void sad8_2_mmx(uint8_t *blk1a, uint8_t *blk1b, uint8_t *blk2,
         "punpckhbw %%mm7, %%mm1         \n\t"
         "paddw %%mm1, %%mm0             \n\t"
         "paddw %%mm0, %%mm6             \n\t"
-        "add %4, %%"REG_a"              \n\t"
+        "add %4, %%"FF_REG_a"           \n\t"
         " js 1b                         \n\t"
         : "+a" (len)
         : "r" (blk1a - len), "r" (blk1b - len), "r" (blk2 - len),
@@ -1008,8 +1008,8 @@ static inline void sad8_4_mmx(uint8_t *blk1, uint8_t *blk2,
 {
     x86_reg len = -(stride * h);
     __asm__ volatile (
-        "movq  (%1, %%"REG_a"), %%mm0   \n\t"
-        "movq 1(%1, %%"REG_a"), %%mm2   \n\t"
+        "movq  (%1, %%"FF_REG_a"), %%mm0\n\t"
+        "movq 1(%1, %%"FF_REG_a"), %%mm2\n\t"
         "movq %%mm0, %%mm1              \n\t"
         "movq %%mm2, %%mm3              \n\t"
         "punpcklbw %%mm7, %%mm0         \n\t"
@@ -1020,8 +1020,8 @@ static inline void sad8_4_mmx(uint8_t *blk1, uint8_t *blk2,
         "paddw %%mm3, %%mm1             \n\t"
         ".p2align 4                     \n\t"
         "1:                             \n\t"
-        "movq  (%2, %%"REG_a"), %%mm2   \n\t"
-        "movq 1(%2, %%"REG_a"), %%mm4   \n\t"
+        "movq  (%2, %%"FF_REG_a"), %%mm2\n\t"
+        "movq 1(%2, %%"FF_REG_a"), %%mm4\n\t"
         "movq %%mm2, %%mm3              \n\t"
         "movq %%mm4, %%mm5              \n\t"
         "punpcklbw %%mm7, %%mm2         \n\t"
@@ -1035,8 +1035,8 @@ static inline void sad8_4_mmx(uint8_t *blk1, uint8_t *blk2,
         "paddw %%mm3, %%mm1             \n\t"
         "paddw %%mm5, %%mm0             \n\t"
         "paddw %%mm5, %%mm1             \n\t"
-        "movq (%3, %%"REG_a"), %%mm4    \n\t"
-        "movq (%3, %%"REG_a"), %%mm5    \n\t"
+        "movq (%3, %%"FF_REG_a"), %%mm4 \n\t"
+        "movq (%3, %%"FF_REG_a"), %%mm5 \n\t"
         "psrlw $2, %%mm0                \n\t"
         "psrlw $2, %%mm1                \n\t"
         "packuswb %%mm1, %%mm0          \n\t"
@@ -1050,7 +1050,7 @@ static inline void sad8_4_mmx(uint8_t *blk1, uint8_t *blk2,
         "paddw %%mm4, %%mm6             \n\t"
         "movq  %%mm2, %%mm0             \n\t"
         "movq  %%mm3, %%mm1             \n\t"
-        "add %4, %%"REG_a"              \n\t"
+        "add %4, %%"FF_REG_a"           \n\t"
         " js 1b                         \n\t"
         : "+a" (len)
         : "r" (blk1 - len), "r" (blk1 - len + stride), "r" (blk2 - len),
@@ -1256,7 +1256,7 @@ av_cold void ff_me_cmp_init_x86(MECmpContext *c, AVCodecContext *avctx)
         c->nsse[0] = nsse16_mmx;
         c->nsse[1] = nsse8_mmx;
 
-        if (!(avctx->flags & CODEC_FLAG_BITEXACT)) {
+        if (!(avctx->flags & AV_CODEC_FLAG_BITEXACT)) {
             c->vsad[0] = vsad16_mmx;
         }
     }
@@ -1272,7 +1272,7 @@ av_cold void ff_me_cmp_init_x86(MECmpContext *c, AVCodecContext *avctx)
         c->sad[0] = sad16_mmxext;
         c->sad[1] = sad8_mmxext;
 
-        if (!(avctx->flags & CODEC_FLAG_BITEXACT)) {
+        if (!(avctx->flags & AV_CODEC_FLAG_BITEXACT)) {
             c->pix_abs[0][1] = sad16_x2_mmxext;
             c->pix_abs[0][2] = sad16_y2_mmxext;
             c->pix_abs[0][3] = sad16_xy2_mmxext;

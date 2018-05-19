@@ -93,11 +93,11 @@
 #include "aac.h"
 #include "aactab.h"
 #include "aacdectab.h"
+#include "adts_header.h"
 #include "cbrt_tablegen.h"
 #include "sbr.h"
 #include "aacsbr.h"
 #include "mpeg4audio.h"
-#include "aacadtsdec.h"
 #include "libavutil/intfloat.h"
 
 #include <assert.h>
@@ -109,6 +109,8 @@
 #if ARCH_ARM
 #   include "arm/aac.h"
 #endif
+
+#include "libavutil/thread.h"
 
 static VLC vlc_scalefactors;
 static VLC vlc_spectral[11];
@@ -1003,10 +1005,55 @@ static void reset_predictor_group(PredictorState *ps, int group_num)
                                     sizeof(ff_aac_spectral_codes[num][0]), \
         size);
 
+static av_cold void aac_static_table_init(void)
+{
+    AAC_INIT_VLC_STATIC( 0, 304);
+    AAC_INIT_VLC_STATIC( 1, 270);
+    AAC_INIT_VLC_STATIC( 2, 550);
+    AAC_INIT_VLC_STATIC( 3, 300);
+    AAC_INIT_VLC_STATIC( 4, 328);
+    AAC_INIT_VLC_STATIC( 5, 294);
+    AAC_INIT_VLC_STATIC( 6, 306);
+    AAC_INIT_VLC_STATIC( 7, 268);
+    AAC_INIT_VLC_STATIC( 8, 510);
+    AAC_INIT_VLC_STATIC( 9, 366);
+    AAC_INIT_VLC_STATIC(10, 462);
+
+    ff_aac_sbr_init();
+
+    ff_aac_tableinit();
+
+    INIT_VLC_STATIC(&vlc_scalefactors, 7,
+                    FF_ARRAY_ELEMS(ff_aac_scalefactor_code),
+                    ff_aac_scalefactor_bits,
+                    sizeof(ff_aac_scalefactor_bits[0]),
+                    sizeof(ff_aac_scalefactor_bits[0]),
+                    ff_aac_scalefactor_code,
+                    sizeof(ff_aac_scalefactor_code[0]),
+                    sizeof(ff_aac_scalefactor_code[0]),
+                    352);
+
+
+    // window initialization
+    ff_kbd_window_init(ff_aac_kbd_long_1024, 4.0, 1024);
+    ff_kbd_window_init(ff_aac_kbd_short_128, 6.0, 128);
+    ff_init_ff_sine_windows(10);
+    ff_init_ff_sine_windows( 9);
+    ff_init_ff_sine_windows( 7);
+
+    cbrt_tableinit();
+}
+
+static AVOnce aac_init = AV_ONCE_INIT;
+
 static av_cold int aac_decode_init(AVCodecContext *avctx)
 {
     AACContext *ac = avctx->priv_data;
     int ret;
+
+    ret = ff_thread_once(&aac_init, &aac_static_table_init);
+    if (ret != 0)
+        return AVERROR_UNKNOWN;
 
     ac->avctx = avctx;
     ac->oc[1].m4ac.sample_rate = avctx->sample_rate;
@@ -1049,35 +1096,9 @@ static av_cold int aac_decode_init(AVCodecContext *avctx)
         }
     }
 
-    AAC_INIT_VLC_STATIC( 0, 304);
-    AAC_INIT_VLC_STATIC( 1, 270);
-    AAC_INIT_VLC_STATIC( 2, 550);
-    AAC_INIT_VLC_STATIC( 3, 300);
-    AAC_INIT_VLC_STATIC( 4, 328);
-    AAC_INIT_VLC_STATIC( 5, 294);
-    AAC_INIT_VLC_STATIC( 6, 306);
-    AAC_INIT_VLC_STATIC( 7, 268);
-    AAC_INIT_VLC_STATIC( 8, 510);
-    AAC_INIT_VLC_STATIC( 9, 366);
-    AAC_INIT_VLC_STATIC(10, 462);
-
-    ff_aac_sbr_init();
-
-    avpriv_float_dsp_init(&ac->fdsp, avctx->flags & CODEC_FLAG_BITEXACT);
+    avpriv_float_dsp_init(&ac->fdsp, avctx->flags & AV_CODEC_FLAG_BITEXACT);
 
     ac->random_state = 0x1f2e3d4c;
-
-    ff_aac_tableinit();
-
-    INIT_VLC_STATIC(&vlc_scalefactors, 7,
-                    FF_ARRAY_ELEMS(ff_aac_scalefactor_code),
-                    ff_aac_scalefactor_bits,
-                    sizeof(ff_aac_scalefactor_bits[0]),
-                    sizeof(ff_aac_scalefactor_bits[0]),
-                    ff_aac_scalefactor_code,
-                    sizeof(ff_aac_scalefactor_code[0]),
-                    sizeof(ff_aac_scalefactor_code[0]),
-                    352);
 
     ff_mdct_init(&ac->mdct,       11, 1, 1.0 / (32768.0 * 1024.0));
     ff_mdct_init(&ac->mdct_ld,    10, 1, 1.0 / (32768.0 * 512.0));
@@ -1086,15 +1107,6 @@ static av_cold int aac_decode_init(AVCodecContext *avctx)
     ret = ff_imdct15_init(&ac->mdct480, 5);
     if (ret < 0)
         return ret;
-
-    // window initialization
-    ff_kbd_window_init(ff_aac_kbd_long_1024, 4.0, 1024);
-    ff_kbd_window_init(ff_aac_kbd_short_128, 6.0, 128);
-    ff_init_ff_sine_windows(10);
-    ff_init_ff_sine_windows( 9);
-    ff_init_ff_sine_windows( 7);
-
-    cbrt_tableinit();
 
     return 0;
 }
@@ -1234,8 +1246,7 @@ static int decode_ics_info(AACContext *ac, IndividualChannelStream *ics,
                 return AVERROR_INVALIDDATA;
             } else {
                 if (aot == AOT_ER_AAC_LD) {
-                    av_log(ac->avctx, AV_LOG_ERROR,
-                           "LTP in ER AAC LD not yet implemented.\n");
+                    avpriv_report_missing_feature(ac->avctx, "LTP in ER AAC LD");
                     return AVERROR_PATCHWELCOME;
                 }
                 if ((ics->ltp.present = get_bits(gb, 1)))
@@ -1904,8 +1915,8 @@ static int decode_ics(AACContext *ac, SingleChannelElement *sce,
             avpriv_request_sample(ac->avctx, "SSR");
             return AVERROR_PATCHWELCOME;
         }
-        // I see no textual basis in the spec for this occuring after SSR gain
-        // control, but this is what both reference and real implmentations do
+        // I see no textual basis in the spec for this occurring after SSR gain
+        // control, but this is what both reference and real implementations do
         if (tns->present && er_syntax)
             if (decode_tns(ac, tns, gb, ics) < 0)
                 return AVERROR_INVALIDDATA;
@@ -2694,7 +2705,7 @@ static int parse_adts_frame_header(AACContext *ac, GetBitContext *gb)
     uint8_t layout_map[MAX_ELEM_ID*4][3];
     int layout_map_tags, ret;
 
-    size = avpriv_aac_parse_header(gb, &hdr_info);
+    size = ff_adts_header_parse(gb, &hdr_info);
     if (size > 0) {
         if (hdr_info.num_aac_frames != 1) {
             avpriv_report_missing_feature(ac->avctx,
@@ -2834,8 +2845,10 @@ static int aac_decode_frame_int(AVCodecContext *avctx, void *data,
     while ((elem_type = get_bits(gb, 3)) != TYPE_END) {
         elem_id = get_bits(gb, 4);
 
-        if (!avctx->channels && elem_type != TYPE_PCE)
+        if (!avctx->channels && elem_type != TYPE_PCE) {
+            err = AVERROR_INVALIDDATA;
             goto fail;
+        }
 
         if (elem_type < TYPE_DSE) {
             if (!(che=get_che(ac, elem_type, elem_id))) {
@@ -2969,7 +2982,7 @@ static int aac_decode_frame(AVCodecContext *avctx, void *data,
     if (new_extradata) {
         av_free(avctx->extradata);
         avctx->extradata = av_mallocz(new_extradata_size +
-                                      FF_INPUT_BUFFER_PADDING_SIZE);
+                                      AV_INPUT_BUFFER_PADDING_SIZE);
         if (!avctx->extradata)
             return AVERROR(ENOMEM);
         avctx->extradata_size = new_extradata_size;
@@ -3033,7 +3046,7 @@ static av_cold int aac_decode_close(AVCodecContext *avctx)
 
 struct LATMContext {
     AACContext aac_ctx;     ///< containing AACContext
-    int initialized;        ///< initilized after a valid extradata was seen
+    int initialized;        ///< initialized after a valid extradata was seen
 
     // parser data
     int audio_mux_version_A; ///< LATM syntax version
@@ -3089,14 +3102,14 @@ static int latm_decode_audio_specific_config(struct LATMContext *latmctx,
 
         if (avctx->extradata_size < esize) {
             av_free(avctx->extradata);
-            avctx->extradata = av_malloc(esize + FF_INPUT_BUFFER_PADDING_SIZE);
+            avctx->extradata = av_malloc(esize + AV_INPUT_BUFFER_PADDING_SIZE);
             if (!avctx->extradata)
                 return AVERROR(ENOMEM);
         }
 
         avctx->extradata_size = esize;
         memcpy(avctx->extradata, gb->buffer + (config_start_bit/8), esize);
-        memset(avctx->extradata+esize, 0, FF_INPUT_BUFFER_PADDING_SIZE);
+        memset(avctx->extradata+esize, 0, AV_INPUT_BUFFER_PADDING_SIZE);
     }
     skip_bits_long(gb, bits_consumed);
 
@@ -3215,7 +3228,7 @@ static int read_audio_mux_element(struct LATMContext *latmctx,
     } else if (!latmctx->aac_ctx.avctx->extradata) {
         av_log(latmctx->aac_ctx.avctx, AV_LOG_DEBUG,
                "no decoder config found\n");
-        return AVERROR(EAGAIN);
+        return 1;
     }
     if (latmctx->audio_mux_version_A == 0) {
         int mux_slot_length_bytes = read_payload_length_info(latmctx, gb);
@@ -3252,8 +3265,8 @@ static int latm_decode_frame(AVCodecContext *avctx, void *out,
     if (muxlength > avpkt->size)
         return AVERROR_INVALIDDATA;
 
-    if ((err = read_audio_mux_element(latmctx, &gb)) < 0)
-        return err;
+    if ((err = read_audio_mux_element(latmctx, &gb)))
+        return (err < 0) ? err : avpkt->size;
 
     if (!latmctx->initialized) {
         if (!avctx->extradata) {
@@ -3318,7 +3331,8 @@ AVCodec ff_aac_decoder = {
     .sample_fmts     = (const enum AVSampleFormat[]) {
         AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_NONE
     },
-    .capabilities    = CODEC_CAP_CHANNEL_CONF | CODEC_CAP_DR1,
+    .capabilities    = AV_CODEC_CAP_CHANNEL_CONF | AV_CODEC_CAP_DR1,
+    .caps_internal   = FF_CODEC_CAP_INIT_THREADSAFE,
     .channel_layouts = aac_channel_layout,
 };
 
@@ -3339,6 +3353,7 @@ AVCodec ff_aac_latm_decoder = {
     .sample_fmts     = (const enum AVSampleFormat[]) {
         AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_NONE
     },
-    .capabilities    = CODEC_CAP_CHANNEL_CONF | CODEC_CAP_DR1,
+    .capabilities    = AV_CODEC_CAP_CHANNEL_CONF | AV_CODEC_CAP_DR1,
+    .caps_internal   = FF_CODEC_CAP_INIT_THREADSAFE,
     .channel_layouts = aac_channel_layout,
 };

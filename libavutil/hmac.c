@@ -18,6 +18,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 
 #include "attributes.h"
@@ -25,24 +27,38 @@
 #include "md5.h"
 #include "sha.h"
 #include "mem.h"
+#include "version.h"
 
-#define MAX_HASHLEN 20
+#define MAX_HASHLEN 32
 #define MAX_BLOCKLEN 64
+
+typedef void (*hmac_final)(void *ctx, uint8_t *dst);
+#if FF_API_CRYPTO_SIZE_T
+typedef void (*hmac_update)(void *ctx, const uint8_t *src, int len);
+#else
+typedef void (*hmac_update)(void *ctx, const uint8_t *src, size_t len);
+#endif
+typedef void (*hmac_init)(void *ctx);
 
 struct AVHMAC {
     void *hash;
     int blocklen, hashlen;
-    void (*final)(void*, uint8_t*);
-    void (*update)(void*, const uint8_t*, int len);
-    void (*init)(void*);
+    hmac_final  final;
+    hmac_update update;
+    hmac_init   init;
     uint8_t key[MAX_BLOCKLEN];
     int keylen;
 };
 
-static av_cold void sha1_init(void *ctx)
-{
-    av_sha_init(ctx, 160);
+#define DEFINE_SHA(bits)                           \
+static av_cold void sha ## bits ##_init(void *ctx) \
+{                                                  \
+    av_sha_init(ctx, bits);                        \
 }
+
+DEFINE_SHA(160)
+DEFINE_SHA(224)
+DEFINE_SHA(256)
 
 AVHMAC *av_hmac_alloc(enum AVHMACType type)
 {
@@ -53,17 +69,33 @@ AVHMAC *av_hmac_alloc(enum AVHMACType type)
     case AV_HMAC_MD5:
         c->blocklen = 64;
         c->hashlen  = 16;
-        c->init     = av_md5_init;
-        c->update   = av_md5_update;
-        c->final    = av_md5_final;
+        c->init     = (hmac_init) av_md5_init;
+        c->update   = (hmac_update) av_md5_update;
+        c->final    = (hmac_final) av_md5_final;
         c->hash     = av_md5_alloc();
         break;
     case AV_HMAC_SHA1:
         c->blocklen = 64;
         c->hashlen  = 20;
-        c->init     = sha1_init;
-        c->update   = av_sha_update;
-        c->final    = av_sha_final;
+        c->init     = sha160_init;
+        c->update   = (hmac_update) av_sha_update;
+        c->final    = (hmac_final) av_sha_final;
+        c->hash     = av_sha_alloc();
+        break;
+    case AV_HMAC_SHA224:
+        c->blocklen = 64;
+        c->hashlen  = 28;
+        c->init     = sha224_init;
+        c->update   = (hmac_update) av_sha_update;
+        c->final    = (hmac_final) av_sha_final;
+        c->hash     = av_sha_alloc();
+        break;
+    case AV_HMAC_SHA256:
+        c->blocklen = 64;
+        c->hashlen  = 32;
+        c->init     = sha256_init;
+        c->update   = (hmac_update) av_sha_update;
+        c->final    = (hmac_final) av_sha_final;
         c->hash     = av_sha_alloc();
         break;
     default:
@@ -137,51 +169,3 @@ int av_hmac_calc(AVHMAC *c, const uint8_t *data, unsigned int len,
     av_hmac_update(c, data, len);
     return av_hmac_final(c, out, outlen);
 }
-
-#ifdef TEST
-#include <stdio.h>
-
-static void test(AVHMAC *hmac, const uint8_t *key, int keylen,
-                 const uint8_t *data, int datalen)
-{
-    uint8_t buf[MAX_HASHLEN];
-    int out, i;
-    // Some of the test vectors are strings, where sizeof() includes the
-    // trailing null byte - remove that.
-    if (!key[keylen - 1])
-        keylen--;
-    if (!data[datalen - 1])
-        datalen--;
-    out = av_hmac_calc(hmac, data, datalen, key, keylen, buf, sizeof(buf));
-    for (i = 0; i < out; i++)
-        printf("%02x", buf[i]);
-    printf("\n");
-}
-
-int main(void)
-{
-    uint8_t key1[16], key3[16], data3[50], key4[63], key5[64], key6[65];
-    const uint8_t key2[]  = "Jefe";
-    const uint8_t data1[] = "Hi There";
-    const uint8_t data2[] = "what do ya want for nothing?";
-    AVHMAC *hmac = av_hmac_alloc(AV_HMAC_MD5);
-    if (!hmac)
-        return 1;
-    memset(key1, 0x0b, sizeof(key1));
-    memset(key3, 0xaa, sizeof(key3));
-    memset(key4, 0x44, sizeof(key4));
-    memset(key5, 0x55, sizeof(key5));
-    memset(key6, 0x66, sizeof(key6));
-    memset(data3, 0xdd, sizeof(data3));
-    // RFC 2104 test vectors
-    test(hmac, key1, sizeof(key1), data1, sizeof(data1));
-    test(hmac, key2, sizeof(key2), data2, sizeof(data2));
-    test(hmac, key3, sizeof(key3), data3, sizeof(data3));
-    // Additional tests, to test cases where the key is too long
-    test(hmac, key4, sizeof(key4), data1, sizeof(data1));
-    test(hmac, key5, sizeof(key5), data2, sizeof(data2));
-    test(hmac, key6, sizeof(key6), data3, sizeof(data3));
-    av_hmac_free(hmac);
-    return 0;
-}
-#endif /* TEST */

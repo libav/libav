@@ -35,12 +35,6 @@
 #include "libavutil/opt.h"
 #include "libavutil/parseutils.h"
 
-#if HAVE_THREADS && GNUTLS_VERSION_NUMBER <= 0x020b00
-#include <gcrypt.h>
-#include "libavutil/thread.h"
-GCRY_THREAD_OPTION_PTHREAD_IMPL;
-#endif
-
 typedef struct TLSContext {
     const AVClass *class;
     TLSShared tls_shared;
@@ -52,10 +46,6 @@ typedef struct TLSContext {
 void ff_gnutls_init(void)
 {
     avpriv_lock_avformat();
-#if HAVE_THREADS && GNUTLS_VERSION_NUMBER < 0x020b00
-    if (gcry_control(GCRYCTL_ANY_INITIALIZATION_P) == 0)
-        gcry_control(GCRYCTL_SET_THREAD_CBS, &gcry_threads_pthread);
-#endif
     gnutls_global_init();
     avpriv_unlock_avformat();
 }
@@ -71,6 +61,7 @@ static int print_tls_error(URLContext *h, int ret)
 {
     switch (ret) {
     case GNUTLS_E_AGAIN:
+        return AVERROR(EAGAIN);
     case GNUTLS_E_INTERRUPTED:
         break;
     case GNUTLS_E_WARNING_ALERT_RECEIVED:
@@ -107,7 +98,10 @@ static ssize_t gnutls_url_pull(gnutls_transport_ptr_t transport,
         return ret;
     if (ret == AVERROR_EXIT)
         return 0;
-    errno = EIO;
+    if (ret == AVERROR(EAGAIN))
+        errno = EAGAIN;
+    else
+        errno = EIO;
     return -1;
 }
 
@@ -120,7 +114,10 @@ static ssize_t gnutls_url_push(gnutls_transport_ptr_t transport,
         return ret;
     if (ret == AVERROR_EXIT)
         return 0;
-    errno = EIO;
+    if (ret == AVERROR(EAGAIN))
+        errno = EAGAIN;
+    else
+        errno = EIO;
     return -1;
 }
 
@@ -212,7 +209,11 @@ fail:
 static int tls_read(URLContext *h, uint8_t *buf, int size)
 {
     TLSContext *c = h->priv_data;
-    int ret = gnutls_record_recv(c->session, buf, size);
+    int ret;
+    // Set or clear the AVIO_FLAG_NONBLOCK on c->tls_shared.tcp
+    c->tls_shared.tcp->flags &= ~AVIO_FLAG_NONBLOCK;
+    c->tls_shared.tcp->flags |= h->flags & AVIO_FLAG_NONBLOCK;
+    ret = gnutls_record_recv(c->session, buf, size);
     if (ret > 0)
         return ret;
     if (ret == 0)
@@ -223,7 +224,11 @@ static int tls_read(URLContext *h, uint8_t *buf, int size)
 static int tls_write(URLContext *h, const uint8_t *buf, int size)
 {
     TLSContext *c = h->priv_data;
-    int ret = gnutls_record_send(c->session, buf, size);
+    int ret;
+    // Set or clear the AVIO_FLAG_NONBLOCK on c->tls_shared.tcp
+    c->tls_shared.tcp->flags &= ~AVIO_FLAG_NONBLOCK;
+    c->tls_shared.tcp->flags |= h->flags & AVIO_FLAG_NONBLOCK;
+    ret = gnutls_record_send(c->session, buf, size);
     if (ret > 0)
         return ret;
     if (ret == 0)
@@ -243,7 +248,7 @@ static const AVClass tls_class = {
     .version    = LIBAVUTIL_VERSION_INT,
 };
 
-URLProtocol ff_tls_gnutls_protocol = {
+const URLProtocol ff_tls_protocol = {
     .name           = "tls",
     .url_open2      = tls_open,
     .url_read       = tls_read,

@@ -116,29 +116,6 @@ void avfilter_graph_free(AVFilterGraph **graph)
     av_freep(graph);
 }
 
-#if FF_API_AVFILTER_OPEN
-int avfilter_graph_add_filter(AVFilterGraph *graph, AVFilterContext *filter)
-{
-    AVFilterContext **filters = av_realloc(graph->filters,
-                                           sizeof(*filters) * (graph->nb_filters + 1));
-    if (!filters)
-        return AVERROR(ENOMEM);
-
-    graph->filters = filters;
-    graph->filters[graph->nb_filters++] = filter;
-
-#if FF_API_FOO_COUNT
-FF_DISABLE_DEPRECATION_WARNINGS
-    graph->filter_count = graph->nb_filters;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
-
-    filter->graph = graph;
-
-    return 0;
-}
-#endif
-
 int avfilter_graph_create_filter(AVFilterContext **filt_ctx, const AVFilter *filt,
                                  const char *name, const char *args, void *opaque,
                                  AVFilterGraph *graph_ctx)
@@ -192,12 +169,6 @@ AVFilterContext *avfilter_graph_alloc_filter(AVFilterGraph *graph,
 
     graph->filters = filters;
     graph->filters[graph->nb_filters++] = s;
-
-#if FF_API_FOO_COUNT
-FF_DISABLE_DEPRECATION_WARNINGS
-    graph->filter_count = graph->nb_filters;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
 
     s->graph = graph;
 
@@ -283,9 +254,15 @@ static int query_formats(AVFilterGraph *graph, AVClass *log_ctx)
     /* ask all the sub-filters for their supported media formats */
     for (i = 0; i < graph->nb_filters; i++) {
         if (graph->filters[i]->filter->query_formats)
-            graph->filters[i]->filter->query_formats(graph->filters[i]);
+            ret = graph->filters[i]->filter->query_formats(graph->filters[i]);
         else
-            ff_default_query_formats(graph->filters[i]);
+            ret = ff_default_query_formats(graph->filters[i]);
+        if (ret < 0) {
+            av_log(log_ctx, AV_LOG_ERROR,
+                   "Error querying formats for the filter %s (%s)\n",
+                   graph->filters[i]->name, graph->filters[i]->filter->name);
+            return ret;
+        }
     }
 
     /* go through and merge as many format lists as possible */
@@ -316,7 +293,7 @@ static int query_formats(AVFilterGraph *graph, AVClass *log_ctx)
 
             if (convert_needed) {
                 AVFilterContext *convert;
-                AVFilter *filter;
+                const AVFilter *filter;
                 AVFilterLink *inlink, *outlink;
                 char scale_args[256];
                 char inst_name[30];
@@ -782,7 +759,7 @@ static int graph_insert_fifos(AVFilterGraph *graph, AVClass *log_ctx)
         for (j = 0; j < f->nb_inputs; j++) {
             AVFilterLink *link = f->inputs[j];
             AVFilterContext *fifo_ctx;
-            AVFilter *fifo;
+            const AVFilter *fifo;
             char name[32];
 
             if (!link->dstpad->needs_fifo)

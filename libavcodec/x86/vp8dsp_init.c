@@ -23,11 +23,10 @@
 #include "libavutil/attributes.h"
 #include "libavutil/cpu.h"
 #include "libavutil/mem.h"
-#include "libavutil/x86/asm.h"
 #include "libavutil/x86/cpu.h"
 #include "libavcodec/vp8dsp.h"
 
-#if HAVE_YASM
+#if HAVE_X86ASM
 
 /*
  * MC functions
@@ -289,7 +288,7 @@ DECLARE_LOOP_FILTER(sse2)
 DECLARE_LOOP_FILTER(ssse3)
 DECLARE_LOOP_FILTER(sse4)
 
-#endif /* HAVE_YASM */
+#endif /* HAVE_X86ASM */
 
 #define VP8_LUMA_MC_FUNC(IDX, SIZE, OPT) \
     c->put_vp8_epel_pixels_tab[IDX][0][2] = ff_put_vp8_epel ## SIZE ## _h6_ ## OPT; \
@@ -317,7 +316,7 @@ DECLARE_LOOP_FILTER(sse4)
 
 av_cold void ff_vp78dsp_init_x86(VP8DSPContext *c)
 {
-#if HAVE_YASM
+#if HAVE_X86ASM
     int cpu_flags = av_get_cpu_flags();
 
     if (EXTERNAL_MMX(cpu_flags)) {
@@ -347,7 +346,7 @@ av_cold void ff_vp78dsp_init_x86(VP8DSPContext *c)
         c->put_vp8_bilinear_pixels_tab[0][0][0] = ff_put_vp8_pixels16_sse;
     }
 
-    if (EXTERNAL_SSE2(cpu_flags) && (cpu_flags & AV_CPU_FLAG_SSE2SLOW)) {
+    if (EXTERNAL_SSE2_SLOW(cpu_flags)) {
         VP8_LUMA_MC_FUNC(0, 16, sse2);
         VP8_MC_FUNC(1, 8, sse2);
         VP8_BILINEAR_MC_FUNC(0, 16, sse2);
@@ -362,12 +361,12 @@ av_cold void ff_vp78dsp_init_x86(VP8DSPContext *c)
         VP8_BILINEAR_MC_FUNC(1, 8, ssse3);
         VP8_BILINEAR_MC_FUNC(2, 4, ssse3);
     }
-#endif /* HAVE_YASM */
+#endif /* HAVE_X86ASM */
 }
 
 av_cold void ff_vp8dsp_init_x86(VP8DSPContext *c)
 {
-#if HAVE_YASM
+#if HAVE_X86ASM
     int cpu_flags = av_get_cpu_flags();
 
     if (EXTERNAL_MMX(cpu_flags)) {
@@ -417,7 +416,7 @@ av_cold void ff_vp8dsp_init_x86(VP8DSPContext *c)
         c->vp8_luma_dc_wht                      = ff_vp8_luma_dc_wht_sse;
     }
 
-    if (EXTERNAL_SSE2(cpu_flags) && (cpu_flags & AV_CPU_FLAG_SSE2SLOW)) {
+    if (EXTERNAL_SSE2_SLOW(cpu_flags)) {
         c->vp8_v_loop_filter_simple = ff_vp8_v_loop_filter_simple_sse2;
 
         c->vp8_v_loop_filter16y_inner = ff_vp8_v_loop_filter16y_inner_sse2;
@@ -461,5 +460,5 @@ av_cold void ff_vp8dsp_init_x86(VP8DSPContext *c)
         c->vp8_h_loop_filter16y       = ff_vp8_h_loop_filter16y_mbedge_sse4;
         c->vp8_h_loop_filter8uv       = ff_vp8_h_loop_filter8uv_mbedge_sse4;
     }
-#endif /* HAVE_YASM */
+#endif /* HAVE_X86ASM */
 }

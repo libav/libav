@@ -29,7 +29,6 @@
 #include "thread.h"
 #include "version.h"
 
-#if !FF_API_AVFILTERPAD_PUBLIC
 /**
  * A filter pad used for either input or output.
  */
@@ -126,7 +125,6 @@ struct AVFilterPad {
      */
     int needs_writable;
 };
-#endif
 
 struct AVFilterGraphInternal {
     void *thread;
@@ -136,11 +134,6 @@ struct AVFilterGraphInternal {
 struct AVFilterInternal {
     avfilter_execute_func *execute;
 };
-
-#if FF_API_AVFILTERBUFFER
-/** default handler for freeing audio/video buffer when there are no references left */
-void ff_avfilter_default_free_buffer(AVFilterBuffer *buf);
-#endif
 
 /** Tell is a format is contained in the provided list terminated by -1. */
 int ff_fmt_is_in(int fmt, const int *fmts);
@@ -172,11 +165,6 @@ static inline void ff_insert_inpad(AVFilterContext *f, unsigned index,
 {
     ff_insert_pad(index, &f->nb_inputs, offsetof(AVFilterLink, dstpad),
                   &f->input_pads, &f->inputs, p);
-#if FF_API_FOO_COUNT
-FF_DISABLE_DEPRECATION_WARNINGS
-    f->input_count = f->nb_inputs;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
 }
 
 /** Insert a new output pad for the filter. */
@@ -185,11 +173,6 @@ static inline void ff_insert_outpad(AVFilterContext *f, unsigned index,
 {
     ff_insert_pad(index, &f->nb_outputs, offsetof(AVFilterLink, srcpad),
                   &f->output_pads, &f->outputs, p);
-#if FF_API_FOO_COUNT
-FF_DISABLE_DEPRECATION_WARNINGS
-    f->output_count = f->nb_outputs;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
 }
 
 /**
@@ -236,5 +219,28 @@ AVFilterContext *ff_filter_alloc(const AVFilter *filter, const char *inst_name);
  * Remove a filter from a graph;
  */
 void ff_filter_graph_remove_filter(AVFilterGraph *graph, AVFilterContext *filter);
+
+/**
+ * The filter is aware of hardware frames, and any hardware frame context
+ * should not be automatically propagated through it.
+ */
+#define FF_FILTER_FLAG_HWFRAME_AWARE (1 << 0)
+
+/**
+ * Perform any additional setup required for hardware frames.
+ *
+ * link->hw_frames_ctx must be set before calling this function.
+ * Inside link->hw_frames_ctx, the fields format, sw_format, width and
+ * height must be set.  If dynamically allocated pools are not supported,
+ * then initial_pool_size must also be set, to the minimum hardware frame
+ * pool size necessary for the filter to work (taking into account any
+ * frames which need to stored for use in operations as appropriate).  If
+ * default_pool_size is nonzero, then it will be used as the pool size if
+ * no other modification takes place (this can be used to preserve
+ * compatibility).
+ */
+int ff_filter_init_hw_frames(AVFilterContext *avctx, AVFilterLink *link,
+                             int default_pool_size);
+
 
 #endif /* AVFILTER_INTERNAL_H */

@@ -1,6 +1,6 @@
 /*
  * Autodesk RLE Decoder
- * Copyright (C) 2005 the ffmpeg project
+ * Copyright (C) 2005 The FFmpeg project
  *
  * This file is part of Libav.
  *
@@ -85,7 +85,7 @@ static int aasc_decode_frame(AVCodecContext *avctx,
         break;
     case 1:
         bytestream2_init(&s->gb, buf, buf_size);
-        ff_msrle_decode(avctx, (AVPicture*)s->frame, 8, &s->gb);
+        ff_msrle_decode(avctx, s->frame, 8, &s->gb);
         break;
     default:
         av_log(avctx, AV_LOG_ERROR, "Unknown compression type %d\n", compr);
@@ -118,5 +118,6 @@ AVCodec ff_aasc_decoder = {
     .init           = aasc_decode_init,
     .close          = aasc_decode_end,
     .decode         = aasc_decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
+    .caps_internal  = FF_CODEC_CAP_INIT_THREADSAFE,
 };

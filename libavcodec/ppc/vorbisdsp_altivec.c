@@ -19,12 +19,12 @@
  */
 
 #include "config.h"
-#if HAVE_ALTIVEC_H
-#include <altivec.h>
-#endif
+
 #include "libavutil/attributes.h"
 #include "libavutil/cpu.h"
 #include "libavutil/ppc/cpu.h"
+#include "libavutil/ppc/util_altivec.h"
+
 #include "libavcodec/vorbisdsp.h"
 
 #if HAVE_ALTIVEC && HAVE_BIGENDIAN
@@ -50,7 +50,7 @@ static void vorbis_inverse_coupling_altivec(float *mag, float *ang,
         vec_stl(m, 0, mag+i);
     }
 }
-#endif /* HAVE_ALTIVEC */
+#endif /* HAVE_ALTIVEC && HAVE_BIGENDIAN */
 
 av_cold void ff_vorbisdsp_init_ppc(VorbisDSPContext *c)
 {
@@ -59,5 +59,5 @@ av_cold void ff_vorbisdsp_init_ppc(VorbisDSPContext *c)
         return;
 
     c->vorbis_inverse_coupling = vorbis_inverse_coupling_altivec;
-#endif /* HAVE_ALTIVEC */
+#endif /* HAVE_ALTIVEC && HAVE_BIGENDIAN */
 }

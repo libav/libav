@@ -52,7 +52,14 @@ typedef struct Parser {
     double var[VARS];
 } Parser;
 
-static const AVClass class = { "Eval", av_default_item_name, NULL, LIBAVUTIL_VERSION_INT, offsetof(Parser,log_offset), offsetof(Parser,log_ctx) };
+static const AVClass class = {
+    .class_name                = "Eval",
+    .item_name                 = av_default_item_name,
+    .option                    = NULL,
+    .version                   = LIBAVUTIL_VERSION_INT,
+    .log_level_offset_offset   = offsetof(Parser, log_offset),
+    .parent_log_context_offset = offsetof(Parser, log_ctx),
+};
 
 static const int8_t si_prefixes['z' - 'E' + 1] = {
     ['y'-'E']= -24,
@@ -565,127 +572,3 @@ int av_expr_parse_and_eval(double *d, const char *s,
     av_expr_free(e);
     return isnan(*d) ? AVERROR(EINVAL) : 0;
 }
-
-#ifdef TEST
-#include <string.h>
-
-static const double const_values[] = {
-    M_PI,
-    M_E,
-    0
-};
-
-static const char *const const_names[] = {
-    "PI",
-    "E",
-    0
-};
-
-int main(int argc, char **argv)
-{
-    int i;
-    double d;
-    const char *const *expr;
-    static const char *const exprs[] = {
-        "",
-        "1;2",
-        "-20",
-        "-PI",
-        "+PI",
-        "1+(5-2)^(3-1)+1/2+sin(PI)-max(-2.2,-3.1)",
-        "80G/80Gi",
-        "1k",
-        "1Gi",
-        "1gi",
-        "1GiFoo",
-        "1k+1k",
-        "1Gi*3foo",
-        "foo",
-        "foo(",
-        "foo()",
-        "foo)",
-        "sin",
-        "sin(",
-        "sin()",
-        "sin)",
-        "sin 10",
-        "sin(1,2,3)",
-        "sin(1 )",
-        "1",
-        "1foo",
-        "bar + PI + E + 100f*2 + foo",
-        "13k + 12f - foo(1, 2)",
-        "1gi",
-        "1Gi",
-        "st(0, 123)",
-        "st(1, 123); ld(1)",
-        "lte(0, 1)",
-        "lte(1, 1)",
-        "lte(1, 0)",
-        "lt(0, 1)",
-        "lt(1, 1)",
-        "gt(1, 0)",
-        "gt(2, 7)",
-        "gte(122, 122)",
-        /* compute 1+2+...+N */
-        "st(0, 1); while(lte(ld(0), 100), st(1, ld(1)+ld(0));st(0, ld(0)+1)); ld(1)",
-        /* compute Fib(N) */
-        "st(1, 1); st(2, 2); st(0, 1); while(lte(ld(0),10), st(3, ld(1)+ld(2)); st(1, ld(2)); st(2, ld(3)); st(0, ld(0)+1)); ld(3)",
-        "while(0, 10)",
-        "st(0, 1); while(lte(ld(0),100), st(1, ld(1)+ld(0)); st(0, ld(0)+1))",
-        "isnan(1)",
-        "isnan(NAN)",
-        "isnan(INF)",
-        "isinf(1)",
-        "isinf(NAN)",
-        "isinf(INF)",
-        "floor(NAN)",
-        "floor(123.123)",
-        "floor(-123.123)",
-        "trunc(123.123)",
-        "trunc(-123.123)",
-        "ceil(123.123)",
-        "ceil(-123.123)",
-        "sqrt(1764)",
-        "isnan(sqrt(-1))",
-        "not(1)",
-        "not(NAN)",
-        "not(0)",
-        "6.0206dB",
-        "-3.0103dB",
-        NULL
-    };
-
-    for (expr = exprs; *expr; expr++) {
-        printf("Evaluating '%s'\n", *expr);
-        av_expr_parse_and_eval(&d, *expr,
-                               const_names, const_values,
-                               NULL, NULL, NULL, NULL, NULL, 0, NULL);
-        if (isnan(d))
-            printf("'%s' -> nan\n\n", *expr);
-        else
-            printf("'%s' -> %f\n\n", *expr, d);
-    }
-
-    av_expr_parse_and_eval(&d, "1+(5-2)^(3-1)+1/2+sin(PI)-max(-2.2,-3.1)",
-                           const_names, const_values,
-                           NULL, NULL, NULL, NULL, NULL, 0, NULL);
-    printf("%f == 12.7\n", d);
-    av_expr_parse_and_eval(&d, "80G/80Gi",
-                           const_names, const_values,
-                           NULL, NULL, NULL, NULL, NULL, 0, NULL);
-    printf("%f == 0.931322575\n", d);
-
-    if (argc > 1 && !strcmp(argv[1], "-t")) {
-        for (i = 0; i < 1050; i++) {
-            START_TIMER;
-            av_expr_parse_and_eval(&d, "1+(5-2)^(3-1)+1/2+sin(PI)-max(-2.2,-3.1)",
-                                   const_names, const_values,
-                                   NULL, NULL, NULL, NULL, NULL, 0, NULL);
-            STOP_TIMER("av_expr_parse_and_eval");
-        }
-    }
-
-    return 0;
-}
-#endif

@@ -140,7 +140,7 @@ static int decode_frame(AVCodecContext *avctx,
 
     avctx->pix_fmt = AV_PIX_FMT_PAL8;
 
-    if (s->width != avctx->width && s->height != avctx->height) {
+    if (s->width != avctx->width || s->height != avctx->height) {
         ret = ff_set_dimensions(avctx, s->width, s->height);
         if (ret < 0)
             return ret;
@@ -249,5 +249,5 @@ AVCodec ff_pictor_decoder = {
     .id             = AV_CODEC_ID_PICTOR,
     .priv_data_size = sizeof(PicContext),
     .decode         = decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
 };

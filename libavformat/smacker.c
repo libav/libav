@@ -112,11 +112,16 @@ static int smacker_read_header(AVFormatContext *s)
     /* read and check header */
     smk->magic = avio_rl32(pb);
     if (smk->magic != MKTAG('S', 'M', 'K', '2') && smk->magic != MKTAG('S', 'M', 'K', '4'))
-        return -1;
+        return AVERROR_INVALIDDATA;
     smk->width = avio_rl32(pb);
     smk->height = avio_rl32(pb);
     smk->frames = avio_rl32(pb);
     smk->pts_inc = (int32_t)avio_rl32(pb);
+    if (smk->pts_inc > INT_MAX / 100) {
+        av_log(s, AV_LOG_ERROR, "pts_inc %d is too large\n", smk->pts_inc);
+        return AVERROR_INVALIDDATA;
+    }
+
     smk->flags = avio_rl32(pb);
     if(smk->flags & SMACKER_FLAG_RING_FRAME)
         smk->frames++;
@@ -126,7 +131,7 @@ static int smacker_read_header(AVFormatContext *s)
 
     if(smk->treesize >= UINT_MAX/4){ // smk->treesize + 16 must not overflow (this check is probably redundant)
         av_log(s, AV_LOG_ERROR, "treesize too large\n");
-        return -1;
+        return AVERROR_INVALIDDATA;
     }
 
 //FIXME remove extradata "rebuilding"
@@ -142,7 +147,7 @@ static int smacker_read_header(AVFormatContext *s)
     /* setup data */
     if(smk->frames > 0xFFFFFF) {
         av_log(s, AV_LOG_ERROR, "Too many frames: %"PRIu32"\n", smk->frames);
-        return -1;
+        return AVERROR_INVALIDDATA;
     }
     smk->frm_size = av_malloc(smk->frames * 4);
     smk->frm_flags = av_malloc(smk->frames);
@@ -160,14 +165,14 @@ static int smacker_read_header(AVFormatContext *s)
     /* init video codec */
     st = avformat_new_stream(s, NULL);
     if (!st)
-        return -1;
+        return AVERROR(ENOMEM);
     smk->videoindex = st->index;
-    st->codec->width = smk->width;
-    st->codec->height = smk->height;
-    st->codec->pix_fmt = AV_PIX_FMT_PAL8;
-    st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
-    st->codec->codec_id = AV_CODEC_ID_SMACKVIDEO;
-    st->codec->codec_tag = smk->magic;
+    st->codecpar->width = smk->width;
+    st->codecpar->height = smk->height;
+    st->codecpar->format = AV_PIX_FMT_PAL8;
+    st->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
+    st->codecpar->codec_id = AV_CODEC_ID_SMACKVIDEO;
+    st->codecpar->codec_tag = smk->magic;
     /* Smacker uses 100000 as internal timebase */
     if(smk->pts_inc < 0)
         smk->pts_inc = -smk->pts_inc;
@@ -183,56 +188,56 @@ static int smacker_read_header(AVFormatContext *s)
         if (smk->rates[i]) {
             ast[i] = avformat_new_stream(s, NULL);
             smk->indexes[i] = ast[i]->index;
-            ast[i]->codec->codec_type = AVMEDIA_TYPE_AUDIO;
+            ast[i]->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
             if (smk->aflags[i] & SMK_AUD_BINKAUD) {
-                ast[i]->codec->codec_id = AV_CODEC_ID_BINKAUDIO_RDFT;
+                ast[i]->codecpar->codec_id = AV_CODEC_ID_BINKAUDIO_RDFT;
             } else if (smk->aflags[i] & SMK_AUD_USEDCT) {
-                ast[i]->codec->codec_id = AV_CODEC_ID_BINKAUDIO_DCT;
+                ast[i]->codecpar->codec_id = AV_CODEC_ID_BINKAUDIO_DCT;
             } else if (smk->aflags[i] & SMK_AUD_PACKED){
-                ast[i]->codec->codec_id = AV_CODEC_ID_SMACKAUDIO;
-                ast[i]->codec->codec_tag = MKTAG('S', 'M', 'K', 'A');
+                ast[i]->codecpar->codec_id = AV_CODEC_ID_SMACKAUDIO;
+                ast[i]->codecpar->codec_tag = MKTAG('S', 'M', 'K', 'A');
             } else {
-                ast[i]->codec->codec_id = AV_CODEC_ID_PCM_U8;
+                ast[i]->codecpar->codec_id = AV_CODEC_ID_PCM_U8;
             }
             if (smk->aflags[i] & SMK_AUD_STEREO) {
-                ast[i]->codec->channels       = 2;
-                ast[i]->codec->channel_layout = AV_CH_LAYOUT_STEREO;
+                ast[i]->codecpar->channels       = 2;
+                ast[i]->codecpar->channel_layout = AV_CH_LAYOUT_STEREO;
             } else {
-                ast[i]->codec->channels       = 1;
-                ast[i]->codec->channel_layout = AV_CH_LAYOUT_MONO;
+                ast[i]->codecpar->channels       = 1;
+                ast[i]->codecpar->channel_layout = AV_CH_LAYOUT_MONO;
             }
-            ast[i]->codec->sample_rate = smk->rates[i];
-            ast[i]->codec->bits_per_coded_sample = (smk->aflags[i] & SMK_AUD_16BITS) ? 16 : 8;
-            if(ast[i]->codec->bits_per_coded_sample == 16 && ast[i]->codec->codec_id == AV_CODEC_ID_PCM_U8)
-                ast[i]->codec->codec_id = AV_CODEC_ID_PCM_S16LE;
-            avpriv_set_pts_info(ast[i], 64, 1, ast[i]->codec->sample_rate
-                    * ast[i]->codec->channels * ast[i]->codec->bits_per_coded_sample / 8);
+            ast[i]->codecpar->sample_rate = smk->rates[i];
+            ast[i]->codecpar->bits_per_coded_sample = (smk->aflags[i] & SMK_AUD_16BITS) ? 16 : 8;
+            if(ast[i]->codecpar->bits_per_coded_sample == 16 && ast[i]->codecpar->codec_id == AV_CODEC_ID_PCM_U8)
+                ast[i]->codecpar->codec_id = AV_CODEC_ID_PCM_S16LE;
+            avpriv_set_pts_info(ast[i], 64, 1, ast[i]->codecpar->sample_rate
+                    * ast[i]->codecpar->channels * ast[i]->codecpar->bits_per_coded_sample / 8);
         }
     }
 
 
     /* load trees to extradata, they will be unpacked by decoder */
-    st->codec->extradata = av_mallocz(smk->treesize + 16 +
-                                      FF_INPUT_BUFFER_PADDING_SIZE);
-    st->codec->extradata_size = smk->treesize + 16;
-    if(!st->codec->extradata){
+    st->codecpar->extradata = av_mallocz(smk->treesize + 16 +
+                                         AV_INPUT_BUFFER_PADDING_SIZE);
+    st->codecpar->extradata_size = smk->treesize + 16;
+    if (!st->codecpar->extradata) {
         av_log(s, AV_LOG_ERROR,
                "Cannot allocate %"PRIu32" bytes of extradata\n",
                smk->treesize + 16);
         av_free(smk->frm_size);
         av_free(smk->frm_flags);
-        return -1;
+        return AVERROR(ENOMEM);
     }
-    ret = avio_read(pb, st->codec->extradata + 16, st->codec->extradata_size - 16);
-    if(ret != st->codec->extradata_size - 16){
+    ret = avio_read(pb, st->codecpar->extradata + 16, st->codecpar->extradata_size - 16);
+    if(ret != st->codecpar->extradata_size - 16){
         av_free(smk->frm_size);
         av_free(smk->frm_flags);
         return AVERROR(EIO);
     }
-    ((int32_t*)st->codec->extradata)[0] = av_le2ne32(smk->mmap_size);
-    ((int32_t*)st->codec->extradata)[1] = av_le2ne32(smk->mclr_size);
-    ((int32_t*)st->codec->extradata)[2] = av_le2ne32(smk->full_size);
-    ((int32_t*)st->codec->extradata)[3] = av_le2ne32(smk->type_size);
+    ((int32_t*)st->codecpar->extradata)[0] = av_le2ne32(smk->mmap_size);
+    ((int32_t*)st->codecpar->extradata)[1] = av_le2ne32(smk->mclr_size);
+    ((int32_t*)st->codecpar->extradata)[2] = av_le2ne32(smk->full_size);
+    ((int32_t*)st->codecpar->extradata)[3] = av_le2ne32(smk->type_size);
 
     smk->curstream = -1;
     smk->nextpos = avio_tell(pb);

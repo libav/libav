@@ -37,6 +37,8 @@
 #include "config.h"
 #include "attributes.h"
 #include "dict.h"
+#include "macros.h"
+#include "mem.h"
 #include "pixfmt.h"
 
 #if ARCH_X86
@@ -53,12 +55,6 @@
 #else
 #    define attribute_align_arg
 #endif
-#endif
-
-#if defined(_MSC_VER) && CONFIG_SHARED
-#    define av_export __declspec(dllimport)
-#else
-#    define av_export
 #endif
 
 #if HAVE_PRAGMA_DEPRECATED
@@ -96,18 +92,24 @@
     DECLARE_ALIGNED(a, t, la_##v) s o;                  \
     t (*v) o = la_##v
 
-#define LOCAL_ALIGNED(a, t, v, ...) E1(LOCAL_ALIGNED_A(a, t, v, __VA_ARGS__,,))
+#define LOCAL_ALIGNED(a, t, v, ...) LOCAL_ALIGNED_##a(t, v, __VA_ARGS__)
 
 #if HAVE_LOCAL_ALIGNED_8
 #   define LOCAL_ALIGNED_8(t, v, ...) E1(LOCAL_ALIGNED_D(8, t, v, __VA_ARGS__,,))
 #else
-#   define LOCAL_ALIGNED_8(t, v, ...) LOCAL_ALIGNED(8, t, v, __VA_ARGS__)
+#   define LOCAL_ALIGNED_8(t, v, ...) E1(LOCAL_ALIGNED_A(8, t, v, __VA_ARGS__,,))
 #endif
 
 #if HAVE_LOCAL_ALIGNED_16
 #   define LOCAL_ALIGNED_16(t, v, ...) E1(LOCAL_ALIGNED_D(16, t, v, __VA_ARGS__,,))
 #else
-#   define LOCAL_ALIGNED_16(t, v, ...) LOCAL_ALIGNED(16, t, v, __VA_ARGS__)
+#   define LOCAL_ALIGNED_16(t, v, ...) E1(LOCAL_ALIGNED_A(16, t, v, __VA_ARGS__,,))
+#endif
+
+#if HAVE_LOCAL_ALIGNED_32
+#   define LOCAL_ALIGNED_32(t, v, ...) E1(LOCAL_ALIGNED_D(32, t, v, __VA_ARGS__,,))
+#else
+#   define LOCAL_ALIGNED_32(t, v, ...) E1(LOCAL_ALIGNED_A(32, t, v, __VA_ARGS__,,))
 #endif
 
 #define FF_ALLOC_OR_GOTO(ctx, p, size, label)\

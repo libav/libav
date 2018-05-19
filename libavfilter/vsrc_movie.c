@@ -35,7 +35,11 @@
 #include "libavutil/avstring.h"
 #include "libavutil/opt.h"
 #include "libavutil/imgutils.h"
+
+#include "libavcodec/avcodec.h"
+
 #include "libavformat/avformat.h"
+
 #include "avfilter.h"
 #include "formats.h"
 #include "internal.h"
@@ -77,15 +81,16 @@ static const char *movie_get_name(void *ctx)
 }
 
 static const AVClass movie_class = {
-    "MovieContext",
-    movie_get_name,
-    movie_options
+    .class_name = "MovieContext",
+    .item_name  = movie_get_name,
+    .option     = movie_options,
 };
 
 static av_cold int movie_init(AVFilterContext *ctx)
 {
     MovieContext *movie = ctx->priv;
     AVInputFormat *iformat = NULL;
+    AVStream *st;
     AVCodec *codec;
     int ret;
     int64_t timestamp;
@@ -132,17 +137,25 @@ static av_cold int movie_init(AVFilterContext *ctx)
         return ret;
     }
     movie->stream_index = ret;
-    movie->codec_ctx = movie->format_ctx->streams[movie->stream_index]->codec;
+    st = movie->format_ctx->streams[movie->stream_index];
 
     /*
      * So now we've got a pointer to the so-called codec context for our video
      * stream, but we still have to find the actual codec and open it.
      */
-    codec = avcodec_find_decoder(movie->codec_ctx->codec_id);
+    codec = avcodec_find_decoder(st->codecpar->codec_id);
     if (!codec) {
         av_log(ctx, AV_LOG_ERROR, "Failed to find any codec\n");
         return AVERROR(EINVAL);
     }
+
+    movie->codec_ctx = avcodec_alloc_context3(codec);
+    if (!movie->codec_ctx)
+        return AVERROR(ENOMEM);
+
+    ret = avcodec_parameters_to_context(movie->codec_ctx, st->codecpar);
+    if (ret < 0)
+        return ret;
 
     movie->codec_ctx->refcounted_frames = 1;
 
@@ -174,8 +187,7 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     MovieContext *movie = ctx->priv;
 
-    if (movie->codec_ctx)
-        avcodec_close(movie->codec_ctx);
+    avcodec_free_context(&movie->codec_ctx);
     if (movie->format_ctx)
         avformat_close_input(&movie->format_ctx);
     av_frame_free(&movie->frame);
@@ -220,8 +232,6 @@ static int movie_get_frame(AVFilterLink *outlink)
             avcodec_decode_video2(movie->codec_ctx, movie->frame, &frame_decoded, &pkt);
 
             if (frame_decoded) {
-                if (movie->frame->pkt_pts != AV_NOPTS_VALUE)
-                    movie->frame->pts = movie->frame->pkt_pts;
                 av_log(outlink->src, AV_LOG_TRACE,
                         "movie_get_frame(): file:'%s' pts:%"PRId64" time:%f aspect:%d/%d\n",
                         movie->file_name, movie->frame->pts,
@@ -230,13 +240,13 @@ static int movie_get_frame(AVFilterLink *outlink)
                         movie->frame->sample_aspect_ratio.num,
                         movie->frame->sample_aspect_ratio.den);
                 // We got it. Free the packet since we are returning
-                av_free_packet(&pkt);
+                av_packet_unref(&pkt);
 
                 return 0;
             }
         }
         // Free the packet that was allocated by av_read_frame
-        av_free_packet(&pkt);
+        av_packet_unref(&pkt);
     }
 
     // On multi-frame source we should stop the mixing process when

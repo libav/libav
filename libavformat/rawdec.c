@@ -42,14 +42,14 @@ int ff_raw_read_partial_packet(AVFormatContext *s, AVPacket *pkt)
 
     pkt->pos= avio_tell(s->pb);
     pkt->stream_index = 0;
-    ret = ffio_read_partial(s->pb, pkt->data, size);
+    ret = avio_read_partial(s->pb, pkt->data, size);
     if (ret < 0) {
-        av_free_packet(pkt);
+        av_packet_unref(pkt);
         return ret;
     } else if (ret < size) {
         /* initialize end of packet for partial reads to avoid reading
          * uninitialized data on allowed overreads */
-        memset(pkt->data + ret, 0, FF_INPUT_BUFFER_PADDING_SIZE);
+        memset(pkt->data + ret, 0, AV_INPUT_BUFFER_PADDING_SIZE);
     }
     pkt->size = ret;
     return ret;
@@ -60,8 +60,8 @@ int ff_raw_audio_read_header(AVFormatContext *s)
     AVStream *st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
-    st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
-    st->codec->codec_id = s->iformat->raw_codec_id;
+    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+    st->codecpar->codec_id = s->iformat->raw_codec_id;
     st->need_parsing = AVSTREAM_PARSE_FULL;
     st->start_time = 0;
     /* the parameters will be extracted from the compressed bitstream */
@@ -84,8 +84,8 @@ int ff_raw_video_read_header(AVFormatContext *s)
         goto fail;
     }
 
-    st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
-    st->codec->codec_id = s->iformat->raw_codec_id;
+    st->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
+    st->codecpar->codec_id = s->iformat->raw_codec_id;
     st->need_parsing = AVSTREAM_PARSE_FULL;
 
     if ((ret = av_parse_video_rate(&framerate, s1->framerate)) < 0) {

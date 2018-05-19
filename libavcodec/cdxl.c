@@ -21,8 +21,9 @@
 
 #include "libavutil/intreadwrite.h"
 #include "libavutil/imgutils.h"
+
 #include "avcodec.h"
-#include "get_bits.h"
+#include "bitstream.h"
 #include "internal.h"
 
 #define BIT_PLANAR   0x00
@@ -69,30 +70,30 @@ static void import_palette(CDXLVideoContext *c, uint32_t *new_palette)
 
 static void bitplanar2chunky(CDXLVideoContext *c, int linesize, uint8_t *out)
 {
-    GetBitContext gb;
+    BitstreamContext bc;
     int x, y, plane;
 
-    init_get_bits(&gb, c->video, c->video_size * 8);
+    bitstream_init8(&bc, c->video, c->video_size);
     for (plane = 0; plane < c->bpp; plane++) {
         for (y = 0; y < c->avctx->height; y++) {
             for (x = 0; x < c->avctx->width; x++)
-                out[linesize * y + x] |= get_bits1(&gb) << plane;
-            skip_bits(&gb, c->padded_bits);
+                out[linesize * y + x] |= bitstream_read_bit(&bc) << plane;
+            bitstream_skip(&bc, c->padded_bits);
         }
     }
 }
 
 static void bitline2chunky(CDXLVideoContext *c, int linesize, uint8_t *out)
 {
-    GetBitContext  gb;
+    BitstreamContext bc;
     int x, y, plane;
 
-    init_get_bits(&gb, c->video, c->video_size * 8);
+    bitstream_init8(&bc, c->video, c->video_size);
     for (y = 0; y < c->avctx->height; y++) {
         for (plane = 0; plane < c->bpp; plane++) {
             for (x = 0; x < c->avctx->width; x++)
-                out[linesize * y + x] |= get_bits1(&gb) << plane;
-            skip_bits(&gb, c->padded_bits);
+                out[linesize * y + x] |= bitstream_read_bit(&bc) << plane;
+            bitstream_skip(&bc, c->padded_bits);
         }
     }
 }
@@ -263,7 +264,7 @@ static int cdxl_decode_frame(AVCodecContext *avctx, void *data,
 
     if (encoding) {
         av_fast_padded_malloc(&c->new_video, &c->new_video_size,
-                              h * w + FF_INPUT_BUFFER_PADDING_SIZE);
+                              h * w + AV_INPUT_BUFFER_PADDING_SIZE);
         if (!c->new_video)
             return AVERROR(ENOMEM);
         if (c->bpp == 8)
@@ -296,5 +297,5 @@ AVCodec ff_cdxl_decoder = {
     .init           = cdxl_decode_init,
     .close          = cdxl_decode_end,
     .decode         = cdxl_decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
 };

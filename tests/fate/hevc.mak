@@ -144,7 +144,7 @@ HEVC_SAMPLES_10BIT =            \
 
 define FATE_HEVC_TEST
 FATE_HEVC += fate-hevc-conformance-$(1)
-fate-hevc-conformance-$(1): CMD = framecrc -vsync 0 -i $(TARGET_SAMPLES)/hevc-conformance/$(1).bit
+fate-hevc-conformance-$(1): CMD = framecrc -vsync 0 -i $(TARGET_SAMPLES)/hevc-conformance/$(1).bit -pix_fmt yuv420p
 endef
 
 define FATE_HEVC_TEST_10BIT
@@ -159,6 +159,11 @@ fate-hevc-paramchange-yuv420p-yuv420p10: CMD = framecrc -vsync 0 -i $(TARGET_SAM
 FATE_HEVC += fate-hevc-paramchange-yuv420p-yuv420p10
 
 FATE_HEVC-$(call DEMDEC, HEVC, HEVC) += $(FATE_HEVC)
+
+# this sample has two stsd entries and needs to reload extradata
+FATE_HEVC-$(call DEMDEC, MOV, HEVC) += fate-hevc-extradata-reload
+
+fate-hevc-extradata-reload: CMD = framemd5 -i $(TARGET_SAMPLES)/hevc/extradata-reload-multi-stsd.mov
 
 FATE_SAMPLES_AVCONV += $(FATE_HEVC-yes)
 

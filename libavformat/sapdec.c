@@ -39,6 +39,8 @@ struct SAPState {
     uint16_t hash;
     char *sdp;
     int eof;
+
+    const URLProtocol **protocols;
 };
 
 static int sap_probe(AVProbeData *p)
@@ -55,6 +57,7 @@ static int sap_read_close(AVFormatContext *s)
         avformat_close_input(&sap->sdp_ctx);
     if (sap->ann_fd)
         ffurl_close(sap->ann_fd);
+    av_freep(&sap->protocols);
     av_freep(&sap->sdp);
     ff_network_close();
     return 0;
@@ -82,10 +85,17 @@ static int sap_read_header(AVFormatContext *s)
         av_strlcpy(host, "224.2.127.254", sizeof(host));
     }
 
+    sap->protocols = ffurl_get_protocols(s->protocol_whitelist,
+                                         s->protocol_blacklist);
+    if (!sap->protocols) {
+        ret = AVERROR(ENOMEM);
+        goto fail;
+    }
+
     ff_url_join(url, sizeof(url), "udp", NULL, host, port, "?localport=%d",
                 port);
     ret = ffurl_open(&sap->ann_fd, url, AVIO_FLAG_READ,
-                     &s->interrupt_callback, NULL);
+                     &s->interrupt_callback, NULL, sap->protocols, NULL);
     if (ret)
         goto fail;
 
@@ -170,7 +180,7 @@ static int sap_read_header(AVFormatContext *s)
             goto fail;
         }
         st->id = i;
-        avcodec_copy_context(st->codec, sap->sdp_ctx->streams[i]->codec);
+        avcodec_parameters_copy(st->codecpar, sap->sdp_ctx->streams[i]->codecpar);
         st->time_base = sap->sdp_ctx->streams[i]->time_base;
     }
 
@@ -215,11 +225,11 @@ static int sap_fetch_packet(AVFormatContext *s, AVPacket *pkt)
             int i = s->nb_streams;
             AVStream *st = avformat_new_stream(s, NULL);
             if (!st) {
-                av_free_packet(pkt);
+                av_packet_unref(pkt);
                 return AVERROR(ENOMEM);
             }
             st->id = i;
-            avcodec_copy_context(st->codec, sap->sdp_ctx->streams[i]->codec);
+            avcodec_parameters_copy(st->codecpar, sap->sdp_ctx->streams[i]->codecpar);
             st->time_base = sap->sdp_ctx->streams[i]->time_base;
         }
     }

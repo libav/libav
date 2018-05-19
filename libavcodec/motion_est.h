@@ -30,6 +30,11 @@
 struct MpegEncContext;
 
 #define MAX_MV 2048
+#define ME_MAP_SIZE 64
+
+#define FF_ME_ZERO 0
+#define FF_ME_EPZS 1
+#define FF_ME_XONE 2
 
 /**
  * Motion estimation context.

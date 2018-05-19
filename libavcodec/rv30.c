@@ -25,9 +25,9 @@
  */
 
 #include "avcodec.h"
+#include "golomb_legacy.h"
 #include "mpegutils.h"
 #include "mpegvideo.h"
-#include "golomb.h"
 
 #include "rv34.h"
 #include "rv30data.h"
@@ -81,7 +81,7 @@ static int rv30_decode_intra_types(RV34DecContext *r, GetBitContext *gb, int8_t 
 
     for(i = 0; i < 4; i++, dst += r->intra_types_stride - 4){
         for(j = 0; j < 4; j+= 2){
-            unsigned code = svq3_get_ue_golomb(gb) << 1;
+            unsigned code = get_interleaved_ue_golomb(gb) << 1;
             if(code >= 81*2){
                 av_log(r->s.avctx, AV_LOG_ERROR, "Incorrect intra prediction code\n");
                 return -1;
@@ -109,7 +109,7 @@ static int rv30_decode_mb_info(RV34DecContext *r)
     static const int rv30_b_types[6] = { RV34_MB_SKIP, RV34_MB_B_DIRECT, RV34_MB_B_FORWARD, RV34_MB_B_BACKWARD, RV34_MB_TYPE_INTRA, RV34_MB_TYPE_INTRA16x16 };
     MpegEncContext *s = &r->s;
     GetBitContext *gb = &s->gb;
-    unsigned code     = svq3_get_ue_golomb(gb);
+    unsigned code = get_interleaved_ue_golomb(gb);
 
     if (code > 11) {
         av_log(s->avctx, AV_LOG_ERROR, "Incorrect MB type code\n");
@@ -282,8 +282,8 @@ AVCodec ff_rv30_decoder = {
     .init                  = rv30_decode_init,
     .close                 = ff_rv34_decode_end,
     .decode                = ff_rv34_decode_frame,
-    .capabilities          = CODEC_CAP_DR1 | CODEC_CAP_DELAY |
-                             CODEC_CAP_FRAME_THREADS,
+    .capabilities          = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY |
+                             AV_CODEC_CAP_FRAME_THREADS,
     .flush                 = ff_mpeg_flush,
     .pix_fmts              = (const enum AVPixelFormat[]) {
         AV_PIX_FMT_YUV420P,

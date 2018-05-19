@@ -1,6 +1,6 @@
 /*
  * id Quake II CIN Video Decoder
- * Copyright (C) 2003 the ffmpeg project
+ * Copyright (C) 2003 The FFmpeg project
  *
  * This file is part of Libav.
  *
@@ -247,5 +247,5 @@ AVCodec ff_idcin_decoder = {
     .priv_data_size = sizeof(IdcinContext),
     .init           = idcin_decode_init,
     .decode         = idcin_decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
 };

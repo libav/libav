@@ -496,6 +496,44 @@ static void nv21ToUV_c(uint8_t *dstU, uint8_t *dstV,
     nvXXtoUV_c(dstV, dstU, src1, width);
 }
 
+static void p010LEToY_c(uint8_t *dst, const uint8_t *src, int width, uint32_t *unused)
+{
+    int i;
+    for (i = 0; i < width; i++) {
+        AV_WN16(dst + i * 2, AV_RL16(src + i * 2) >> 6);
+    }
+}
+
+static void p010BEToY_c(uint8_t *dst, const uint8_t *src, int width, uint32_t *unused)
+{
+    int i;
+    for (i = 0; i < width; i++) {
+        AV_WN16(dst + i * 2, AV_RB16(src + i * 2) >> 6);
+    }
+}
+
+static void p010LEToUV_c(uint8_t *dstU, uint8_t *dstV,
+                         const uint8_t *src1, const uint8_t *src2,
+                         int width, uint32_t *unused)
+{
+    int i;
+    for (i = 0; i < width; i++) {
+        AV_WN16(dstU + i * 2, AV_RL16(src1 + i * 4 + 0) >> 6);
+        AV_WN16(dstV + i * 2, AV_RL16(src1 + i * 4 + 2) >> 6);
+    }
+}
+
+static void p010BEToUV_c(uint8_t *dstU, uint8_t *dstV,
+                         const uint8_t *src1, const uint8_t *src2,
+                         int width, uint32_t *unused)
+{
+    int i;
+    for (i = 0; i < width; i++) {
+        AV_WN16(dstU + i * 2, AV_RB16(src1 + i * 4 + 0) >> 6);
+        AV_WN16(dstV + i * 2, AV_RB16(src1 + i * 4 + 2) >> 6);
+    }
+}
+
 #define input_pixel(pos) (isBE(origin) ? AV_RB16(pos) : AV_RL16(pos))
 
 static void bgr24ToY_c(uint8_t *dst, const uint8_t *src,
@@ -633,6 +671,19 @@ static av_always_inline void planar_rgb16_to_y(uint8_t *_dst, const uint8_t *_sr
     }
 }
 
+static av_always_inline void planar_rgb16_to_a(uint8_t *_dst, const uint8_t *_src[4],
+                                               int width, int bpc, int is_be)
+{
+    int i;
+    const uint16_t **src = (const uint16_t **)_src;
+    uint16_t *dst        = (uint16_t *)_dst;
+    int shift = bpc < 15 ? bpc : 14;
+
+    for (i = 0; i < width; i++) {
+        dst[i] = rdpx(src[3] + i) << (14 - shift);
+    }
+}
+
 static void planar_rgb9le_to_y(uint8_t *dst, const uint8_t *src[4], int w)
 {
     planar_rgb16_to_y(dst, src, w, 9, 0);
@@ -648,9 +699,39 @@ static void planar_rgb10le_to_y(uint8_t *dst, const uint8_t *src[4], int w)
     planar_rgb16_to_y(dst, src, w, 10, 0);
 }
 
+static void planar_rgb10le_to_a(uint8_t *dst, const uint8_t *src[4], int w)
+{
+    planar_rgb16_to_a(dst, src, w, 10, 0);
+}
+
 static void planar_rgb10be_to_y(uint8_t *dst, const uint8_t *src[4], int w)
 {
     planar_rgb16_to_y(dst, src, w, 10, 1);
+}
+
+static void planar_rgb10be_to_a(uint8_t *dst, const uint8_t *src[4], int w)
+{
+    planar_rgb16_to_a(dst, src, w, 10, 1);
+}
+
+static void planar_rgb12le_to_y(uint8_t *dst, const uint8_t *src[4], int w)
+{
+    planar_rgb16_to_y(dst, src, w, 12, 0);
+}
+
+static void planar_rgb12le_to_a(uint8_t *dst, const uint8_t *src[4], int w)
+{
+    planar_rgb16_to_a(dst, src, w, 12, 0);
+}
+
+static void planar_rgb12be_to_y(uint8_t *dst, const uint8_t *src[4], int w)
+{
+    planar_rgb16_to_y(dst, src, w, 12, 1);
+}
+
+static void planar_rgb12be_to_a(uint8_t *dst, const uint8_t *src[4], int w)
+{
+    planar_rgb16_to_a(dst, src, w, 12, 1);
 }
 
 static void planar_rgb16le_to_y(uint8_t *dst, const uint8_t *src[4], int w)
@@ -658,9 +739,19 @@ static void planar_rgb16le_to_y(uint8_t *dst, const uint8_t *src[4], int w)
     planar_rgb16_to_y(dst, src, w, 16, 0);
 }
 
+static void planar_rgb16le_to_a(uint8_t *dst, const uint8_t *src[4], int w)
+{
+    planar_rgb16_to_a(dst, src, w, 16, 0);
+}
+
 static void planar_rgb16be_to_y(uint8_t *dst, const uint8_t *src[4], int w)
 {
     planar_rgb16_to_y(dst, src, w, 16, 1);
+}
+
+static void planar_rgb16be_to_a(uint8_t *dst, const uint8_t *src[4], int w)
+{
+    planar_rgb16_to_a(dst, src, w, 16, 1);
 }
 
 static av_always_inline void planar_rgb16_to_uv(uint8_t *_dstU, uint8_t *_dstV,
@@ -706,6 +797,18 @@ static void planar_rgb10be_to_uv(uint8_t *dstU, uint8_t *dstV,
     planar_rgb16_to_uv(dstU, dstV, src, w, 10, 1);
 }
 
+static void planar_rgb12le_to_uv(uint8_t *dstU, uint8_t *dstV,
+                                 const uint8_t *src[4], int w)
+{
+    planar_rgb16_to_uv(dstU, dstV, src, w, 12, 0);
+}
+
+static void planar_rgb12be_to_uv(uint8_t *dstU, uint8_t *dstV,
+                                 const uint8_t *src[4], int w)
+{
+    planar_rgb16_to_uv(dstU, dstV, src, w, 12, 1);
+}
+
 static void planar_rgb16le_to_uv(uint8_t *dstU, uint8_t *dstV,
                                  const uint8_t *src[4], int w)
 {
@@ -749,8 +852,13 @@ av_cold void ff_sws_init_input_funcs(SwsContext *c)
     case AV_PIX_FMT_GBRP9LE:
         c->readChrPlanar = planar_rgb9le_to_uv;
         break;
+    case AV_PIX_FMT_GBRAP10LE:
     case AV_PIX_FMT_GBRP10LE:
         c->readChrPlanar = planar_rgb10le_to_uv;
+        break;
+    case AV_PIX_FMT_GBRAP12LE:
+    case AV_PIX_FMT_GBRP12LE:
+        c->readChrPlanar = planar_rgb12le_to_uv;
         break;
     case AV_PIX_FMT_GBRAP16LE:
     case AV_PIX_FMT_GBRP16LE:
@@ -759,8 +867,13 @@ av_cold void ff_sws_init_input_funcs(SwsContext *c)
     case AV_PIX_FMT_GBRP9BE:
         c->readChrPlanar = planar_rgb9be_to_uv;
         break;
+    case AV_PIX_FMT_GBRAP10BE:
     case AV_PIX_FMT_GBRP10BE:
         c->readChrPlanar = planar_rgb10be_to_uv;
+        break;
+    case AV_PIX_FMT_GBRAP12BE:
+    case AV_PIX_FMT_GBRP12BE:
+        c->readChrPlanar = planar_rgb12be_to_uv;
         break;
     case AV_PIX_FMT_GBRAP16BE:
     case AV_PIX_FMT_GBRP16BE:
@@ -771,48 +884,60 @@ av_cold void ff_sws_init_input_funcs(SwsContext *c)
         c->readChrPlanar = planar_rgb_to_uv;
         break;
 #if HAVE_BIGENDIAN
-    case AV_PIX_FMT_YUV444P9LE:
-    case AV_PIX_FMT_YUV422P9LE:
     case AV_PIX_FMT_YUV420P9LE:
+    case AV_PIX_FMT_YUV422P9LE:
+    case AV_PIX_FMT_YUV444P9LE:
+    case AV_PIX_FMT_YUV420P10LE:
     case AV_PIX_FMT_YUV422P10LE:
     case AV_PIX_FMT_YUV444P10LE:
-    case AV_PIX_FMT_YUV420P10LE:
+    case AV_PIX_FMT_YUV420P12LE:
+    case AV_PIX_FMT_YUV422P12LE:
+    case AV_PIX_FMT_YUV444P12LE:
     case AV_PIX_FMT_YUV420P16LE:
     case AV_PIX_FMT_YUV422P16LE:
     case AV_PIX_FMT_YUV444P16LE:
-    case AV_PIX_FMT_YUVA444P9LE:
-    case AV_PIX_FMT_YUVA422P9LE:
     case AV_PIX_FMT_YUVA420P9LE:
+    case AV_PIX_FMT_YUVA422P9LE:
+    case AV_PIX_FMT_YUVA444P9LE:
+    case AV_PIX_FMT_YUVA420P10LE:
     case AV_PIX_FMT_YUVA422P10LE:
     case AV_PIX_FMT_YUVA444P10LE:
-    case AV_PIX_FMT_YUVA420P10LE:
     case AV_PIX_FMT_YUVA420P16LE:
     case AV_PIX_FMT_YUVA422P16LE:
     case AV_PIX_FMT_YUVA444P16LE:
         c->chrToYV12 = bswap16UV_c;
         break;
 #else
-    case AV_PIX_FMT_YUV444P9BE:
-    case AV_PIX_FMT_YUV422P9BE:
     case AV_PIX_FMT_YUV420P9BE:
-    case AV_PIX_FMT_YUV444P10BE:
-    case AV_PIX_FMT_YUV422P10BE:
+    case AV_PIX_FMT_YUV422P9BE:
+    case AV_PIX_FMT_YUV444P9BE:
     case AV_PIX_FMT_YUV420P10BE:
+    case AV_PIX_FMT_YUV422P10BE:
+    case AV_PIX_FMT_YUV444P10BE:
+    case AV_PIX_FMT_YUV420P12BE:
+    case AV_PIX_FMT_YUV422P12BE:
+    case AV_PIX_FMT_YUV444P12BE:
     case AV_PIX_FMT_YUV420P16BE:
     case AV_PIX_FMT_YUV422P16BE:
     case AV_PIX_FMT_YUV444P16BE:
-    case AV_PIX_FMT_YUVA444P9BE:
-    case AV_PIX_FMT_YUVA422P9BE:
     case AV_PIX_FMT_YUVA420P9BE:
+    case AV_PIX_FMT_YUVA422P9BE:
+    case AV_PIX_FMT_YUVA444P9BE:
+    case AV_PIX_FMT_YUVA420P10BE:
     case AV_PIX_FMT_YUVA422P10BE:
     case AV_PIX_FMT_YUVA444P10BE:
-    case AV_PIX_FMT_YUVA420P10BE:
     case AV_PIX_FMT_YUVA420P16BE:
     case AV_PIX_FMT_YUVA422P16BE:
     case AV_PIX_FMT_YUVA444P16BE:
         c->chrToYV12 = bswap16UV_c;
         break;
 #endif
+    case AV_PIX_FMT_P010LE:
+        c->chrToYV12 = p010LEToUV_c;
+        break;
+    case AV_PIX_FMT_P010BE:
+        c->chrToYV12 = p010BEToUV_c;
+        break;
     }
     if (c->chrSrcHSubSample) {
         switch (srcFormat) {
@@ -960,20 +1085,36 @@ av_cold void ff_sws_init_input_funcs(SwsContext *c)
     case AV_PIX_FMT_GBRP9LE:
         c->readLumPlanar = planar_rgb9le_to_y;
         break;
+    case AV_PIX_FMT_GBRAP10LE:
+        c->readAlpPlanar = planar_rgb10le_to_a;
     case AV_PIX_FMT_GBRP10LE:
         c->readLumPlanar = planar_rgb10le_to_y;
         break;
+    case AV_PIX_FMT_GBRAP12LE:
+        c->readAlpPlanar = planar_rgb12le_to_a;
+    case AV_PIX_FMT_GBRP12LE:
+        c->readLumPlanar = planar_rgb12le_to_y;
+        break;
     case AV_PIX_FMT_GBRAP16LE:
+        c->readAlpPlanar = planar_rgb16le_to_a;
     case AV_PIX_FMT_GBRP16LE:
         c->readLumPlanar = planar_rgb16le_to_y;
         break;
     case AV_PIX_FMT_GBRP9BE:
         c->readLumPlanar = planar_rgb9be_to_y;
         break;
+    case AV_PIX_FMT_GBRAP10BE:
+        c->readAlpPlanar = planar_rgb10be_to_a;
     case AV_PIX_FMT_GBRP10BE:
         c->readLumPlanar = planar_rgb10be_to_y;
         break;
+    case AV_PIX_FMT_GBRAP12BE:
+        c->readAlpPlanar = planar_rgb12be_to_a;
+    case AV_PIX_FMT_GBRP12BE:
+        c->readLumPlanar = planar_rgb12be_to_y;
+        break;
     case AV_PIX_FMT_GBRAP16BE:
+        c->readAlpPlanar = planar_rgb16be_to_a;
     case AV_PIX_FMT_GBRP16BE:
         c->readLumPlanar = planar_rgb16be_to_y;
         break;
@@ -983,24 +1124,28 @@ av_cold void ff_sws_init_input_funcs(SwsContext *c)
         c->readLumPlanar = planar_rgb_to_y;
         break;
 #if HAVE_BIGENDIAN
-    case AV_PIX_FMT_YUV444P9LE:
-    case AV_PIX_FMT_YUV422P9LE:
     case AV_PIX_FMT_YUV420P9LE:
-    case AV_PIX_FMT_YUV444P10LE:
-    case AV_PIX_FMT_YUV422P10LE:
+    case AV_PIX_FMT_YUV422P9LE:
+    case AV_PIX_FMT_YUV444P9LE:
     case AV_PIX_FMT_YUV420P10LE:
+    case AV_PIX_FMT_YUV422P10LE:
+    case AV_PIX_FMT_YUV444P10LE:
+    case AV_PIX_FMT_YUV420P12LE:
+    case AV_PIX_FMT_YUV422P12LE:
+    case AV_PIX_FMT_YUV444P12LE:
     case AV_PIX_FMT_YUV420P16LE:
     case AV_PIX_FMT_YUV422P16LE:
     case AV_PIX_FMT_YUV444P16LE:
+    case AV_PIX_FMT_GRAY12LE:
     case AV_PIX_FMT_GRAY16LE:
         c->lumToYV12 = bswap16Y_c;
         break;
-    case AV_PIX_FMT_YUVA444P9LE:
-    case AV_PIX_FMT_YUVA422P9LE:
     case AV_PIX_FMT_YUVA420P9LE:
-    case AV_PIX_FMT_YUVA444P10LE:
-    case AV_PIX_FMT_YUVA422P10LE:
+    case AV_PIX_FMT_YUVA422P9LE:
+    case AV_PIX_FMT_YUVA444P9LE:
     case AV_PIX_FMT_YUVA420P10LE:
+    case AV_PIX_FMT_YUVA422P10LE:
+    case AV_PIX_FMT_YUVA444P10LE:
     case AV_PIX_FMT_YUVA420P16LE:
     case AV_PIX_FMT_YUVA422P16LE:
     case AV_PIX_FMT_YUVA444P16LE:
@@ -1008,24 +1153,28 @@ av_cold void ff_sws_init_input_funcs(SwsContext *c)
         c->alpToYV12 = bswap16Y_c;
         break;
 #else
-    case AV_PIX_FMT_YUV444P9BE:
-    case AV_PIX_FMT_YUV422P9BE:
     case AV_PIX_FMT_YUV420P9BE:
-    case AV_PIX_FMT_YUV444P10BE:
-    case AV_PIX_FMT_YUV422P10BE:
+    case AV_PIX_FMT_YUV422P9BE:
+    case AV_PIX_FMT_YUV444P9BE:
     case AV_PIX_FMT_YUV420P10BE:
+    case AV_PIX_FMT_YUV422P10BE:
+    case AV_PIX_FMT_YUV444P10BE:
+    case AV_PIX_FMT_YUV420P12BE:
+    case AV_PIX_FMT_YUV422P12BE:
+    case AV_PIX_FMT_YUV444P12BE:
     case AV_PIX_FMT_YUV420P16BE:
     case AV_PIX_FMT_YUV422P16BE:
     case AV_PIX_FMT_YUV444P16BE:
+    case AV_PIX_FMT_GRAY12BE:
     case AV_PIX_FMT_GRAY16BE:
         c->lumToYV12 = bswap16Y_c;
         break;
-    case AV_PIX_FMT_YUVA444P9BE:
-    case AV_PIX_FMT_YUVA422P9BE:
     case AV_PIX_FMT_YUVA420P9BE:
-    case AV_PIX_FMT_YUVA444P10BE:
-    case AV_PIX_FMT_YUVA422P10BE:
+    case AV_PIX_FMT_YUVA422P9BE:
+    case AV_PIX_FMT_YUVA444P9BE:
     case AV_PIX_FMT_YUVA420P10BE:
+    case AV_PIX_FMT_YUVA422P10BE:
+    case AV_PIX_FMT_YUVA444P10BE:
     case AV_PIX_FMT_YUVA420P16BE:
     case AV_PIX_FMT_YUVA422P16BE:
     case AV_PIX_FMT_YUVA444P16BE:
@@ -1127,6 +1276,12 @@ av_cold void ff_sws_init_input_funcs(SwsContext *c)
         break;
     case AV_PIX_FMT_BGR48LE:
         c->lumToYV12 = bgr48LEToY_c;
+        break;
+    case AV_PIX_FMT_P010LE:
+        c->lumToYV12 = p010LEToY_c;
+        break;
+    case AV_PIX_FMT_P010BE:
+        c->lumToYV12 = p010BEToY_c;
         break;
     }
     if (c->alpPixBuf) {

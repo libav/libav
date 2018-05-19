@@ -42,6 +42,7 @@
 #include "ac3dsp.h"
 #include "ac3.h"
 #include "fft.h"
+#include "internal.h"
 #include "ac3enc.h"
 #include "eac3enc.h"
 
@@ -1675,9 +1676,9 @@ void ff_ac3_output_frame(AC3EncodeContext *s, unsigned char *frame)
 }
 
 
+#ifdef DEBUG
 static void dprint_options(AC3EncodeContext *s)
 {
-#ifdef DEBUG
     AVCodecContext *avctx = s->avctx;
     AC3EncOptions *opt = &s->options;
     char strbuf[32];
@@ -1786,8 +1787,10 @@ static void dprint_options(AC3EncodeContext *s)
             ff_dlog(avctx, "extended bitstream info 2: {not written}\n");
         }
     }
-#endif
 }
+#else
+#define dprint_options(x) do {} while(0)
+#endif
 
 
 #define FLT_OPTION_THRESHOLD 0.01
@@ -2484,7 +2487,7 @@ av_cold int ff_ac3_encode_init(AVCodecContext *avctx)
 
     ff_audiodsp_init(&s->adsp);
     ff_me_cmp_init(&s->mecc, avctx);
-    ff_ac3dsp_init(&s->ac3dsp, avctx->flags & CODEC_FLAG_BITEXACT);
+    ff_ac3dsp_init(&s->ac3dsp, avctx->flags & AV_CODEC_FLAG_BITEXACT);
 
     dprint_options(s);
 

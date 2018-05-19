@@ -38,7 +38,7 @@ always faster, just that one or the other may be better suited to a
 particular system. The floating-point encoder will generally produce better
 quality audio for a given bitrate. The @var{ac3_fixed} encoder is not the
 default codec for any of the output formats, so it must be specified explicitly
-using the option @code{-acodec ac3_fixed} in order to use it.
+using the option @code{-c:a ac3_fixed} in order to use it.
 
 @subsection AC-3 Metadata
 
@@ -603,8 +603,6 @@ options follow the Libav ones.
 @tab Noise reduction.
 @item me_range          @tab merange
 @tab Maximum range of the motion search in pixels.
-@item me_method         @tab me
-@tab Full-pixel motion estimation method.
 @item subq              @tab subme
 @tab Sub-pixel motion estimation method.
 @item b_strategy        @tab b-adapt
@@ -805,8 +803,8 @@ Use @var{0} to disable alpha plane coding.
 @subsection Speed considerations
 
 In the default mode of operation the encoder has to honor frame constraints
-(i.e. not produc frames with size bigger than requested) while still making
-output picture as good as possible.
+(i.e. not produce frames with a size larger than requested) while still making
+the output picture as good as possible.
 A frame containing a lot of small details is harder to compress and the encoder
 would spend more time searching for appropriate quantizers for each slice.
 
@@ -814,5 +812,213 @@ Setting a higher @option{bits_per_mb} limit will improve the speed.
 
 For the fastest encoding speed set the @option{qscale} parameter (4 is the
 recommended value) and do not set a size constraint.
+
+@section libkvazaar
+
+Kvazaar H.265/HEVC encoder.
+
+Requires the presence of the libkvazaar headers and library during
+configuration. You need to explicitly configure the build with
+@option{--enable-libkvazaar}.
+
+@subsection Options
+
+@table @option
+
+@item b
+Set target video bitrate in bit/s and enable rate control.
+
+@item kvazaar-params
+Set kvazaar parameters as a list of @var{name}=@var{value} pairs separated
+by commas (,). See kvazaar documentation for a list of options.
+
+@end table
+
+@section QSV encoders
+
+The family of Intel QuickSync Video encoders (MPEG-2, H.264 and HEVC)
+
+The ratecontrol method is selected as follows:
+
+@itemize @bullet
+@item
+When @option{global_quality} is specified, a quality-based mode is used.
+Specifically this means either
+@itemize @minus
+@item
+@var{CQP} - constant quantizer scale, when the @option{qscale} codec flag is
+also set (the @option{-qscale} avconv option).
+
+@item
+@var{LA_ICQ} - intelligent constant quality with lookahead, when the
+@option{la_depth} option is also set.
+
+@item
+@var{ICQ} -- intelligent constant quality otherwise.
+@end itemize
+
+@item
+Otherwise, a bitrate-based mode is used. For all of those, you should specify at
+least the desired average bitrate with the @option{b} option.
+@itemize @minus
+@item
+@var{LA} - VBR with lookahead, when the @option{la_depth} option is specified.
+
+@item
+@var{VCM} - video conferencing mode, when the @option{vcm} option is set.
+
+@item
+@var{CBR} - constant bitrate, when @option{maxrate} is specified and equal to
+the average bitrate.
+
+@item
+@var{VBR} - variable bitrate, when @option{maxrate} is specified, but is higher
+than the average bitrate.
+
+@item
+@var{AVBR} - average VBR mode, when @option{maxrate} is not specified. This mode
+is further configured by the @option{avbr_accuracy} and
+@option{avbr_convergence} options.
+@end itemize
+@end itemize
+
+Note that depending on your system, a different mode than the one you specified
+may be selected by the encoder. Set the verbosity level to @var{verbose} or
+higher to see the actual settings used by the QSV runtime.
+
+Additional libavcodec global options are mapped to MSDK options as follows:
+
+@itemize
+@item
+@option{g/gop_size} -> @option{GopPicSize}
+
+@item
+@option{bf/max_b_frames}+1 -> @option{GopRefDist}
+
+@item
+@option{rc_init_occupancy/rc_initial_buffer_occupancy} ->
+@option{InitialDelayInKB}
+
+@item
+@option{slices} -> @option{NumSlice}
+
+@item
+@option{refs} -> @option{NumRefFrame}
+
+@item
+@option{b_strategy/b_frame_strategy} -> @option{BRefType}
+
+@item
+@option{cgop/CLOSED_GOP} codec flag -> @option{GopOptFlag}
+
+@item
+For the @var{CQP} mode, the @option{i_qfactor/i_qoffset} and
+@option{b_qfactor/b_qoffset} set the difference between @var{QPP} and @var{QPI},
+and @var{QPP} and @var{QPB} respectively.
+
+@item
+Setting the @option{coder} option to the value @var{vlc} will make the H.264
+encoder use CAVLC instead of CABAC.
+
+@end itemize
+
+@section VAAPI encoders
+
+Wrappers for hardware encoders accessible via VAAPI.
+
+These encoders only accept input in VAAPI hardware surfaces.  If you have input
+in software frames, use the @option{hwupload} filter to upload them to the GPU.
+
+The following standard libavcodec options are used:
+@itemize
+@item
+@option{g} / @option{gop_size}
+@item
+@option{bf} / @option{max_b_frames}
+@item
+@option{profile}
+@item
+@option{level}
+@item
+@option{b} / @option{bit_rate}
+@item
+@option{maxrate} / @option{rc_max_rate}
+@item
+@option{bufsize} / @option{rc_buffer_size}
+@item
+@option{rc_init_occupancy} / @option{rc_initial_buffer_occupancy}
+@item
+@option{compression_level}
+
+Speed / quality tradeoff: higher values are faster / worse quality.
+@item
+@option{q} / @option{global_quality}
+
+Size / quality tradeoff: higher values are smaller / worse quality.
+@item
+@option{qmin}
+(only: @option{qmax} is not supported)
+@item
+@option{i_qfactor} / @option{i_quant_factor}
+@item
+@option{i_qoffset} / @option{i_quant_offset}
+@item
+@option{b_qfactor} / @option{b_quant_factor}
+@item
+@option{b_qoffset} / @option{b_quant_offset}
+@end itemize
+
+@table @option
+
+@item vaapi_h264
+@option{profile} sets the value of @emph{profile_idc} and the @emph{constraint_set*_flag}s.
+@option{level} sets the value of @emph{level_idc}.
+
+@table @option
+@item low_power
+Use low-power encoding mode.
+@end table
+
+@item vaapi_hevc
+@option{profile} and @option{level} set the values of
+@emph{general_profile_idc} and @emph{general_level_idc} respectively.
+
+@item vaapi_mjpeg
+Always encodes using the standard quantisation and huffman tables -
+@option{global_quality} scales the standard quantisation table (range 1-100).
+
+@item vaapi_mpeg2
+@option{profile} and @option{level} set the value of @emph{profile_and_level_indication}.
+
+No rate control is supported.
+
+@item vaapi_vp8
+B-frames are not supported.
+
+@option{global_quality} sets the @emph{q_idx} used for non-key frames (range 0-127).
+
+@table @option
+@item loop_filter_level
+@item loop_filter_sharpness
+Manually set the loop filter parameters.
+@end table
+
+@item vaapi_vp9
+@option{global_quality} sets the @emph{q_idx} used for P-frames (range 0-255).
+
+@table @option
+@item loop_filter_level
+@item loop_filter_sharpness
+Manually set the loop filter parameters.
+@end table
+
+B-frames are supported, but the output stream is always in encode order rather than display
+order.  If B-frames are enabled, it may be necessary to use the @option{vp9_raw_reorder}
+bitstream filter to modify the output stream to display frames in the correct order.
+
+Only normal frames are produced - the @option{vp9_superframe} bitstream filter may be
+required to produce a stream usable with all decoders.
+
+@end table
 
 @c man end VIDEO ENCODERS

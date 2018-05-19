@@ -54,16 +54,18 @@ typedef struct ZmbvEncContext {
     int comp_size;
     int keyint, curfrm;
     z_stream zstream;
+
+    int score_tab[256];
 } ZmbvEncContext;
 
-static int score_tab[256];
 
 /** Block comparing function
  * XXX should be optimized and moved to DSPContext
  * TODO handle out of edge ME
  */
-static inline int block_cmp(uint8_t *src, int stride, uint8_t *src2, int stride2,
-                            int bw, int bh, int *xored)
+static inline int block_cmp(ZmbvEncContext *c, uint8_t *src, int stride,
+                            uint8_t *src2, int stride2, int bw, int bh,
+                            int *xored)
 {
     int sum = 0;
     int i, j;
@@ -81,7 +83,7 @@ static inline int block_cmp(uint8_t *src, int stride, uint8_t *src2, int stride2
     }
 
     for(i = 1; i < 256; i++)
-        sum += score_tab[histogram[i]];
+        sum += c->score_tab[histogram[i]];
 
     return sum;
 }
@@ -97,14 +99,14 @@ static int zmbv_me(ZmbvEncContext *c, uint8_t *src, int sstride, uint8_t *prev,
     *mx = *my = 0;
     bw = FFMIN(ZMBV_BLOCK, c->avctx->width - x);
     bh = FFMIN(ZMBV_BLOCK, c->avctx->height - y);
-    bv = block_cmp(src, sstride, prev, pstride, bw, bh, xored);
+    bv = block_cmp(c, src, sstride, prev, pstride, bw, bh, xored);
     if(!bv) return 0;
     for(ty = FFMAX(y - c->range, 0); ty < FFMIN(y + c->range, c->avctx->height - bh); ty++){
         for(tx = FFMAX(x - c->range, 0); tx < FFMIN(x + c->range, c->avctx->width - bw); tx++){
             if(tx == x && ty == y) continue; // we already tested this block
             dx = tx - x;
             dy = ty - y;
-            tv = block_cmp(src, sstride, prev + dx + dy*pstride, pstride, bw, bh, xored);
+            tv = block_cmp(c, src, sstride, prev + dx + dy * pstride, pstride, bw, bh, xored);
             if(tv < bv){
                  bv = tv;
                  *mx = dx;
@@ -133,8 +135,12 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     c->curfrm++;
     if(c->curfrm == c->keyint)
         c->curfrm = 0;
+#if FF_API_CODED_FRAME
+FF_DISABLE_DEPRECATION_WARNINGS
     avctx->coded_frame->pict_type = keyframe ? AV_PICTURE_TYPE_I : AV_PICTURE_TYPE_P;
     avctx->coded_frame->key_frame = keyframe;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
     chpal = !keyframe && memcmp(p->data[1], c->pal2, 1024);
 
     palptr = (uint32_t*)p->data[1];
@@ -261,8 +267,6 @@ static av_cold int encode_end(AVCodecContext *avctx)
     deflateEnd(&c->zstream);
     av_freep(&c->prev);
 
-    av_frame_free(&avctx->coded_frame);
-
     return 0;
 }
 
@@ -277,7 +281,7 @@ static av_cold int encode_init(AVCodecContext *avctx)
     int lvl = 9;
 
     for(i=1; i<256; i++)
-        score_tab[i]= -i * log(i/(double)(ZMBV_BLOCK*ZMBV_BLOCK)) * (256/M_LN2);
+        c->score_tab[i] = -i * log(i / (double)(ZMBV_BLOCK * ZMBV_BLOCK)) * (256 / M_LN2);
 
     c->avctx = avctx;
 
@@ -324,12 +328,6 @@ static av_cold int encode_init(AVCodecContext *avctx)
     if (zret != Z_OK) {
         av_log(avctx, AV_LOG_ERROR, "Inflate init error: %d\n", zret);
         return -1;
-    }
-
-    avctx->coded_frame = av_frame_alloc();
-    if (!avctx->coded_frame) {
-        encode_end(avctx);
-        return AVERROR(ENOMEM);
     }
 
     return 0;

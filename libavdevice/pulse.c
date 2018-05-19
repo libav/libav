@@ -107,10 +107,10 @@ static av_cold int pulse_read_header(AVFormatContext *s)
         return AVERROR(EIO);
     }
     /* take real parameters */
-    st->codec->codec_type  = AVMEDIA_TYPE_AUDIO;
-    st->codec->codec_id    = codec_id;
-    st->codec->sample_rate = pd->sample_rate;
-    st->codec->channels    = pd->channels;
+    st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
+    st->codecpar->codec_id    = codec_id;
+    st->codecpar->sample_rate = pd->sample_rate;
+    st->codecpar->channels    = pd->channels;
     avpriv_set_pts_info(st, 64, 1, 1000000);  /* 64 bits pts in us */
 
     pd->pts = AV_NOPTS_VALUE;
@@ -133,7 +133,7 @@ static int pulse_read_packet(AVFormatContext *s, AVPacket *pkt)
     if ((pa_simple_read(pd->s, pkt->data, pkt->size, &res)) < 0) {
         av_log(s, AV_LOG_ERROR, "pa_simple_read failed: %s\n",
                pa_strerror(res));
-        av_free_packet(pkt);
+        av_packet_unref(pkt);
         return AVERROR(EIO);
     }
 

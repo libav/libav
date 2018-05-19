@@ -97,8 +97,18 @@ static int vp8_decode(AVCodecContext *avctx,
         }
         if ((ret = ff_get_buffer(avctx, picture, 0)) < 0)
             return ret;
-        av_image_copy(picture->data, picture->linesize, img->planes,
+        av_image_copy(picture->data, picture->linesize, (const uint8_t **) img->planes,
                       img->stride, avctx->pix_fmt, img->d_w, img->d_h);
+#if VPX_IMAGE_ABI_VERSION >= 4
+        switch (img->range) {
+        case VPX_CR_STUDIO_RANGE:
+            picture->color_range = AVCOL_RANGE_MPEG;
+            break;
+        case VPX_CR_FULL_RANGE:
+            picture->color_range = AVCOL_RANGE_JPEG;
+            break;
+        }
+#endif
         *got_frame           = 1;
     }
     return avpkt->size;
@@ -126,7 +136,8 @@ AVCodec ff_libvpx_vp8_decoder = {
     .init           = vp8_init,
     .close          = vp8_free,
     .decode         = vp8_decode,
-    .capabilities   = CODEC_CAP_AUTO_THREADS | CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_AUTO_THREADS | AV_CODEC_CAP_DR1,
+    .wrapper_name   = "libvpx",
 };
 #endif /* CONFIG_LIBVPX_VP8_DECODER */
 
@@ -145,6 +156,7 @@ AVCodec ff_libvpx_vp9_decoder = {
     .init           = vp9_init,
     .close          = vp8_free,
     .decode         = vp8_decode,
-    .capabilities   = CODEC_CAP_AUTO_THREADS,
+    .capabilities   = AV_CODEC_CAP_AUTO_THREADS,
+    .wrapper_name   = "libvpx",
 };
 #endif /* CONFIG_LIBVPX_VP9_DECODER */

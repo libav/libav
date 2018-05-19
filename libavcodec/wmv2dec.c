@@ -228,7 +228,14 @@ int ff_wmv2_decode_secondary_picture_header(MpegEncContext *s)
     s->picture_number++; // FIXME ?
 
     if (w->j_type) {
-        ff_intrax8_decode_picture(&w->x8, 2 * s->qscale, (s->qscale - 1) | 1);
+        ff_intrax8_decode_picture(&w->x8, &s->current_picture,
+                                  &s->gb, &s->mb_x, &s->mb_y,
+                                  2 * s->qscale, (s->qscale - 1) | 1,
+                                  s->loop_filter, s->low_delay);
+
+        ff_er_add_slice(&w->s.er, 0, 0,
+                        (w->s.mb_x >> 1) - 1, (w->s.mb_y >> 1) - 1,
+                        ER_MB_END);
         return 1;
     }
 
@@ -467,9 +474,9 @@ static av_cold int wmv2_decode_init(AVCodecContext *avctx)
 
     ff_wmv2_common_init(w);
 
-    ff_intrax8_common_init(&w->x8, &w->s);
-
-    return 0;
+    return ff_intrax8_common_init(avctx, &w->x8, &w->s.idsp,
+                                  w->s.block, w->s.block_last_index,
+                                  w->s.mb_width, w->s.mb_height);
 }
 
 static av_cold int wmv2_decode_end(AVCodecContext *avctx)
@@ -489,7 +496,7 @@ AVCodec ff_wmv2_decoder = {
     .init           = wmv2_decode_init,
     .close          = wmv2_decode_end,
     .decode         = ff_h263_decode_frame,
-    .capabilities   = CODEC_CAP_DRAW_HORIZ_BAND | CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DRAW_HORIZ_BAND | AV_CODEC_CAP_DR1,
     .pix_fmts       = (const enum AVPixelFormat[]) { AV_PIX_FMT_YUV420P,
                                                      AV_PIX_FMT_NONE },
 };

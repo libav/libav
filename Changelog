@@ -2,6 +2,32 @@ Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
 version <next>:
+- Support for spherical videos
+- Intel QSV-accelerated VP8 and VC-1 decoding
+- VAAPI-accelerated VP8 and HEVC decoding
+- VAAPI-accelerated deinterlacing
+- config.log and other configuration files moved into avbuild/ directory
+- VAAPI-accelerated MPEG-2 and VP8 encoding
+- Apple Pixlet decoder
+- The x86 assembler default switched from yasm to nasm, pass
+  --x86asmexe=yasm to configure to restore the old behavior.
+- Cineform HD decoder
+- VP9 superframe split/merge bitstream filters
+- FM Screen Capture Codec decoder
+- ClearVideo decoder (I-frames only)
+- support for decoding through D3D11VA in avconv
+- Cinepak encoder
+- Intel QSV-accelerated MJPEG encoding
+- NVIDIA CUVID-accelerated H.264 and HEVC decoding
+- Intel QSV-accelerated overlay filter
+- AV1 Support through libaom
+- Haivision SRT protocol via libsrt
+- Dropped support for building for Windows XP. The minimum supported Windows
+  version is Windows Vista.
+- support mbedTLS-based TLS
+
+
+version 12:
 - aliases and defaults for Ogg subtypes (opus, spx)
 - HEVC/H.265 RTP payload format (draft v6) packetizer and depacketizer
 - avplay now exits by default at the end of playback
@@ -38,6 +64,32 @@ version <next>:
 - DirectDraw Surface image/texture decoder
 - rewritten ASF demuxer
 - Go2Meeting decoding support
+- Intel QSV-accelerated MPEG-2 video and HEVC encoding
+- bitstream filter for converting HEVC from MP4 to Annex B
+- Intel QSV-accelerated MPEG-2 video and HEVC decoding
+- Support DNx100 (1440x1080@8)
+- DXV decoding
+- Screenpresso SPV1 decoding
+- zero-copy Intel QSV transcoding in avconv
+- libkvazaar HEVC encoder
+- innoHeim/Rsupport Screen Capture Codec decoder
+- support encoding 16-bit RLE SGI images
+- support Apple AVFoundation video capture
+- G.723.1 muxer and encoder
+- compressed SWF
+- VAAPI-accelerated format conversion and scaling
+- libnpp/CUDA-accelerated format conversion and scaling
+- VAAPI-accelerate H.264/HEVC/MJPEG encoding
+- Generic OpenMAX IL encoder with support for Raspberry Pi
+- MMAL-accelerated MPEG-2 and VC-1 decoding
+- G.729 raw demuxer
+- MagicYUV decoder
+- Duck TrueMotion 2.0 Real Time decoder
+- Intel QSV video scaling and deinterlacing filter
+- Support MOV with multiple sample description tables
+- OpenH264 decoder wrapper
+- Removed the legacy X11 screen grabber, use XCB instead
+- HDCD decoding filter through libhdcd
 
 
 version 11:
@@ -359,7 +411,7 @@ version 0.7_beta2:
 - DPX image encoder
 - SMPTE 302M AES3 audio decoder
 - ffmpeg no longer quits after the 'q' key is pressed; use 'ctrl+c' instead
-- 9bit and 10bit per sample support in the H.264 decoder
+- 9 bits and 10 bits per sample support in the H.264 decoder
 
 
 version 0.7_beta1:
@@ -714,7 +766,7 @@ version 0.4.9-pre1:
 - rate distorted optimal lambda->qp support
 - AAC encoding with libfaac
 - Sunplus JPEG codec (SP5X) support
-- use Lagrange multipler instead of QP for ratecontrol
+- use Lagrange multiplier instead of QP for ratecontrol
 - Theora/VP3 decoding support
 - XA and ADX ADPCM codecs
 - export MPEG-2 active display area / pan scan

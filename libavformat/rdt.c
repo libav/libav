@@ -25,6 +25,8 @@
  * @author Ronald S. Bultje <rbultje@ronald.bitfreak.net>
  */
 
+#include "libavcodec/bitstream.h"
+
 #include "avformat.h"
 #include "libavutil/avstring.h"
 #include "rtpdec.h"
@@ -34,7 +36,6 @@
 #include "rm.h"
 #include "internal.h"
 #include "avio_internal.h"
-#include "libavcodec/get_bits.h"
 
 struct RDTDemuxContext {
     AVFormatContext *ic; /**< the containing (RTSP) demux context */
@@ -44,7 +45,7 @@ struct RDTDemuxContext {
      * in the AVFormatContext, and this variable points to the offset in
      * that array such that the first is the first stream of this set. */
     AVStream **streams;
-    int n_streams; /**< streams with identifical content in this set */
+    int n_streams; /**< streams with identical content in this set */
     void *dynamic_protocol_context;
     DynamicPayloadPacketHandlerProc parse_packet;
     uint32_t prev_timestamp;
@@ -86,7 +87,7 @@ struct PayloadContext {
     RMStream **rmst;
     uint8_t *mlti_data;
     unsigned int mlti_data_size;
-    char buffer[RTP_MAX_PACKET_LENGTH + FF_INPUT_BUFFER_PADDING_SIZE];
+    char buffer[RTP_MAX_PACKET_LENGTH + AV_INPUT_BUFFER_PADDING_SIZE];
     int audio_pkt_cnt; /**< remaining audio packets in rmdec */
 };
 
@@ -98,7 +99,7 @@ ff_rdt_calc_response_and_checksum(char response[41], char chksum[9],
     unsigned char zres[16],
         buf[64] = { 0xa1, 0xe9, 0x14, 0x9d, 0x0e, 0x6b, 0x3b, 0x59 };
 #define XOR_TABLE_SIZE 37
-    const unsigned char xor_table[XOR_TABLE_SIZE] = {
+    static const unsigned char xor_table[XOR_TABLE_SIZE] = {
         0x05, 0x18, 0x74, 0xd0, 0x0d, 0x09, 0x02, 0x53,
         0xc0, 0x01, 0x05, 0x05, 0x67, 0x03, 0x19, 0x70,
         0x08, 0x27, 0x66, 0x10, 0x10, 0x72, 0x08, 0x09,
@@ -191,7 +192,7 @@ ff_rdt_parse_header(const uint8_t *buf, int len,
                     int *pset_id, int *pseq_no, int *pstream_id,
                     int *pis_keyframe, uint32_t *ptimestamp)
 {
-    GetBitContext gb;
+    BitstreamContext bc;
     int consumed = 0, set_id, seq_no, stream_id, is_keyframe,
         len_included, need_reliable;
     uint32_t timestamp;
@@ -261,24 +262,24 @@ ff_rdt_parse_header(const uint8_t *buf, int len,
      * [2] http://www.wireshark.org/docs/dfref/r/rdt.html and
      *     http://anonsvn.wireshark.org/viewvc/trunk/epan/dissectors/packet-rdt.c
      */
-    init_get_bits(&gb, buf, len << 3);
-    len_included  = get_bits1(&gb);
-    need_reliable = get_bits1(&gb);
-    set_id        = get_bits(&gb, 5);
-    skip_bits(&gb, 1);
-    seq_no        = get_bits(&gb, 16);
+    bitstream_init8(&bc, buf, len);
+    len_included  = bitstream_read_bit(&bc);
+    need_reliable = bitstream_read_bit(&bc);
+    set_id        = bitstream_read(&bc, 5);
+    bitstream_skip(&bc, 1);
+    seq_no        = bitstream_read(&bc, 16);
     if (len_included)
-        skip_bits(&gb, 16);
-    skip_bits(&gb, 2);
-    stream_id     = get_bits(&gb, 5);
-    is_keyframe   = !get_bits1(&gb);
-    timestamp     = get_bits_long(&gb, 32);
+        bitstream_skip(&bc, 16);
+    bitstream_skip(&bc, 2);
+    stream_id     = bitstream_read(&bc, 5);
+    is_keyframe   = !bitstream_read_bit(&bc);
+    timestamp     = bitstream_read(&bc, 32);
     if (set_id == 0x1f)
-        set_id    = get_bits(&gb, 16);
+        set_id    = bitstream_read(&bc, 16);
     if (need_reliable)
-        skip_bits(&gb, 16);
+        bitstream_skip(&bc, 16);
     if (stream_id == 0x1f)
-        stream_id = get_bits(&gb, 16);
+        stream_id = bitstream_read(&bc, 16);
 
     if (pset_id)      *pset_id      = set_id;
     if (pseq_no)      *pseq_no      = seq_no;
@@ -286,7 +287,7 @@ ff_rdt_parse_header(const uint8_t *buf, int len,
     if (pis_keyframe) *pis_keyframe = is_keyframe;
     if (ptimestamp)   *ptimestamp   = timestamp;
 
-    return consumed + (get_bits_count(&gb) >> 3);
+    return consumed + (bitstream_tell(&bc) >> 3);
 }
 
 /**< return 0 on packet, no more left, 1 on packet, 1 on partial packet... */
@@ -309,7 +310,7 @@ rdt_parse_packet (AVFormatContext *ctx, PayloadContext *rdt, AVStream *st,
         if (res < 0)
             return res;
         if (res > 0) {
-            if (st->codec->codec_id == AV_CODEC_ID_AAC) {
+            if (st->codecpar->codec_id == AV_CODEC_ID_AAC) {
                 memcpy (rdt->buffer, buf + pos, len - pos);
                 rdt->rmctx->pb = avio_alloc_context (rdt->buffer, len - pos, 0,
                                                     NULL, NULL, NULL, NULL);
@@ -322,8 +323,8 @@ get_cache:
             ff_rm_retrieve_cache (rdt->rmctx, rdt->rmctx->pb,
                                   st, rdt->rmst[st->index], pkt);
         if (rdt->audio_pkt_cnt == 0 &&
-            st->codec->codec_id == AV_CODEC_ID_AAC)
-            av_freep(&rdt->rmctx->pb);
+            st->codecpar->codec_id == AV_CODEC_ID_AAC)
+            avio_context_free(&rdt->rmctx->pb);
     }
     pkt->stream_index = st->index;
     pkt->pts = *timestamp;
@@ -398,7 +399,7 @@ rdt_parse_b64buf (unsigned int *target_len, const char *p)
         len -= 2; /* skip embracing " at start/end */
     }
     *target_len = len * 3 / 4;
-    target = av_mallocz(*target_len + FF_INPUT_BUFFER_PADDING_SIZE);
+    target = av_mallocz(*target_len + AV_INPUT_BUFFER_PADDING_SIZE);
     if (!target)
         return NULL;
     av_base64_decode(target, p, *target_len);
@@ -448,7 +449,7 @@ real_parse_asm_rule(AVStream *st, const char *p, const char *end)
 {
     do {
         /* can be either averagebandwidth= or AverageBandwidth= */
-        if (sscanf(p, " %*1[Aa]verage%*1[Bb]andwidth=%d", &st->codec->bit_rate) == 1)
+        if (sscanf(p, " %*1[Aa]verage%*1[Bb]andwidth=%d", &st->codecpar->bit_rate) == 1)
             break;
         if (!(p = strchr(p, ',')) || p > end)
             p = end;
@@ -464,7 +465,7 @@ add_dstream(AVFormatContext *s, AVStream *orig_st)
     if (!(st = avformat_new_stream(s, NULL)))
         return NULL;
     st->id = orig_st->id;
-    st->codec->codec_type = orig_st->codec->codec_type;
+    st->codecpar->codec_type = orig_st->codecpar->codec_type;
     st->first_dts         = orig_st->first_dts;
 
     return st;

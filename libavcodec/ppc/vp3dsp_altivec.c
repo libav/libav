@@ -21,11 +21,12 @@
 #include <string.h>
 
 #include "config.h"
+
 #include "libavutil/attributes.h"
 #include "libavutil/cpu.h"
 #include "libavutil/ppc/cpu.h"
-#include "libavutil/ppc/types_altivec.h"
 #include "libavutil/ppc/util_altivec.h"
+
 #include "libavcodec/vp3dsp.h"
 
 #if HAVE_ALTIVEC && HAVE_BIGENDIAN
@@ -114,7 +115,7 @@ static inline vec_s16 M16(vec_s16 a, vec_s16 C)
 #define ADD8(a) vec_add(a, eight)
 #define SHIFT4(a) vec_sra(a, four)
 
-static void vp3_idct_put_altivec(uint8_t *dst, int stride, int16_t block[64])
+static void vp3_idct_put_altivec(uint8_t *dst, ptrdiff_t stride, int16_t block[64])
 {
     vec_u8 t;
     IDCT_START
@@ -143,7 +144,7 @@ static void vp3_idct_put_altivec(uint8_t *dst, int stride, int16_t block[64])
     memset(block, 0, sizeof(*block) * 64);
 }
 
-static void vp3_idct_add_altivec(uint8_t *dst, int stride, int16_t block[64])
+static void vp3_idct_add_altivec(uint8_t *dst, ptrdiff_t stride, int16_t block[64])
 {
     LOAD_ZERO;
     vec_u8 t, vdst;
@@ -175,7 +176,7 @@ static void vp3_idct_add_altivec(uint8_t *dst, int stride, int16_t block[64])
     memset(block, 0, sizeof(*block) * 64);
 }
 
-#endif /* HAVE_ALTIVEC */
+#endif /* HAVE_ALTIVEC && HAVE_BIGENDIAN */
 
 av_cold void ff_vp3dsp_init_ppc(VP3DSPContext *c, int flags)
 {
@@ -185,5 +186,5 @@ av_cold void ff_vp3dsp_init_ppc(VP3DSPContext *c, int flags)
 
     c->idct_put = vp3_idct_put_altivec;
     c->idct_add = vp3_idct_add_altivec;
-#endif
+#endif /* HAVE_ALTIVEC && HAVE_BIGENDIAN */
 }

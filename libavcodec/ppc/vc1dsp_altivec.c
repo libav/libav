@@ -20,11 +20,12 @@
  */
 
 #include "config.h"
+
 #include "libavutil/attributes.h"
 #include "libavutil/cpu.h"
 #include "libavutil/ppc/cpu.h"
-#include "libavutil/ppc/types_altivec.h"
 #include "libavutil/ppc/util_altivec.h"
+
 #include "libavcodec/vc1dsp.h"
 
 #if HAVE_ALTIVEC && HAVE_BIGENDIAN
@@ -229,7 +230,8 @@ static void vc1_inv_trans_8x8_altivec(int16_t block[64])
 
 /** Do inverse transform on 8x4 part of block
 */
-static void vc1_inv_trans_8x4_altivec(uint8_t *dest, int stride, int16_t *block)
+static void vc1_inv_trans_8x4_altivec(uint8_t *dest, ptrdiff_t stride,
+                                      int16_t *block)
 {
     vector signed short src0, src1, src2, src3, src4, src5, src6, src7;
     vector signed int s0, s1, s2, s3, s4, s5, s6, s7;
@@ -340,7 +342,7 @@ static void vc1_inv_trans_8x4_altivec(uint8_t *dest, int stride, int16_t *block)
 #undef OP_U8_ALTIVEC
 #undef PREFIX_no_rnd_vc1_chroma_mc8_altivec
 
-#endif /* HAVE_ALTIVEC */
+#endif /* HAVE_ALTIVEC && HAVE_BIGENDIAN */
 
 av_cold void ff_vc1dsp_init_ppc(VC1DSPContext *dsp)
 {
@@ -352,5 +354,5 @@ av_cold void ff_vc1dsp_init_ppc(VC1DSPContext *dsp)
     dsp->vc1_inv_trans_8x4 = vc1_inv_trans_8x4_altivec;
     dsp->put_no_rnd_vc1_chroma_pixels_tab[0] = put_no_rnd_vc1_chroma_mc8_altivec;
     dsp->avg_no_rnd_vc1_chroma_pixels_tab[0] = avg_no_rnd_vc1_chroma_mc8_altivec;
-#endif /* HAVE_ALTIVEC */
+#endif /* HAVE_ALTIVEC && HAVE_BIGENDIAN */
 }

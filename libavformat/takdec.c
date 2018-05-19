@@ -19,11 +19,14 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#define BITSTREAM_READER_LE
+#include "libavcodec/bitstream.h"
 #include "libavcodec/tak.h"
+
+#include "apetag.h"
 #include "avformat.h"
 #include "internal.h"
 #include "rawdec.h"
-#include "apetag.h"
 
 typedef struct TAKDemuxContext {
     int     mlast_frame;
@@ -41,7 +44,7 @@ static int tak_read_header(AVFormatContext *s)
 {
     TAKDemuxContext *tc = s->priv_data;
     AVIOContext *pb     = s->pb;
-    GetBitContext gb;
+    BitstreamContext bc;
     AVStream *st;
     uint8_t *buffer = NULL;
     int ret;
@@ -50,8 +53,8 @@ static int tak_read_header(AVFormatContext *s)
     if (!st)
         return AVERROR(ENOMEM);
 
-    st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
-    st->codec->codec_id   = AV_CODEC_ID_TAK;
+    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+    st->codecpar->codec_id   = AV_CODEC_ID_TAK;
     st->need_parsing      = AVSTREAM_PARSE_FULL;
 
     tc->mlast_frame = 0;
@@ -71,7 +74,7 @@ static int tak_read_header(AVFormatContext *s)
         case TAK_METADATA_STREAMINFO:
         case TAK_METADATA_LAST_FRAME:
         case TAK_METADATA_ENCODER:
-            buffer = av_malloc(size + FF_INPUT_BUFFER_PADDING_SIZE);
+            buffer = av_malloc(size + AV_INPUT_BUFFER_PADDING_SIZE);
             if (!buffer)
                 return AVERROR(ENOMEM);
 
@@ -80,7 +83,7 @@ static int tak_read_header(AVFormatContext *s)
                 return AVERROR(EIO);
             }
 
-            init_get_bits(&gb, buffer, size * 8);
+            bitstream_init8(&bc, buffer, size);
             break;
         case TAK_METADATA_MD5: {
             uint8_t md5[16];
@@ -99,7 +102,7 @@ static int tak_read_header(AVFormatContext *s)
         case TAK_METADATA_END: {
             int64_t curpos = avio_tell(pb);
 
-            if (pb->seekable) {
+            if (pb->seekable & AVIO_SEEKABLE_NORMAL) {
                 ff_ape_parse_tag(s);
                 avio_seek(pb, curpos, SEEK_SET);
             }
@@ -116,29 +119,29 @@ static int tak_read_header(AVFormatContext *s)
         if (type == TAK_METADATA_STREAMINFO) {
             TAKStreamInfo ti;
 
-            avpriv_tak_parse_streaminfo(&gb, &ti);
+            avpriv_tak_parse_streaminfo(&bc, &ti);
             if (ti.samples > 0)
                 st->duration = ti.samples;
-            st->codec->bits_per_coded_sample = ti.bps;
+            st->codecpar->bits_per_coded_sample = ti.bps;
             if (ti.ch_layout)
-                st->codec->channel_layout = ti.ch_layout;
-            st->codec->sample_rate           = ti.sample_rate;
-            st->codec->channels              = ti.channels;
+                st->codecpar->channel_layout = ti.ch_layout;
+            st->codecpar->sample_rate           = ti.sample_rate;
+            st->codecpar->channels              = ti.channels;
             st->start_time                   = 0;
-            avpriv_set_pts_info(st, 64, 1, st->codec->sample_rate);
-            st->codec->extradata             = buffer;
-            st->codec->extradata_size        = size;
+            avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
+            st->codecpar->extradata             = buffer;
+            st->codecpar->extradata_size        = size;
             buffer                           = NULL;
         } else if (type == TAK_METADATA_LAST_FRAME) {
             if (size != 11)
                 return AVERROR_INVALIDDATA;
             tc->mlast_frame = 1;
-            tc->data_end    = get_bits64(&gb, TAK_LAST_FRAME_POS_BITS) +
-                              get_bits(&gb, TAK_LAST_FRAME_SIZE_BITS);
+            tc->data_end    = bitstream_read_63(&bc, TAK_LAST_FRAME_POS_BITS) +
+                              bitstream_read(&bc, TAK_LAST_FRAME_SIZE_BITS);
             av_freep(&buffer);
         } else if (type == TAK_METADATA_ENCODER) {
-            av_log(s, AV_LOG_VERBOSE, "encoder version: %0X\n",
-                   get_bits_long(&gb, TAK_ENCODER_VERSION_BITS));
+            av_log(s, AV_LOG_VERBOSE, "encoder version: %0"PRIX32"\n",
+                   bitstream_read(&bc, TAK_ENCODER_VERSION_BITS));
             av_freep(&buffer);
         }
     }

@@ -23,6 +23,7 @@
 
 #include <stdlib.h>
 #include <xcb/xcb.h>
+#include <xcb/shape.h>
 
 #if CONFIG_LIBXCB_XFIXES
 #include <xcb/xfixes.h>
@@ -226,7 +227,7 @@ static int xcbgrab_frame_shm(AVFormatContext *s, AVPacket *pkt)
     xcb_shm_get_image_reply_t *img;
     xcb_drawable_t drawable = c->screen->root;
     uint8_t *data;
-    int size = c->frame_size + FF_INPUT_BUFFER_PADDING_SIZE;
+    int size = c->frame_size + AV_INPUT_BUFFER_PADDING_SIZE;
     int id   = shmget(IPC_PRIVATE, size, IPC_CREAT | 0777);
     xcb_generic_error_t *e = NULL;
 
@@ -499,7 +500,7 @@ static int pixfmt_from_pixmap_format(AVFormatContext *s, int depth,
 
         fmt++;
     }
-    av_log(s, AV_LOG_ERROR, "Pixmap format not mappable.\n");
+    avpriv_report_missing_feature(s, "Mapping this pixmap format");
 
     return AVERROR_PATCHWELCOME;
 }
@@ -543,13 +544,12 @@ static int create_stream(AVFormatContext *s)
                                   st->avg_frame_rate.num };
     c->time_frame = av_gettime();
 
-    st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
-    st->codec->codec_id   = AV_CODEC_ID_RAWVIDEO;
-    st->codec->width      = c->width;
-    st->codec->height     = c->height;
-    st->codec->time_base  = c->time_base;
+    st->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
+    st->codecpar->codec_id   = AV_CODEC_ID_RAWVIDEO;
+    st->codecpar->width      = c->width;
+    st->codecpar->height     = c->height;
 
-    ret = pixfmt_from_pixmap_format(s, geo->depth, &st->codec->pix_fmt);
+    ret = pixfmt_from_pixmap_format(s, geo->depth, &st->codecpar->format);
 
     free(geo);
 
@@ -684,7 +684,7 @@ static av_cold int xcbgrab_read_header(AVFormatContext *s)
     return 0;
 }
 
-AVInputFormat ff_x11grab_xcb_demuxer = {
+AVInputFormat ff_xcbgrab_demuxer = {
     .name           = "x11grab",
     .long_name      = NULL_IF_CONFIG_SMALL("X11 screen capture, using XCB"),
     .priv_data_size = sizeof(XCBGrabContext),

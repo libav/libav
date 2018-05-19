@@ -19,6 +19,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/imgutils.h"
+
 #include "avcodec.h"
 #include "bytestream.h"
 #include "internal.h"
@@ -31,10 +33,10 @@ static int pam_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     int i, h, w, n, linesize, depth, maxval, ret;
     const char *tuple_type;
     uint8_t *ptr;
+    int size = av_image_get_buffer_size(avctx->pix_fmt,
+                                        avctx->width, avctx->height, 1);
 
-    if ((ret = ff_alloc_packet(pkt, avpicture_get_size(avctx->pix_fmt,
-                                                       avctx->width,
-                                                       avctx->height) + 200)) < 0) {
+    if ((ret = ff_alloc_packet(pkt, size + 200)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "encoded frame too large\n");
         return ret;
     }
@@ -109,19 +111,13 @@ static int pam_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
 
 static av_cold int pam_encode_init(AVCodecContext *avctx)
 {
-    avctx->coded_frame = av_frame_alloc();
-    if (!avctx->coded_frame)
-        return AVERROR(ENOMEM);
-
+#if FF_API_CODED_FRAME
+FF_DISABLE_DEPRECATION_WARNINGS
     avctx->coded_frame->pict_type = AV_PICTURE_TYPE_I;
     avctx->coded_frame->key_frame = 1;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
 
-    return 0;
-}
-
-static av_cold int pam_encode_close(AVCodecContext *avctx)
-{
-    av_frame_free(&avctx->coded_frame);
     return 0;
 }
 
@@ -131,7 +127,6 @@ AVCodec ff_pam_encoder = {
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_PAM,
     .init           = pam_encode_init,
-    .close          = pam_encode_close,
     .encode2        = pam_encode_frame,
     .pix_fmts       = (const enum AVPixelFormat[]){
         AV_PIX_FMT_RGB24, AV_PIX_FMT_RGB32, AV_PIX_FMT_GRAY8, AV_PIX_FMT_MONOWHITE,

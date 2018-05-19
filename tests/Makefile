@@ -58,6 +58,7 @@ PARSERDEMDEC       = $(call ALLYES, $(1)_PARSER $(2)_DEMUXER $(3)_DECODER)
 
 include $(SRC_PATH)/tests/fate/acodec.mak
 include $(SRC_PATH)/tests/fate/vcodec.mak
+
 include $(SRC_PATH)/tests/fate/avformat.mak
 include $(SRC_PATH)/tests/fate/seek.mak
 
@@ -71,16 +72,20 @@ include $(SRC_PATH)/tests/fate/amrwb.mak
 include $(SRC_PATH)/tests/fate/atrac.mak
 include $(SRC_PATH)/tests/fate/audio.mak
 include $(SRC_PATH)/tests/fate/bmp.mak
+include $(SRC_PATH)/tests/fate/build.mak
+include $(SRC_PATH)/tests/fate/canopus.mak
+include $(SRC_PATH)/tests/fate/cbs.mak
 include $(SRC_PATH)/tests/fate/cdxl.mak
+include $(SRC_PATH)/tests/fate/checkasm.mak
 include $(SRC_PATH)/tests/fate/cover-art.mak
 include $(SRC_PATH)/tests/fate/demux.mak
 include $(SRC_PATH)/tests/fate/dfa.mak
 include $(SRC_PATH)/tests/fate/dpcm.mak
 include $(SRC_PATH)/tests/fate/ea.mak
+include $(SRC_PATH)/tests/fate/fft.mak
 include $(SRC_PATH)/tests/fate/filter-audio.mak
 include $(SRC_PATH)/tests/fate/filter-video.mak
 include $(SRC_PATH)/tests/fate/flac.mak
-include $(SRC_PATH)/tests/fate/fft.mak
 include $(SRC_PATH)/tests/fate/h264.mak
 include $(SRC_PATH)/tests/fate/hevc.mak
 include $(SRC_PATH)/tests/fate/image.mak
@@ -94,6 +99,7 @@ include $(SRC_PATH)/tests/fate/lossless-audio.mak
 include $(SRC_PATH)/tests/fate/lossless-video.mak
 include $(SRC_PATH)/tests/fate/microsoft.mak
 include $(SRC_PATH)/tests/fate/monkeysaudio.mak
+include $(SRC_PATH)/tests/fate/mov.mak
 include $(SRC_PATH)/tests/fate/mp3.mak
 include $(SRC_PATH)/tests/fate/mpc.mak
 include $(SRC_PATH)/tests/fate/mpeg4.mak
@@ -139,11 +145,13 @@ endif
 
 FATE_UTILS = base64 tiny_psnr
 
+$(addprefix fate-, $(IGNORE_TESTS)): REPORT=ignore
+
 fate: $(FATE)
 
 $(FATE): $(FATE_UTILS:%=tests/%$(HOSTEXESUF))
 	@echo "TEST    $(@:fate-%=%)"
-	$(Q)$(SRC_PATH)/tests/fate-run.sh $@ "$(SAMPLES)" "$(TARGET_EXEC)" "$(TARGET_PATH)" '$(CMD)' '$(CMP)' '$(REF)' '$(FUZZ)' '$(THREADS)' '$(THREAD_TYPE)' '$(CPUFLAGS)' '$(CMP_SHIFT)' '$(CMP_TARGET)' '$(SIZE_TOLERANCE)' '$(CMP_UNIT)' '$(GEN)' '$(HWACCEL)'
+	$(Q)$(SRC_PATH)/tests/fate-run.sh $@ "$(SAMPLES)" "$(TARGET_EXEC)" "$(TARGET_PATH)" '$(CMD)' '$(CMP)' '$(REF)' '$(FUZZ)' '$(THREADS)' '$(THREAD_TYPE)' '$(CPUFLAGS)' '$(CMP_SHIFT)' '$(CMP_TARGET)' '$(SIZE_TOLERANCE)' '$(CMP_UNIT)' '$(GEN)' '$(HWACCEL)' '$(REPORT)'
 
 fate-list:
 	@printf '%s\n' $(sort $(FATE))
@@ -160,7 +168,7 @@ lcov: coverage.info
 
 lcov-reset: TAG = LCOV
 lcov-reset:
-	$(M)lcov -d $(CURDIR) --zerocounters
+	$(M)lcov -q -d $(CURDIR) --zerocounters
 	$(Q)$(RM) -f coverage.info
 
 clean:: testclean
@@ -172,6 +180,8 @@ testclean:
 	$(RM) tests/pixfmts.mak
 
 -include $(wildcard tests/*.d)
+
+include $(SRC_PATH)/tests/checkasm/Makefile
 
 .PHONY: fate* lcov lcov-reset
 .INTERMEDIATE: coverage.info

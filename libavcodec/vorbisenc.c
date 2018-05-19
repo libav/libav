@@ -1178,7 +1178,7 @@ static av_cold int vorbis_encode_init(AVCodecContext *avctx)
         goto error;
 
     avctx->bit_rate = 0;
-    if (avctx->flags & CODEC_FLAG_QSCALE)
+    if (avctx->flags & AV_CODEC_FLAG_QSCALE)
         venc->quality = avctx->global_quality / (float)FF_QP2LAMBDA;
     else
         venc->quality = 3.0;
@@ -1205,7 +1205,7 @@ AVCodec ff_vorbis_encoder = {
     .init           = vorbis_encode_init,
     .encode2        = vorbis_encode_frame,
     .close          = vorbis_encode_close,
-    .capabilities   = CODEC_CAP_DELAY | CODEC_CAP_EXPERIMENTAL,
+    .capabilities   = AV_CODEC_CAP_DELAY | AV_CODEC_CAP_EXPERIMENTAL,
     .sample_fmts    = (const enum AVSampleFormat[]){ AV_SAMPLE_FMT_FLTP,
                                                      AV_SAMPLE_FMT_NONE },
 };

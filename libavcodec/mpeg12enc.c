@@ -1,5 +1,5 @@
 /*
- * MPEG1/2 encoder
+ * MPEG-1/2 encoder
  * Copyright (c) 2000,2001 Fabrice Bellard
  * Copyright (c) 2002-2004 Michael Niedermayer <michaelni@gmx.at>
  *
@@ -22,7 +22,7 @@
 
 /**
  * @file
- * MPEG1/2 encoder
+ * MPEG-1/2 encoder
  */
 
 #include <stdint.h>
@@ -136,12 +136,12 @@ static av_cold int encode_init(AVCodecContext *avctx)
 
     if (find_frame_rate_index(s) < 0) {
         if (s->strict_std_compliance > FF_COMPLIANCE_EXPERIMENTAL) {
-            av_log(avctx, AV_LOG_ERROR, "MPEG1/2 does not support %d/%d fps\n",
+            av_log(avctx, AV_LOG_ERROR, "MPEG-1/2 does not support %d/%d fps\n",
                    avctx->time_base.den, avctx->time_base.num);
             return -1;
         } else {
             av_log(avctx, AV_LOG_INFO,
-                   "MPEG1/2 does not support %d/%d fps, there may be AV sync issues\n",
+                   "MPEG-1/2 does not support %d/%d fps, there may be AV sync issues\n",
                    avctx->time_base.den, avctx->time_base.num);
         }
     }
@@ -182,6 +182,13 @@ static av_cold int encode_init(AVCodecContext *avctx)
         return -1;
     }
 
+#if FF_API_PRIVATE_OPT
+FF_DISABLE_DEPRECATION_WARNINGS
+    if (avctx->timecode_frame_start)
+        s->timecode_frame_start = avctx->timecode_frame_start;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
+
     return 0;
 }
 
@@ -207,7 +214,7 @@ static void mpeg1_encode_sequence_header(MpegEncContext *s)
     if (s->current_picture.f->key_frame) {
         AVRational framerate = ff_mpeg12_frame_rate_tab[s->frame_rate_index];
 
-        /* mpeg1 header repeated every gop */
+        /* MPEG-1 header repeated every GOP */
         put_header(s, SEQ_START_CODE);
 
         put_sbits(&s->pb, 12, s->width);
@@ -290,7 +297,7 @@ static void mpeg1_encode_sequence_header(MpegEncContext *s)
 
             put_header(s, EXT_START_CODE);
             put_bits(&s->pb, 4, 2);                         // sequence display extension
-            put_bits(&s->pb, 3, 0);                         // video_format: 0 is components
+            put_bits(&s->pb, 3, 5);                         // video_format: 5 is unspecified
             put_bits(&s->pb, 1, 1);                         // colour_description
             put_bits(&s->pb, 8, s->avctx->color_primaries); // colour_primaries
             put_bits(&s->pb, 8, s->avctx->color_trc);       // transfer_characteristics
@@ -307,7 +314,7 @@ static void mpeg1_encode_sequence_header(MpegEncContext *s)
          * fake MPEG frame rate in case of low frame rate */
         fps       = (framerate.num + framerate.den / 2) / framerate.den;
         time_code = s->current_picture_ptr->f->coded_picture_number +
-                    s->avctx->timecode_frame_start;
+                    s->timecode_frame_start;
 
         s->gop_picture_number = s->current_picture_ptr->f->coded_picture_number;
         if (s->drop_frame_timecode) {
@@ -324,7 +331,7 @@ static void mpeg1_encode_sequence_header(MpegEncContext *s)
         put_bits(&s->pb, 1, 1);
         put_bits(&s->pb, 6, (uint32_t)((time_code / fps) % 60));
         put_bits(&s->pb, 6, (uint32_t)((time_code % fps)));
-        put_bits(&s->pb, 1, !!(s->avctx->flags & CODEC_FLAG_CLOSED_GOP));
+        put_bits(&s->pb, 1, !!(s->avctx->flags & AV_CODEC_FLAG_CLOSED_GOP) || s->intra_only);
         put_bits(&s->pb, 1, 0);                     // broken link
     }
 }
@@ -368,7 +375,7 @@ void ff_mpeg1_encode_picture_header(MpegEncContext *s, int picture_number)
     AVFrameSideData *side_data;
     mpeg1_encode_sequence_header(s);
 
-    /* mpeg1 picture header */
+    /* MPEG-1 picture header */
     put_header(s, PICTURE_START_CODE);
     /* temporal reference */
 
@@ -1050,7 +1057,9 @@ av_cold void ff_mpeg1_encode_init(MpegEncContext *s)
     { "drop_frame_timecode", "Timecode is in drop frame format.",             \
       OFFSET(drop_frame_timecode), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, VE }, \
     { "scan_offset",         "Reserve space for SVCD scan offset user data.", \
-      OFFSET(scan_offset),         AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, VE },
+      OFFSET(scan_offset),         AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, VE }, \
+    { "timecode_frame_start", "GOP timecode frame start number, in non-drop-frame format", \
+      OFFSET(timecode_frame_start), AV_OPT_TYPE_INT64, {.i64 = 0 }, 0, INT64_MAX, VE}, \
 
 static const AVOption mpeg1_options[] = {
     COMMON_OPTS
@@ -1089,7 +1098,7 @@ AVCodec ff_mpeg1video_encoder = {
     .supported_framerates = ff_mpeg12_frame_rate_tab + 1,
     .pix_fmts             = (const enum AVPixelFormat[]) { AV_PIX_FMT_YUV420P,
                                                            AV_PIX_FMT_NONE },
-    .capabilities         = CODEC_CAP_DELAY | CODEC_CAP_SLICE_THREADS,
+    .capabilities         = AV_CODEC_CAP_DELAY | AV_CODEC_CAP_SLICE_THREADS,
     .priv_class           = &mpeg1_class,
 };
 
@@ -1106,6 +1115,6 @@ AVCodec ff_mpeg2video_encoder = {
     .pix_fmts             = (const enum AVPixelFormat[]) { AV_PIX_FMT_YUV420P,
                                                            AV_PIX_FMT_YUV422P,
                                                            AV_PIX_FMT_NONE },
-    .capabilities         = CODEC_CAP_DELAY | CODEC_CAP_SLICE_THREADS,
+    .capabilities         = AV_CODEC_CAP_DELAY | AV_CODEC_CAP_SLICE_THREADS,
     .priv_class           = &mpeg2_class,
 };

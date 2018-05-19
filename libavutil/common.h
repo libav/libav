@@ -36,6 +36,7 @@
 #include <string.h>
 
 #include "attributes.h"
+#include "macros.h"
 #include "version.h"
 #include "libavutil/avconfig.h"
 
@@ -49,6 +50,14 @@
 #define RSHIFT(a,b) ((a) > 0 ? ((a) + ((1<<(b))>>1))>>(b) : ((a) + ((1<<(b))>>1)-1)>>(b))
 /* assume b>0 */
 #define ROUNDED_DIV(a,b) (((a)>0 ? (a) + ((b)>>1) : (a) - ((b)>>1))/(b))
+
+/**
+ * Fast a / (1 << b) rounded toward +inf, assuming a >= 0 and b >= 0.
+ */
+#define AV_CEIL_RSHIFT(a, b) \
+    (av_builtin_constant_p(b) ? ((a) + (1 << (b)) - 1) >> (b) \
+                              : -((-(a)) >> (b)))
+
 #define FFABS(a) ((a) >= 0 ? (a) : (-(a)))
 #define FFSIGN(a) ((a) > 0 ? 1 : -1)
 
@@ -59,13 +68,8 @@
 
 #define FFSWAP(type,a,b) do{type SWAP_tmp= b; b= a; a= SWAP_tmp;}while(0)
 #define FF_ARRAY_ELEMS(a) (sizeof(a) / sizeof((a)[0]))
-#define FFALIGN(x, a) (((x)+(a)-1)&~((a)-1))
 
 /* misc math functions */
-
-#if FF_API_AV_REVERSE
-extern attribute_deprecated const uint8_t av_reverse[256];
-#endif
 
 #ifdef HAVE_AV_CONFIG_H
 #   include "config.h"
@@ -176,6 +180,17 @@ static av_always_inline av_const unsigned av_clip_uintp2_c(int a, int p)
 {
     if (a & ~((1<<p) - 1)) return -a >> 31 & ((1<<p) - 1);
     else                   return  a;
+}
+
+/**
+ * Clear high bits from an unsigned integer starting with specific bit position
+ * @param  a value to clip
+ * @param  p bit position to clip at
+ * @return clipped value
+ */
+static av_always_inline av_const unsigned av_mod_uintp2_c(unsigned a, unsigned p)
+{
+    return a & ((1 << p) - 1);
 }
 
 /**
@@ -405,6 +420,9 @@ static av_always_inline av_const int av_popcount64_c(uint64_t x)
 #endif
 #ifndef av_clip_uintp2
 #   define av_clip_uintp2   av_clip_uintp2_c
+#endif
+#ifndef av_mod_uintp2
+#   define av_mod_uintp2    av_mod_uintp2_c
 #endif
 #ifndef av_sat_add32
 #   define av_sat_add32     av_sat_add32_c

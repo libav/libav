@@ -42,10 +42,12 @@ typedef struct FileContext {
     const AVClass *class;
     int fd;
     int trunc;
+    int follow;
 } FileContext;
 
 static const AVOption file_options[] = {
     { "truncate", "Truncate existing files on write", offsetof(FileContext, trunc), AV_OPT_TYPE_INT, { .i64 = 1 }, 0, 1, AV_OPT_FLAG_ENCODING_PARAM },
+    { "follow", "Follow a file as it is being written", offsetof(FileContext, follow), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, AV_OPT_FLAG_DECODING_PARAM },
     { NULL }
 };
 
@@ -59,13 +61,17 @@ static const AVClass file_class = {
 static int file_read(URLContext *h, unsigned char *buf, int size)
 {
     FileContext *c = h->priv_data;
-    return read(c->fd, buf, size);
+    int ret = read(c->fd, buf, size);
+    if (ret == 0 && c->follow)
+        return AVERROR(EAGAIN);
+    return (ret == -1) ? AVERROR(errno) : ret;
 }
 
 static int file_write(URLContext *h, const unsigned char *buf, int size)
 {
     FileContext *c = h->priv_data;
-    return write(c->fd, buf, size);
+    int ret = write(c->fd, buf, size);
+    return (ret == -1) ? AVERROR(errno) : ret;
 }
 
 static int file_get_handle(URLContext *h)
@@ -76,8 +82,13 @@ static int file_get_handle(URLContext *h)
 
 static int file_check(URLContext *h, int mask)
 {
+    const char *filename = h->filename;
     struct stat st;
-    int ret = stat(h->filename, &st);
+    int ret;
+
+    av_strstart(filename, "file:", &filename);
+
+    ret = stat(filename, &st);
     if (ret < 0)
         return AVERROR(errno);
 
@@ -142,7 +153,7 @@ static int file_close(URLContext *h)
     return close(c->fd);
 }
 
-URLProtocol ff_file_protocol = {
+const URLProtocol ff_file_protocol = {
     .name                = "file",
     .url_open            = file_open,
     .url_read            = file_read,
@@ -182,7 +193,7 @@ static int pipe_open(URLContext *h, const char *filename, int flags)
     return 0;
 }
 
-URLProtocol ff_pipe_protocol = {
+const URLProtocol ff_pipe_protocol = {
     .name                = "pipe",
     .url_open            = pipe_open,
     .url_read            = file_read,

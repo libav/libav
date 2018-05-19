@@ -27,9 +27,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "libavutil/buffer.h"
 #include "libavutil/internal.h"
 
 #include "avcodec.h"
+#include "thread.h"
 #include "vp56.h"
 
 enum TxfmMode {
@@ -125,9 +127,8 @@ typedef struct ProbContext {
     uint8_t partition[4][4][3];
 } ProbContext;
 
-typedef void (*vp9_mc_func)(uint8_t *dst, const uint8_t *ref,
-                            ptrdiff_t dst_stride,
-                            ptrdiff_t ref_stride,
+typedef void (*vp9_mc_func)(uint8_t *dst, ptrdiff_t dst_stride,
+                            const uint8_t *ref, ptrdiff_t ref_stride,
                             int h, int mx, int my);
 
 typedef struct VP9DSPContext {
@@ -141,7 +142,7 @@ typedef struct VP9DSPContext {
      */
     // FIXME(rbultje) maybe replace left/top pointers with HAVE_TOP/
     // HAVE_LEFT/HAVE_TOPRIGHT flags instead, and then handle it in-place?
-    // also needs to fit in with what h264/vp8/etc do
+    // also needs to fit in with what H.264/VP8/etc do
     void (*intra_pred[N_TXFM_SIZES][N_INTRA_PRED_MODES])(uint8_t *dst,
                                                          ptrdiff_t stride,
                                                          const uint8_t *left,
@@ -225,6 +226,16 @@ typedef struct VP9Filter {
                               [8 /* rows */][4 /* 0=16, 1=8, 2=4, 3=inner4 */];
 } VP9Filter;
 
+typedef struct VP9Frame {
+    ThreadFrame tf;
+
+    uint8_t *segmentation_map;
+    VP9MVRefPair *mv;
+
+    AVBufferRef *segmentation_map_buf;
+    AVBufferRef *mv_buf;
+} VP9Frame;
+
 enum BlockLevel {
     BL_64X64,
     BL_32X32,
@@ -259,6 +270,9 @@ typedef struct VP9Block {
     int row, row7, col, col7;
     uint8_t *dst[3];
     ptrdiff_t y_stride, uv_stride;
+
+    enum BlockLevel bl;
+    enum BlockPartition bp;
 } VP9Block;
 
 typedef struct VP9Context {
@@ -268,7 +282,16 @@ typedef struct VP9Context {
     VP56RangeCoder c;
     VP56RangeCoder *c_b;
     unsigned c_b_size;
-    VP9Block b;
+    VP9Block *b;
+    VP9Block *b_base;
+
+    int alloc_width;
+    int alloc_height;
+
+    int pass;
+    int uses_2pass;
+    int last_uses_2pass;
+    int setup_finished;
 
     // bitstream header
     uint8_t profile;
@@ -293,8 +316,12 @@ typedef struct VP9Context {
     uint8_t refidx[3];
     uint8_t signbias[3];
     uint8_t varcompref[2];
-    AVFrame *refs[8];
-    AVFrame *cur_frame;
+
+    ThreadFrame refs[8];
+
+#define CUR_FRAME 0
+#define LAST_FRAME 1
+    VP9Frame frames[2];
 
     struct {
         uint8_t level;
@@ -392,23 +419,24 @@ typedef struct VP9Context {
 
     // whole-frame cache
     uint8_t *intra_pred_data[3];
-    uint8_t *segmentation_map;
-    VP9MVRefPair *mv[2];
     VP9Filter *lflvl;
-    DECLARE_ALIGNED(32, uint8_t, edge_emu_buffer)[71 * 80];
+    // This requires 64 + 8 rows, with 80 bytes stride
+    DECLARE_ALIGNED(32, uint8_t, edge_emu_buffer)[72 * 80];
 
     // block reconstruction intermediates
-    DECLARE_ALIGNED(32, int16_t, block)[4096];
-    DECLARE_ALIGNED(32, int16_t, uvblock)[2][1024];
-    uint8_t eob[256];
-    uint8_t uveob[2][64];
-    VP56mv min_mv, max_mv;
+    int16_t *block_base, *block, *uvblock_base[2], *uvblock[2];
+    uint8_t *eob_base, *uveob_base[2], *eob, *uveob[2];
+    struct { int x, y; } min_mv, max_mv;
     DECLARE_ALIGNED(32, uint8_t, tmp_y)[64 * 64];
     DECLARE_ALIGNED(32, uint8_t, tmp_uv)[2][32 * 32];
 } VP9Context;
 
+extern const int8_t ff_vp9_subpel_filters[3][15][8];
+
 void ff_vp9dsp_init(VP9DSPContext *dsp);
 
+void ff_vp9dsp_init_aarch64(VP9DSPContext *dsp);
+void ff_vp9dsp_init_arm(VP9DSPContext *dsp);
 void ff_vp9dsp_init_x86(VP9DSPContext *dsp);
 
 void ff_vp9_fill_mv(VP9Context *s, VP56mv *mv, int mode, int sb);

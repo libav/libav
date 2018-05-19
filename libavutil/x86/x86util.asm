@@ -29,6 +29,16 @@
 
 %include "libavutil/x86/x86inc.asm"
 
+; Interleave low src0 with low src1 and store in src0,
+; interleave high src0 with high src1 and store in src1.
+; %1 - types
+; %2 - index of the register with src0
+; %3 - index of the register with src1
+; %4 - index of the register for intermediate results
+; example for %1 - wd: input: src0: x0 x1 x2 x3 z0 z1 z2 z3
+;                             src1: y0 y1 y2 y3 q0 q1 q2 q3
+;                     output: src0: x0 y0 x1 y1 x2 y2 x3 y3
+;                             src1: z0 q0 z1 q1 z2 q2 z3 q3
 %macro SBUTTERFLY 4
 %if avx_enabled == 0
     mova      m%4, m%2
@@ -164,13 +174,13 @@
 %endif
 %endmacro
 
-%macro PSIGNW_MMX 2
+%macro PSIGNW 2
+%if cpuflag(ssse3)
+    psignw     %1, %2
+%else
     pxor       %1, %2
     psubw      %1, %2
-%endmacro
-
-%macro PSIGNW_SSSE3 2
-    psignw     %1, %2
+%endif
 %endmacro
 
 %macro ABS1 2
@@ -211,7 +221,7 @@
 %endif
 %endmacro
 
-%macro ABSB 2 ; source mmreg, temp mmreg (unused for ssse3)
+%macro ABSB 2 ; source mmreg, temp mmreg (unused for SSSE3)
 %if cpuflag(ssse3)
     pabsb   %1, %1
 %else
@@ -235,7 +245,7 @@
 %endif
 %endmacro
 
-%macro ABSD2_MMX 4
+%macro ABSD2 4
     pxor    %3, %3
     pxor    %4, %4
     pcmpgtd %3, %1
@@ -280,7 +290,7 @@
 %else
     palignr %1, %2, %3
 %endif
-%elif cpuflag(mmx) ; [dst,] src1, src2, imm, tmp
+%else ; [dst,] src1, src2, imm, tmp
     %define %%dst %1
 %if %0==5
 %ifnidn %1, %2
@@ -552,7 +562,9 @@
 %endmacro
 
 %macro SPLATW 2-3 0
-%if mmsize == 16
+%if cpuflag(avx2) && %3 == 0
+    vpbroadcastw %1, %2
+%elif mmsize == 16
     pshuflw    %1, %2, (%3)*0x55
     punpcklqdq %1, %1
 %elif cpuflag(mmxext)
@@ -594,37 +606,47 @@
     pminsw %1, %3
 %endmacro
 
-%macro PMINSD_MMX 3 ; dst, src, tmp
+%macro PMINSD 3 ; dst, src, tmp/unused
+%if cpuflag(sse4)
+    pminsd    %1, %2
+%elif cpuflag(sse2)
+    cvtdq2ps  %1, %1
+    minps     %1, %2
+    cvtps2dq  %1, %1
+%else
     mova      %3, %2
     pcmpgtd   %3, %1
     pxor      %1, %2
     pand      %1, %3
     pxor      %1, %2
+%endif
 %endmacro
 
-%macro PMAXSD_MMX 3 ; dst, src, tmp
+%macro PMAXSD 3 ; dst, src, tmp/unused
+%if cpuflag(sse4)
+    pmaxsd    %1, %2
+%else
     mova      %3, %1
     pcmpgtd   %3, %2
     pand      %1, %3
     pandn     %3, %2
     por       %1, %3
+%endif
 %endmacro
 
-%macro CLIPD_MMX 3-4 ; src/dst, min, max, tmp
-    PMINSD_MMX %1, %3, %4
-    PMAXSD_MMX %1, %2, %4
-%endmacro
-
-%macro CLIPD_SSE2 3-4 ; src/dst, min (float), max (float), unused
+%macro CLIPD 3-4
+%if cpuflag(sse4);  src/dst, min, max, unused
+    pminsd  %1, %3
+    pmaxsd  %1, %2
+%elif cpuflag(sse2) ; src/dst, min (float), max (float), unused
     cvtdq2ps  %1, %1
     minps     %1, %3
     maxps     %1, %2
     cvtps2dq  %1, %1
-%endmacro
-
-%macro CLIPD_SSE41 3-4 ;  src/dst, min, max, unused
-    pminsd  %1, %3
-    pmaxsd  %1, %2
+%else               ; src/dst, min, max, tmp
+    PMINSD    %1, %3, %4
+    PMAXSD    %1, %2, %4
+%endif
 %endmacro
 
 %macro VBROADCASTSS 2 ; dst xmm/ymm, src m32

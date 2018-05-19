@@ -1,6 +1,6 @@
 /*
  * Interplay MVE File Demuxer
- * Copyright (c) 2003 The ffmpeg Project
+ * Copyright (c) 2003 The FFmpeg project
  *
  * This file is part of Libav.
  *
@@ -180,7 +180,7 @@ static int load_ipmovie_packet(IPMVEContext *s, AVIOContext *pb,
 
         if (avio_read(pb, pkt->data, s->decode_map_chunk_size) !=
             s->decode_map_chunk_size) {
-            av_free_packet(pkt);
+            av_packet_unref(pkt);
             return CHUNK_EOF;
         }
 
@@ -189,7 +189,7 @@ static int load_ipmovie_packet(IPMVEContext *s, AVIOContext *pb,
 
         if (avio_read(pb, pkt->data + s->decode_map_chunk_size,
             s->video_chunk_size) != s->video_chunk_size) {
-            av_free_packet(pkt);
+            av_packet_unref(pkt);
             return CHUNK_EOF;
         }
 
@@ -332,9 +332,6 @@ static int process_ipmovie_chunk(IPMVEContext *s, AVIOContext *pb,
                 break;
             }
             s->frame_pts_inc = ((uint64_t)AV_RL32(&scratch[0])) * AV_RL16(&scratch[4]);
-            av_log(NULL, AV_LOG_TRACE, "  %.2f frames/second (timer div = %d, subdiv = %d)\n",
-                    1000000.0 / s->frame_pts_inc, AV_RL32(&scratch[0]),
-                    AV_RL16(&scratch[4]));
             break;
 
         case OPCODE_INIT_AUDIO_BUFFERS:
@@ -584,12 +581,12 @@ static int ipmovie_read_header(AVFormatContext *s)
         return AVERROR(ENOMEM);
     avpriv_set_pts_info(st, 63, 1, 1000000);
     ipmovie->video_stream_index = st->index;
-    st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
-    st->codec->codec_id = AV_CODEC_ID_INTERPLAY_VIDEO;
-    st->codec->codec_tag = 0;  /* no fourcc */
-    st->codec->width = ipmovie->video_width;
-    st->codec->height = ipmovie->video_height;
-    st->codec->bits_per_coded_sample = ipmovie->video_bpp;
+    st->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
+    st->codecpar->codec_id = AV_CODEC_ID_INTERPLAY_VIDEO;
+    st->codecpar->codec_tag = 0;  /* no fourcc */
+    st->codecpar->width = ipmovie->video_width;
+    st->codecpar->height = ipmovie->video_height;
+    st->codecpar->bits_per_coded_sample = ipmovie->video_bpp;
 
     if (ipmovie->audio_type) {
         st = avformat_new_stream(s, NULL);
@@ -597,19 +594,19 @@ static int ipmovie_read_header(AVFormatContext *s)
             return AVERROR(ENOMEM);
         avpriv_set_pts_info(st, 32, 1, ipmovie->audio_sample_rate);
         ipmovie->audio_stream_index = st->index;
-        st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
-        st->codec->codec_id = ipmovie->audio_type;
-        st->codec->codec_tag = 0;  /* no tag */
-        st->codec->channels = ipmovie->audio_channels;
-        st->codec->channel_layout = st->codec->channels == 1 ? AV_CH_LAYOUT_MONO :
-                                                               AV_CH_LAYOUT_STEREO;
-        st->codec->sample_rate = ipmovie->audio_sample_rate;
-        st->codec->bits_per_coded_sample = ipmovie->audio_bits;
-        st->codec->bit_rate = st->codec->channels * st->codec->sample_rate *
-            st->codec->bits_per_coded_sample;
-        if (st->codec->codec_id == AV_CODEC_ID_INTERPLAY_DPCM)
-            st->codec->bit_rate /= 2;
-        st->codec->block_align = st->codec->channels * st->codec->bits_per_coded_sample;
+        st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+        st->codecpar->codec_id = ipmovie->audio_type;
+        st->codecpar->codec_tag = 0;  /* no tag */
+        st->codecpar->channels = ipmovie->audio_channels;
+        st->codecpar->channel_layout = st->codecpar->channels == 1 ? AV_CH_LAYOUT_MONO :
+                                                                     AV_CH_LAYOUT_STEREO;
+        st->codecpar->sample_rate = ipmovie->audio_sample_rate;
+        st->codecpar->bits_per_coded_sample = ipmovie->audio_bits;
+        st->codecpar->bit_rate = st->codecpar->channels * st->codecpar->sample_rate *
+            st->codecpar->bits_per_coded_sample;
+        if (st->codecpar->codec_id == AV_CODEC_ID_INTERPLAY_DPCM)
+            st->codecpar->bit_rate /= 2;
+        st->codecpar->block_align = st->codecpar->channels * st->codecpar->bits_per_coded_sample;
     }
 
     return 0;

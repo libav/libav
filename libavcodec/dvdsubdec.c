@@ -20,7 +20,7 @@
  */
 
 #include "avcodec.h"
-#include "get_bits.h"
+#include "bitstream.h"
 #include "internal.h"
 
 #include "libavutil/attributes.h"
@@ -50,13 +50,13 @@ static void yuv_a_to_rgba(const uint8_t *ycbcr, const uint8_t *alpha, uint32_t *
     }
 }
 
-static int decode_run_2bit(GetBitContext *gb, int *color)
+static int decode_run_2bit(BitstreamContext *bc, int *color)
 {
     unsigned int v, t;
 
     v = 0;
     for (t = 1; v < t && t <= 0x40; t <<= 2)
-        v = (v << 4) | get_bits(gb, 4);
+        v = (v << 4) | bitstream_read(bc, 4);
     *color = v & 3;
     if (v < 4) { /* Code for fill rest of line */
         return INT_MAX;
@@ -64,23 +64,23 @@ static int decode_run_2bit(GetBitContext *gb, int *color)
     return v >> 2;
 }
 
-static int decode_run_8bit(GetBitContext *gb, int *color)
+static int decode_run_8bit(BitstreamContext *bc, int *color)
 {
     int len;
-    int has_run = get_bits1(gb);
-    if (get_bits1(gb))
-        *color = get_bits(gb, 8);
+    int has_run = bitstream_read_bit(bc);
+    if (bitstream_read_bit(bc))
+        *color = bitstream_read(bc, 8);
     else
-        *color = get_bits(gb, 2);
+        *color = bitstream_read(bc, 2);
     if (has_run) {
-        if (get_bits1(gb)) {
-            len = get_bits(gb, 7);
+        if (bitstream_read_bit(bc)) {
+            len = bitstream_read(bc, 7);
             if (len == 0)
                 len = INT_MAX;
             else
                 len += 9;
         } else
-            len = get_bits(gb, 3) + 2;
+            len = bitstream_read(bc, 3) + 2;
     } else
         len = 1;
     return len;
@@ -89,24 +89,24 @@ static int decode_run_8bit(GetBitContext *gb, int *color)
 static int decode_rle(uint8_t *bitmap, int linesize, int w, int h,
                       const uint8_t *buf, int start, int buf_size, int is_8bit)
 {
-    GetBitContext gb;
+    BitstreamContext bc;
     int bit_len;
     int x, y, len, color;
     uint8_t *d;
 
     bit_len = (buf_size - start) * 8;
-    init_get_bits(&gb, buf + start, bit_len);
+    bitstream_init(&bc, buf + start, bit_len);
 
     x = 0;
     y = 0;
     d = bitmap;
     for(;;) {
-        if (get_bits_count(&gb) > bit_len)
+        if (bitstream_tell(&bc) > bit_len)
             return -1;
         if (is_8bit)
-            len = decode_run_8bit(&gb, &color);
+            len = decode_run_8bit(&bc, &color);
         else
-            len = decode_run_2bit(&gb, &color);
+            len = decode_run_2bit(&bc, &color);
         len = FFMIN(len, w - x);
         memset(d + x, color, len);
         x += len;
@@ -117,7 +117,7 @@ static int decode_rle(uint8_t *bitmap, int linesize, int w, int h,
             d += linesize;
             x = 0;
             /* byte align */
-            align_get_bits(&gb);
+            bitstream_align(&bc);
         }
     }
     return 0;
@@ -178,13 +178,14 @@ static void guess_palette(DVDSubContext* ctx,
 static int decode_dvd_subtitles(DVDSubContext *ctx, AVSubtitle *sub_header,
                                 const uint8_t *buf, int buf_size)
 {
-    int cmd_pos, pos, cmd, x1, y1, x2, y2, offset1, offset2, next_cmd_pos;
+    int cmd_pos, pos, cmd, x1, y1, x2, y2, next_cmd_pos;
     int big_offsets, offset_size, is_8bit = 0;
     const uint8_t *yuv_palette = 0;
     uint8_t colormap[4] = { 0 }, alpha[256] = { 0 };
     int date;
     int i;
     int is_menu = 0;
+    int64_t offset1, offset2;
 
     if (buf_size < 10)
         return -1;
@@ -246,7 +247,8 @@ static int decode_dvd_subtitles(DVDSubContext *ctx, AVSubtitle *sub_header,
                 alpha[1] = buf[pos + 1] >> 4;
                 alpha[0] = buf[pos + 1] & 0x0f;
                 pos += 2;
-            ff_dlog(NULL, "alpha=%x%x%x%x\n", alpha[0],alpha[1],alpha[2],alpha[3]);
+                ff_dlog(NULL, "alpha=%"PRIx8"%"PRIx8"%"PRIx8"%"PRIx8"\n",
+                        alpha[0], alpha[1], alpha[2], alpha[3]);
                 break;
             case 0x05:
             case 0x85:
@@ -266,7 +268,7 @@ static int decode_dvd_subtitles(DVDSubContext *ctx, AVSubtitle *sub_header,
                     goto fail;
                 offset1 = AV_RB16(buf + pos);
                 offset2 = AV_RB16(buf + pos + 2);
-                ff_dlog(NULL, "offset1=0x%04x offset2=0x%04x\n", offset1, offset2);
+                ff_dlog(NULL, "offset1=0x%04"PRIx64" offset2=0x%04"PRIx64"\n", offset1, offset2);
                 pos += 4;
                 break;
             case 0x86:
@@ -274,7 +276,7 @@ static int decode_dvd_subtitles(DVDSubContext *ctx, AVSubtitle *sub_header,
                     goto fail;
                 offset1 = AV_RB32(buf + pos);
                 offset2 = AV_RB32(buf + pos + 4);
-                ff_dlog(NULL, "offset1=0x%04x offset2=0x%04x\n", offset1, offset2);
+                ff_dlog(NULL, "offset1=0x%04"PRIx64" offset2=0x%04"PRIx64"\n", offset1, offset2);
                 pos += 8;
                 break;
 
@@ -302,6 +304,9 @@ static int decode_dvd_subtitles(DVDSubContext *ctx, AVSubtitle *sub_header,
             }
         }
     the_end:
+        if (offset1 >= buf_size || offset2 >= buf_size)
+            goto fail;
+
         if (offset1 >= 0) {
             int w, h;
             uint8_t *bitmap;
@@ -316,8 +321,8 @@ static int decode_dvd_subtitles(DVDSubContext *ctx, AVSubtitle *sub_header,
             if (w > 0 && h > 0) {
                 if (sub_header->rects) {
                     for (i = 0; i < sub_header->num_rects; i++) {
-                        av_freep(&sub_header->rects[i]->pict.data[0]);
-                        av_freep(&sub_header->rects[i]->pict.data[1]);
+                        av_freep(&sub_header->rects[i]->data[0]);
+                        av_freep(&sub_header->rects[i]->data[1]);
                         av_freep(&sub_header->rects[i]);
                     }
                     av_freep(&sub_header->rects);
@@ -331,25 +336,27 @@ static int decode_dvd_subtitles(DVDSubContext *ctx, AVSubtitle *sub_header,
                 if (!sub_header->rects[0])
                     goto fail;
                 sub_header->num_rects = 1;
-                bitmap = sub_header->rects[0]->pict.data[0] = av_malloc(w * h);
+                bitmap = sub_header->rects[0]->data[0] = av_malloc(w * h);
                 if (!bitmap)
                     goto fail;
                 decode_rle(bitmap, w * 2, w, (h + 1) / 2,
                            buf, offset1, buf_size, is_8bit);
                 decode_rle(bitmap + w, w * 2, w, h / 2,
                            buf, offset2, buf_size, is_8bit);
-                sub_header->rects[0]->pict.data[1] = av_mallocz(AVPALETTE_SIZE);
-                if (!sub_header->rects[0]->pict.data[1])
+                sub_header->rects[0]->data[1] = av_mallocz(AVPALETTE_SIZE);
+                if (!sub_header->rects[0]->data[1])
                     goto fail;
                 if (is_8bit) {
                     if (yuv_palette == 0)
                         goto fail;
                     sub_header->rects[0]->nb_colors = 256;
-                    yuv_a_to_rgba(yuv_palette, alpha, (uint32_t*)sub_header->rects[0]->pict.data[1], 256);
+                    yuv_a_to_rgba(yuv_palette, alpha,
+                                  (uint32_t *)sub_header->rects[0]->data[1],
+                                  256);
                 } else {
                     sub_header->rects[0]->nb_colors = 4;
                     guess_palette(ctx,
-                                  (uint32_t*)sub_header->rects[0]->pict.data[1],
+                                  (uint32_t *)sub_header->rects[0]->data[1],
                                   colormap, alpha, 0xffff00);
                 }
                 sub_header->rects[0]->x = x1;
@@ -357,7 +364,21 @@ static int decode_dvd_subtitles(DVDSubContext *ctx, AVSubtitle *sub_header,
                 sub_header->rects[0]->w = w;
                 sub_header->rects[0]->h = h;
                 sub_header->rects[0]->type = SUBTITLE_BITMAP;
-                sub_header->rects[0]->pict.linesize[0] = w;
+                sub_header->rects[0]->linesize[0] = w;
+
+#if FF_API_AVPICTURE
+FF_DISABLE_DEPRECATION_WARNINGS
+{
+                int j;
+                AVSubtitleRect *rect;
+                rect = sub_header->rects[0];
+                for (j = 0; j < 4; j++) {
+                    rect->pict.data[j] = rect->data[j];
+                    rect->pict.linesize[j] = rect->linesize[j];
+                }
+}
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
             }
         }
         if (next_cmd_pos == cmd_pos)
@@ -369,8 +390,8 @@ static int decode_dvd_subtitles(DVDSubContext *ctx, AVSubtitle *sub_header,
  fail:
     if (!sub_header->rects) {
         for (i = 0; i < sub_header->num_rects; i++) {
-            av_freep(&sub_header->rects[i]->pict.data[0]);
-            av_freep(&sub_header->rects[i]->pict.data[1]);
+            av_freep(&sub_header->rects[i]->data[0]);
+            av_freep(&sub_header->rects[i]->data[1]);
             av_freep(&sub_header->rects[i]);
         }
         av_freep(&sub_header->rects);
@@ -402,29 +423,29 @@ static int find_smallest_bounding_rectangle(AVSubtitle *s)
         return 0;
 
     for(i = 0; i < s->rects[0]->nb_colors; i++) {
-        if ((((uint32_t*)s->rects[0]->pict.data[1])[i] >> 24) == 0)
+        if ((((uint32_t *)s->rects[0]->data[1])[i] >> 24) == 0)
             transp_color[i] = 1;
     }
     y1 = 0;
-    while (y1 < s->rects[0]->h && is_transp(s->rects[0]->pict.data[0] + y1 * s->rects[0]->pict.linesize[0],
+    while (y1 < s->rects[0]->h && is_transp(s->rects[0]->data[0] + y1 * s->rects[0]->linesize[0],
                                   1, s->rects[0]->w, transp_color))
         y1++;
     if (y1 == s->rects[0]->h) {
-        av_freep(&s->rects[0]->pict.data[0]);
+        av_freep(&s->rects[0]->data[0]);
         s->rects[0]->w = s->rects[0]->h = 0;
         return 0;
     }
 
     y2 = s->rects[0]->h - 1;
-    while (y2 > 0 && is_transp(s->rects[0]->pict.data[0] + y2 * s->rects[0]->pict.linesize[0], 1,
+    while (y2 > 0 && is_transp(s->rects[0]->data[0] + y2 * s->rects[0]->linesize[0], 1,
                                s->rects[0]->w, transp_color))
         y2--;
     x1 = 0;
-    while (x1 < (s->rects[0]->w - 1) && is_transp(s->rects[0]->pict.data[0] + x1, s->rects[0]->pict.linesize[0],
+    while (x1 < (s->rects[0]->w - 1) && is_transp(s->rects[0]->data[0] + x1, s->rects[0]->linesize[0],
                                         s->rects[0]->h, transp_color))
         x1++;
     x2 = s->rects[0]->w - 1;
-    while (x2 > 0 && is_transp(s->rects[0]->pict.data[0] + x2, s->rects[0]->pict.linesize[0], s->rects[0]->h,
+    while (x2 > 0 && is_transp(s->rects[0]->data[0] + x2, s->rects[0]->linesize[0], s->rects[0]->h,
                                   transp_color))
         x2--;
     w = x2 - x1 + 1;
@@ -433,11 +454,11 @@ static int find_smallest_bounding_rectangle(AVSubtitle *s)
     if (!bitmap)
         return 1;
     for(y = 0; y < h; y++) {
-        memcpy(bitmap + w * y, s->rects[0]->pict.data[0] + x1 + (y1 + y) * s->rects[0]->pict.linesize[0], w);
+        memcpy(bitmap + w * y, s->rects[0]->data[0] + x1 + (y1 + y) * s->rects[0]->linesize[0], w);
     }
-    av_freep(&s->rects[0]->pict.data[0]);
-    s->rects[0]->pict.data[0] = bitmap;
-    s->rects[0]->pict.linesize[0] = w;
+    av_freep(&s->rects[0]->data[0]);
+    s->rects[0]->data[0] = bitmap;
+    s->rects[0]->linesize[0] = w;
     s->rects[0]->w = w;
     s->rects[0]->h = h;
     s->rects[0]->x += x1;
@@ -495,11 +516,11 @@ static int dvdsub_decode(AVCodecContext *avctx,
         goto no_subtitle;
 
 #if defined(DEBUG)
-    ff_dlog(NULL, "start=%d ms end =%d ms\n",
+    ff_dlog(NULL, "start=%"PRIu32" ms end =%"PRIu32" ms\n",
             sub->start_display_time,
             sub->end_display_time);
-    ppm_save("/tmp/a.ppm", sub->rects[0]->pict.data[0],
-             sub->rects[0]->w, sub->rects[0]->h, sub->rects[0]->pict.data[1]);
+    ppm_save("/tmp/a.ppm", sub->rects[0]->data[0],
+             sub->rects[0]->w, sub->rects[0]->h, sub->rects[0]->data[1]);
 #endif
 
     *data_size = 1;

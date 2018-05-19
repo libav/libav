@@ -90,6 +90,43 @@ struct AVFormatInternal {
      * Timebase for the timestamp offset.
      */
     AVRational offset_timebase;
+
+#if FF_API_COMPUTE_PKT_FIELDS2
+    int missing_ts_warning;
+#endif
+};
+
+struct AVStreamInternal {
+    /**
+     * Set to 1 if the codec allows reordering, so pts can be different
+     * from dts.
+     */
+    int reorder;
+    /**
+     * The codec context used by avformat_find_stream_info, the parser, etc.
+     */
+    AVCodecContext *avctx;
+    /**
+     * 1 if avctx has been initialized with the values from the codec parameters
+     */
+    int avctx_inited;
+
+    enum AVCodecID orig_codec_id;
+
+    /* the context for extracting extradata in find_stream_info()
+     * inited=1/bsf=NULL signals that extracting is not possible (codec not
+     * supported) */
+    struct {
+        AVBSFContext *bsf;
+        AVPacket     *pkt;
+        int inited;
+    } extract_extradata;
+
+#if FF_API_LAVF_AVCTX
+    // whether the deprecated stream codec context needs
+    // to be filled from the codec parameters
+    int need_codec_update;
+#endif
 };
 
 void ff_dynarray_add(intptr_t **tab_ptr, int *nb_ptr, intptr_t elem);
@@ -348,7 +385,7 @@ int ff_read_packet(AVFormatContext *s, AVPacket *pkt);
  * Interleave a packet per dts in an output media file.
  *
  * Packets with pkt->destruct == av_destruct_packet will be freed inside this
- * function, so they cannot be used after it. Note that calling av_free_packet()
+ * function, so they cannot be used after it. Note that calling av_packet_unref()
  * on them is still safe.
  *
  * @param s media file handle
@@ -408,10 +445,20 @@ static inline int ff_rename(const char *oldpath, const char *newpath)
 }
 
 /**
- * Add new side data to a stream. If a side data of this type already exists, it
- * is replaced.
+ * A wrapper around AVFormatContext.io_close that should be used
+ * instead of calling the pointer directly.
  */
-uint8_t *ff_stream_new_side_data(AVStream *st, enum AVPacketSideDataType type,
-                                 int size);
+void ff_format_io_close(AVFormatContext *s, AVIOContext **pb);
+
+/**
+ * Find the next packet in the interleaving queue for the given stream.
+ * The pkt parameter is filled in with the queued packet, including
+ * references to the data (which the caller is not allowed to keep or
+ * modify).
+ *
+ * @return 0 if a packet was found, a negative value if no packet was found
+ */
+int ff_interleaved_peek(AVFormatContext *s, int stream,
+                        AVPacket *pkt, int add_offset);
 
 #endif /* AVFORMAT_INTERNAL_H */

@@ -63,6 +63,9 @@ static av_cold int wmv2_encode_init(AVCodecContext *avctx)
 
     avctx->extradata_size = 4;
     avctx->extradata      = av_mallocz(avctx->extradata_size + 10);
+    if (!avctx->extradata)
+        return AVERROR(ENOMEM);
+
     encode_ext_header(w);
 
     return 0;
@@ -78,7 +81,7 @@ int ff_wmv2_encode_picture_header(MpegEncContext *s, int picture_number)
     put_bits(&s->pb, 5, s->qscale);
 
     s->dc_table_index  = 1;
-    s->mv_table_index  = 1; /* only if P frame */
+    s->mv_table_index  = 1; /* only if P-frame */
     s->per_mb_rl_table = 0;
     s->mspel           = 0;
     w->per_mb_abt      = 0;
@@ -213,12 +216,20 @@ void ff_wmv2_encode_mb(MpegEncContext *s, int16_t block[6][64],
         ff_msmpeg4_encode_block(s, block[i], i);
 }
 
+static const AVClass wmv2_class = {
+    .class_name = "wmv2 encoder",
+    .item_name  = av_default_item_name,
+    .option     = ff_mpv_generic_options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
+
 AVCodec ff_wmv2_encoder = {
     .name           = "wmv2",
     .long_name      = NULL_IF_CONFIG_SMALL("Windows Media Video 8"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_WMV2,
     .priv_data_size = sizeof(Wmv2Context),
+    .priv_class     = &wmv2_class,
     .init           = wmv2_encode_init,
     .encode2        = ff_mpv_encode_picture,
     .close          = ff_mpv_encode_end,

@@ -30,21 +30,6 @@
 #include "internal.h"
 #include "put_bits.h"
 
-static av_cold int encode_init(AVCodecContext *avctx)
-{
-    avctx->coded_frame = av_frame_alloc();
-    if (!avctx->coded_frame)
-        return AVERROR(ENOMEM);
-
-    return 0;
-}
-
-static av_cold int encode_close(AVCodecContext *avctx)
-{
-    av_frame_free(&avctx->coded_frame);
-    return 0;
-}
-
 static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
                         const AVFrame *p, int *got_packet)
 {
@@ -56,8 +41,12 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
         return ret;
     }
 
+#if FF_API_CODED_FRAME
+FF_DISABLE_DEPRECATION_WARNINGS
     avctx->coded_frame->pict_type = AV_PICTURE_TYPE_I;
     avctx->coded_frame->key_frame = 1;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
 
     init_put_bits(&pb, pkt->data, pkt->size);
 
@@ -89,9 +78,7 @@ AVCodec ff_cljr_encoder = {
     .long_name      = NULL_IF_CONFIG_SMALL("Cirrus Logic AccuPak"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_CLJR,
-    .init           = encode_init,
     .encode2        = encode_frame,
-    .close          = encode_close,
     .pix_fmts       = (const enum AVPixelFormat[]) { AV_PIX_FMT_YUV411P,
                                                    AV_PIX_FMT_NONE },
 };

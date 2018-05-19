@@ -1,5 +1,5 @@
 /*
- * MPEG1/2 demuxer
+ * MPEG-1/2 demuxer
  * Copyright (c) 2000, 2001, 2002 Fabrice Bellard
  *
  * This file is part of Libav.
@@ -22,9 +22,6 @@
 #include "avformat.h"
 #include "internal.h"
 #include "mpeg.h"
-
-#undef NDEBUG
-#include <assert.h>
 
 /*********************************************/
 /* demux code */
@@ -290,7 +287,7 @@ redo:
             goto error_redo;
         c = avio_r8(s->pb);
         len--;
-        /* XXX: for mpeg1, should test only bit 7 */
+        /* XXX: for MPEG-1, should test only bit 7 */
         if (c != 0xff)
             break;
     }
@@ -381,7 +378,7 @@ redo:
         int i;
         for (i = 0; i < s->nb_streams; i++) {
             if (startcode == s->streams[i]->id &&
-                s->pb->seekable /* index useless on streams anyway */) {
+                (s->pb->seekable & AVIO_SEEKABLE_NORMAL) /* index useless on streams anyway */) {
                 ff_reduce_index(s, i);
                 av_add_index_entry(s->streams[i], *ppos, dts, 0, 0,
                                    AVINDEX_KEYFRAME /* FIXME keyframe? */);
@@ -517,8 +514,8 @@ skip:
     if (!st)
         goto skip;
     st->id                = startcode;
-    st->codec->codec_type = type;
-    st->codec->codec_id   = codec_id;
+    st->codecpar->codec_type = type;
+    st->codecpar->codec_id   = codec_id;
     st->need_parsing      = AVSTREAM_PARSE_FULL;
 
 found:

@@ -18,7 +18,11 @@
  * License along with Libav; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
+
+#include "libavutil/avstring.h"
 #include "libavutil/imgutils.h"
+#include "libavutil/stereo3d.h"
+
 #include "avcodec.h"
 #include "bytestream.h"
 #include "internal.h"
@@ -414,9 +418,21 @@ static int decode_frame(AVCodecContext *avctx,
     int ret;
 
     /* check signature */
-    if (buf_size < 8 ||
-        (memcmp(buf, ff_pngsig, 8) != 0 && memcmp(buf, ff_mngsig, 8) != 0)) {
-        av_log(avctx, AV_LOG_ERROR, "Invalid PNG signature (%d).\n", buf_size);
+    if (buf_size < 8) {
+        av_log(avctx, AV_LOG_ERROR, "Not enough data %d\n",
+               buf_size);
+        return AVERROR_INVALIDDATA;
+    }
+    if (memcmp(buf, ff_pngsig, 8) != 0 &&
+        memcmp(buf, ff_mngsig, 8) != 0) {
+        char signature[5 * 8 + 1] = { 0 };
+        int i;
+        for (i = 0; i < 8; i++) {
+            av_strlcatf(signature + i * 5, sizeof(signature) - i * 5,
+                        " 0x%02x", buf[i]);
+        }
+        av_log(avctx, AV_LOG_ERROR, "Invalid PNG signature %s\n",
+               signature);
         return AVERROR_INVALIDDATA;
     }
 
@@ -437,7 +453,7 @@ static int decode_frame(AVCodecContext *avctx,
         if (length > 0x7fffffff)
             goto fail;
         tag = bytestream2_get_le32(&s->gb);
-        ff_dlog(avctx, "png: tag=%c%c%c%c length=%u\n",
+        ff_dlog(avctx, "png: tag=%c%c%c%c length=%"PRIu32"\n",
                 (tag & 0xff),
                 ((tag >> 8) & 0xff),
                 ((tag >> 16) & 0xff),
@@ -504,7 +520,13 @@ static int decode_frame(AVCodecContext *avctx,
                 } else if (s->bit_depth == 16 &&
                            s->color_type == PNG_COLOR_TYPE_GRAY_ALPHA) {
                     avctx->pix_fmt = AV_PIX_FMT_YA16BE;
+                } else if (s->bit_depth == 16 &&
+                           s->color_type == PNG_COLOR_TYPE_RGB_ALPHA) {
+                    avctx->pix_fmt = AV_PIX_FMT_RGBA64BE;
                 } else {
+                    avpriv_report_missing_feature(avctx,
+                                                  "Bit depth %d color type %d",
+                                                  s->bit_depth, s->color_type);
                     goto fail;
                 }
 
@@ -594,6 +616,22 @@ static int decode_frame(AVCodecContext *avctx,
             bytestream2_skip(&s->gb, 4);     /* crc */
         }
         break;
+        case MKTAG('s', 'T', 'E', 'R'): {
+            int mode = bytestream2_get_byte(&s->gb);
+            AVStereo3D *stereo3d = av_stereo3d_create_side_data(p);
+            if (!stereo3d)
+                goto the_end;
+
+            if (mode == 0 || mode == 1) {
+                stereo3d->type  = AV_STEREO3D_SIDEBYSIDE;
+                stereo3d->flags = mode ? 0 : AV_STEREO3D_FLAG_INVERT;
+            } else {
+                 av_log(avctx, AV_LOG_WARNING,
+                        "Unknown value in sTER chunk (%d)\n", mode);
+            }
+            bytestream2_skip(&s->gb, 4); /* crc */
+            break;
+        }
         case MKTAG('I', 'E', 'N', 'D'):
             if (!(s->state & PNG_ALLIMAGE))
                 goto fail;
@@ -607,7 +645,7 @@ skip_tag:
         }
     }
 exit_loop:
-    /* handle p-frames only if a predecessor frame is available */
+    /* handle P-frames only if a predecessor frame is available */
     if (s->prev->data[0]) {
         if (!(avpkt->flags & AV_PKT_FLAG_KEY)) {
             int i, j;
@@ -675,5 +713,6 @@ AVCodec ff_png_decoder = {
     .init           = png_dec_init,
     .close          = png_dec_end,
     .decode         = decode_frame,
-    .capabilities   = CODEC_CAP_DR1 /*| CODEC_CAP_DRAW_HORIZ_BAND*/,
+    .capabilities   = AV_CODEC_CAP_DR1 /*| AV_CODEC_CAP_DRAW_HORIZ_BAND*/,
+    .caps_internal  = FF_CODEC_CAP_INIT_THREADSAFE,
 };

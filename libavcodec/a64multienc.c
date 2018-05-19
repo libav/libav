@@ -44,7 +44,8 @@ static const int mc_colors[5]={0x0,0xb,0xc,0xf,0x1};
 //static const int mc_colors[5]={0x0,0x8,0xa,0xf,0x7};
 //static const int mc_colors[5]={0x0,0x9,0x8,0xa,0x3};
 
-static void to_meta_with_crop(AVCodecContext *avctx, AVFrame *p, int *dest)
+static void to_meta_with_crop(AVCodecContext *avctx,
+                              const AVFrame *p, int *dest)
 {
     int blockx, blocky, x, y;
     int luma = 0;
@@ -165,7 +166,6 @@ static void render_charset(AVCodecContext *avctx, uint8_t *charset,
 static av_cold int a64multi_close_encoder(AVCodecContext *avctx)
 {
     A64Context *c = avctx->priv_data;
-    av_frame_free(&avctx->coded_frame);
     av_free(c->mc_meta_charset);
     av_free(c->mc_best_cb);
     av_free(c->mc_charset);
@@ -209,7 +209,7 @@ static av_cold int a64multi_encode_init(AVCodecContext *avctx)
     }
 
     /* set up extradata */
-    if (!(avctx->extradata = av_mallocz(8 * 4 + FF_INPUT_BUFFER_PADDING_SIZE))) {
+    if (!(avctx->extradata = av_mallocz(8 * 4 + AV_INPUT_BUFFER_PADDING_SIZE))) {
         av_log(avctx, AV_LOG_ERROR, "Failed to allocate memory for extradata.\n");
         return AVERROR(ENOMEM);
     }
@@ -217,14 +217,12 @@ static av_cold int a64multi_encode_init(AVCodecContext *avctx)
     AV_WB32(avctx->extradata, c->mc_lifetime);
     AV_WB32(avctx->extradata + 16, INTERLACED);
 
-    avctx->coded_frame = av_frame_alloc();
-    if (!avctx->coded_frame) {
-        a64multi_close_encoder(avctx);
-        return AVERROR(ENOMEM);
-    }
-
+#if FF_API_CODED_FRAME
+FF_DISABLE_DEPRECATION_WARNINGS
     avctx->coded_frame->pict_type = AV_PICTURE_TYPE_I;
     avctx->coded_frame->key_frame = 1;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
     if (!avctx->codec_tag)
          avctx->codec_tag = AV_RL32("a64m");
 
@@ -252,7 +250,6 @@ static int a64multi_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
                                  const AVFrame *pict, int *got_packet)
 {
     A64Context *c = avctx->priv_data;
-    AVFrame *const p = avctx->coded_frame;
 
     int frame;
     int x, y;
@@ -296,10 +293,13 @@ static int a64multi_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     } else {
         /* fill up mc_meta_charset with data until lifetime exceeds */
         if (c->mc_frame_counter < c->mc_lifetime) {
-            *p = *pict;
-            p->pict_type = AV_PICTURE_TYPE_I;
-            p->key_frame = 1;
-            to_meta_with_crop(avctx, p, meta + 32000 * c->mc_frame_counter);
+#if FF_API_CODED_FRAME
+FF_DISABLE_DEPRECATION_WARNINGS
+            avctx->coded_frame->pict_type = AV_PICTURE_TYPE_I;
+            avctx->coded_frame->key_frame = 1;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
+            to_meta_with_crop(avctx, pict, meta + 32000 * c->mc_frame_counter);
             c->mc_frame_counter++;
             if (c->next_pts == AV_NOPTS_VALUE)
                 c->next_pts = pict->pts;
@@ -392,7 +392,7 @@ AVCodec ff_a64multi_encoder = {
     .encode2        = a64multi_encode_frame,
     .close          = a64multi_close_encoder,
     .pix_fmts       = (const enum AVPixelFormat[]) {AV_PIX_FMT_GRAY8, AV_PIX_FMT_NONE},
-    .capabilities   = CODEC_CAP_DELAY,
+    .capabilities   = AV_CODEC_CAP_DELAY,
 };
 
 AVCodec ff_a64multi5_encoder = {
@@ -405,5 +405,5 @@ AVCodec ff_a64multi5_encoder = {
     .encode2        = a64multi_encode_frame,
     .close          = a64multi_close_encoder,
     .pix_fmts       = (const enum AVPixelFormat[]) {AV_PIX_FMT_GRAY8, AV_PIX_FMT_NONE},
-    .capabilities   = CODEC_CAP_DELAY,
+    .capabilities   = AV_CODEC_CAP_DELAY,
 };

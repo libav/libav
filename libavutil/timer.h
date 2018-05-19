@@ -32,13 +32,15 @@
 
 #include "config.h"
 
-#if HAVE_MACH_MACH_TIME_H
+#if HAVE_MACH_ABSOLUTE_TIME
 #include <mach/mach_time.h>
 #endif
 
 #include "log.h"
 
-#if   ARCH_ARM
+#if   ARCH_AARCH64
+#   include "aarch64/timer.h"
+#elif ARCH_ARM
 #   include "arm/timer.h"
 #elif ARCH_BFIN
 #   include "bfin/timer.h"

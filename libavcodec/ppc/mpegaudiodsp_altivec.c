@@ -90,7 +90,7 @@ static void apply_window(const float *buf, const float *win1,
 }
 
 static void apply_window_mp3(float *in, float *win, int *unused, float *out,
-                             int incr)
+                             ptrdiff_t incr)
 {
     LOCAL_ALIGNED_16(float, suma, [17]);
     LOCAL_ALIGNED_16(float, sumb, [17]);
@@ -128,7 +128,7 @@ static void apply_window_mp3(float *in, float *win, int *unused, float *out,
     *out = sum;
 }
 
-#endif /* HAVE_ALTIVEC */
+#endif /* HAVE_ALTIVEC && HAVE_BIGENDIAN */
 
 av_cold void ff_mpadsp_init_ppc(MPADSPContext *s)
 {
@@ -137,5 +137,5 @@ av_cold void ff_mpadsp_init_ppc(MPADSPContext *s)
         return;
 
     s->apply_window_float = apply_window_mp3;
-#endif /* HAVE_ALTIVEC */
+#endif /* HAVE_ALTIVEC && HAVE_BIGENDIAN */
 }

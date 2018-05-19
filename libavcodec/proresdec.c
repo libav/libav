@@ -176,6 +176,7 @@ static int decode_frame_header(ProresContext *ctx, const uint8_t *buf,
     avctx->color_primaries = buf[14];
     avctx->color_trc       = buf[15];
     avctx->colorspace      = buf[16];
+    avctx->color_range     = AVCOL_RANGE_MPEG;
 
     ctx->qmat_changed = 0;
     ptr   = buf + 20;
@@ -778,5 +779,5 @@ AVCodec ff_prores_decoder = {
     .init           = decode_init,
     .close          = decode_close,
     .decode         = decode_frame,
-    .capabilities   = CODEC_CAP_DR1 | CODEC_CAP_SLICE_THREADS,
+    .capabilities   = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_SLICE_THREADS,
 };

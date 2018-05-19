@@ -141,22 +141,22 @@ static int dss_read_header(AVFormatContext *s)
     ctx->audio_codec = avio_r8(pb);
 
     if (ctx->audio_codec == DSS_ACODEC_DSS_SP) {
-        st->codec->codec_id    = AV_CODEC_ID_DSS_SP;
-        st->codec->sample_rate = 12000;
+        st->codecpar->codec_id    = AV_CODEC_ID_DSS_SP;
+        st->codecpar->sample_rate = 12000;
     } else if (ctx->audio_codec == DSS_ACODEC_G723_1) {
-        st->codec->codec_id    = AV_CODEC_ID_G723_1;
-        st->codec->sample_rate = 8000;
+        st->codecpar->codec_id    = AV_CODEC_ID_G723_1;
+        st->codecpar->sample_rate = 8000;
     } else {
         avpriv_request_sample(s, "Support for codec %x in DSS",
                               ctx->audio_codec);
         return AVERROR_PATCHWELCOME;
     }
 
-    st->codec->codec_type     = AVMEDIA_TYPE_AUDIO;
-    st->codec->channel_layout = AV_CH_LAYOUT_MONO;
-    st->codec->channels       = 1;
+    st->codecpar->codec_type     = AVMEDIA_TYPE_AUDIO;
+    st->codecpar->channel_layout = AV_CH_LAYOUT_MONO;
+    st->codecpar->channels       = 1;
 
-    avpriv_set_pts_info(st, 64, 1, st->codec->sample_rate);
+    avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
     st->start_time = 0;
 
     /* Jump over header */
@@ -256,7 +256,7 @@ static int dss_sp_read_packet(AVFormatContext *s, AVPacket *pkt)
     return pkt->size;
 
 error_eof:
-    av_free_packet(pkt);
+    av_packet_unref(pkt);
     return ret < 0 ? ret : AVERROR_EOF;
 }
 
@@ -294,7 +294,7 @@ static int dss_723_1_read_packet(AVFormatContext *s, AVPacket *pkt)
         ret = avio_read(s->pb, pkt->data + offset,
                         size2 - offset);
         if (ret < size2 - offset) {
-            av_free_packet(pkt);
+            av_packet_unref(pkt);
             return ret < 0 ? ret : AVERROR_EOF;
         }
 
@@ -304,7 +304,7 @@ static int dss_723_1_read_packet(AVFormatContext *s, AVPacket *pkt)
 
     ret = avio_read(s->pb, pkt->data + offset, size - offset);
     if (ret < size - offset) {
-        av_free_packet(pkt);
+        av_packet_unref(pkt);
         return ret < 0 ? ret : AVERROR_EOF;
     }
 

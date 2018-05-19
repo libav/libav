@@ -1,6 +1,6 @@
 /*
  * Wing Commander/Xan Video Decoder
- * Copyright (C) 2003 the ffmpeg project
+ * Copyright (C) 2003 The FFmpeg project
  *
  * This file is part of Libav.
  *
@@ -34,10 +34,11 @@
 
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mem.h"
-#include "avcodec.h"
-#include "bytestream.h"
+
 #define BITSTREAM_READER_LE
-#include "get_bits.h"
+#include "avcodec.h"
+#include "bitstream.h"
+#include "bytestream.h"
 #include "internal.h"
 
 #define RUNTIME_GAMMA 0
@@ -123,15 +124,15 @@ static int xan_huffman_decode(unsigned char *dest, int dest_len,
     unsigned char val = ival;
     unsigned char *dest_end = dest + dest_len;
     unsigned char *dest_start = dest;
-    GetBitContext gb;
+    BitstreamContext bc;
 
     if (ptr_len < 0)
         return AVERROR_INVALIDDATA;
 
-    init_get_bits(&gb, ptr, ptr_len * 8);
+    bitstream_init8(&bc, ptr, ptr_len);
 
     while (val != 0x16) {
-        unsigned idx = val - 0x17 + get_bits1(&gb) * byte;
+        unsigned idx = val - 0x17 + bitstream_read_bit(&bc) * byte;
         if (idx >= 2 * byte)
             return AVERROR_INVALIDDATA;
         val = src[idx];
@@ -620,5 +621,5 @@ AVCodec ff_xan_wc3_decoder = {
     .init           = xan_decode_init,
     .close          = xan_decode_end,
     .decode         = xan_decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
 };

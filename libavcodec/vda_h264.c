@@ -25,7 +25,7 @@
 #include <CoreFoundation/CFString.h>
 
 #include "libavutil/avutil.h"
-#include "h264.h"
+#include "h264dec.h"
 #include "internal.h"
 #include "vda.h"
 #include "vda_internal.h"
@@ -158,7 +158,7 @@ int ff_vda_create_decoder(struct vda_context *vda_ctx,
     CFMutableDictionaryRef io_surface_properties;
     CFNumberRef cv_pix_fmt;
 
-    /* Each VCL NAL in the bistream sent to the decoder
+    /* Each VCL NAL in the bitstream sent to the decoder
      * is preceded by a 4 bytes length header.
      * Change the avcC atom header if needed, to signal headers of 4 bytes. */
     if (extradata_size >= 4 && (extradata[4] & 0x03) != 0x03) {
@@ -247,7 +247,7 @@ static int vda_h264_uninit(AVCodecContext *avctx)
     return 0;
 }
 
-AVHWAccel ff_h264_vda_old_hwaccel = {
+const AVHWAccel ff_h264_vda_old_hwaccel = {
     .name           = "h264_vda",
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_H264,
@@ -384,7 +384,7 @@ int ff_vda_default_init(AVCodecContext *avctx)
 
     // kCVPixelFormatType_420YpCbCr8Planar;
 
-    /* Each VCL NAL in the bistream sent to the decoder
+    /* Each VCL NAL in the bitstream sent to the decoder
      * is preceded by a 4 bytes length header.
      * Change the avcC atom header if needed, to signal headers of 4 bytes. */
     if (avctx->extradata_size >= 4 && (avctx->extradata[4] & 0x03) != 0x03) {
@@ -483,7 +483,7 @@ static int vda_h264_alloc_frame(AVCodecContext *avctx, AVFrame *frame)
     return 0;
 }
 
-AVHWAccel ff_h264_vda_hwaccel = {
+const AVHWAccel ff_h264_vda_hwaccel = {
     .name           = "h264_vda",
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_H264,

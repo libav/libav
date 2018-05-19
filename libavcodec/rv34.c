@@ -28,9 +28,9 @@
 
 #include "avcodec.h"
 #include "error_resilience.h"
+#include "golomb_legacy.h"
 #include "mpegutils.h"
 #include "mpegvideo.h"
-#include "golomb.h"
 #include "internal.h"
 #include "mathops.h"
 #include "mpeg_er.h"
@@ -215,7 +215,7 @@ static int rv34_decode_cbp(GetBitContext *gb, RV34VLC *vlc, int table)
 }
 
 /**
- * Get one coefficient value from the bistream and store it.
+ * Get one coefficient value from the bitstream and store it.
  */
 static inline void decode_coeff(int16_t *dst, int coef, int esc, GetBitContext *gb, VLC* vlc, int q)
 {
@@ -854,8 +854,8 @@ static int rv34_decode_mv(RV34DecContext *r, int block_type)
 
     memset(r->dmv, 0, sizeof(r->dmv));
     for(i = 0; i < num_mvs[block_type]; i++){
-        r->dmv[i][0] = svq3_get_se_golomb(gb);
-        r->dmv[i][1] = svq3_get_se_golomb(gb);
+        r->dmv[i][0] = get_interleaved_se_golomb(gb);
+        r->dmv[i][1] = get_interleaved_se_golomb(gb);
     }
     switch(block_type){
     case RV34_MB_TYPE_INTRA:
@@ -1464,7 +1464,7 @@ static int rv34_decode_slice(RV34DecContext *r, int end, const uint8_t* buf, int
     return s->mb_y == s->mb_height;
 }
 
-/** @} */ // recons group end
+/** @} */ // reconstruction group end
 
 /**
  * Initialize decoder.

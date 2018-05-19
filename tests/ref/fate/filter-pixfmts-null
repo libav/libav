@@ -13,12 +13,20 @@ bgr565le            6a0d182c7165103b2613d1805c822f9f
 bgr8                36b9ef72c87da36ac547202d85a5805f
 bgra                56e6e1bfde40aaa27473e01b46345c82
 gbrap               57cb1a02d6f015a4329fe367f3bdfe49
+gbrap10be           56d152356064bce059f85be97f548d68
+gbrap10le           30e9fdb568a60eb3f8dcd55497425fa2
+gbrap12be           df4b550099df0702f602a8b305702a8c
+gbrap12le           f947c43e494ab87410dfb2547e7e22f2
 gbrp                d5f73b5d3ba7f6cadbc9b4ecbc161005
 gbrp10be            eb19bda60ab7f893198364dff21342d6
 gbrp10le            546146efb36ad2605e9f74ee5e4c2a36
+gbrp12be            3a7dd35686a7ca85cc58c44d0c5c4e96
+gbrp12le            654861b1837d312569395f598da1a2a1
 gbrp9be             cbe1bf8ead497a92362a749bd4b0a57e
 gbrp9le             f88c68df5d699a4a7f1b0152df9f25fe
 gray                8c941e9bbf6da5336384c57f15a4a454
+gray12be            aecffce8ea67ab93527dc74c1a523454
+gray12le            eac4b15c8686f04ea73751294f40b8e0
 gray16be            43bda75c197b0d59a9b87ee941553644
 gray16le            a4ea1369ef1efff0e1341a1dc42dbfdf
 monob               e13b2cbfb93d3ed6fdc1f256662ea959
@@ -43,6 +51,8 @@ yuv411p             fc2f303b20ae610dce86dae4a6671881
 yuv420p             a2117c3c5d4533dca311dc94a3d157bc
 yuv420p10be         7756ef359f79d63ef6f983caeaba5c51
 yuv420p10le         aa8abcc05010b4b0df7d924fd5887291
+yuv420p12be         f93fea0e8e10e9f2d006e8f8be5b8938
+yuv420p12le         5d2810e2112328dd88ffddfb486df060
 yuv420p16be         7a708532d8ac26d598ac7332e38dd2de
 yuv420p16le         6b868d3b0c44c6b04f39415890d6ee0b
 yuv420p9be          11ffb289661f4f55347d60e99dcef632
@@ -50,6 +60,8 @@ yuv420p9le          a0c9608b2be3ca6d4e8cf625714a3833
 yuv422p             b082344038849f5fd444ccf2a30e3f4f
 yuv422p10be         43a6293e138d0ecfd3385df3dcf9b713
 yuv422p10le         74da030a4efb5a20986fcead50018f4d
+yuv422p12be         d60480c872d6723e587199ee4ecfe86d
+yuv422p12le         2cbf87d44e9c897ec6460225d47efbda
 yuv422p16be         f7a0fb9e82805660317d07209e726100
 yuv422p16le         12eeb2f95bb0d655d52e8eed1cfbf771
 yuv422p9be          60daf1a7e61434b244c5a43f4449b617
@@ -58,6 +70,8 @@ yuv440p             12000ce709b38aac3f7b7f59b07847ef
 yuv444p             628c9d1e10c22e0e512b27c0e03b46e6
 yuv444p10be         b60d77db54a592ed088ebf7964e2dd5e
 yuv444p10le         1752a238eb27fb7c746e349536f60686
+yuv444p12be         be54f88f9b9034b5b9bc466132bfba10
+yuv444p12le         714c3c5789897b56cb9ae6a45688e395
 yuv444p16be         8e1e2f04cb2e97f80fdfecbb2c5679a0
 yuv444p16le         5677b2caa63e0c075eac6937b03cf2a6
 yuv444p9be          5ab55576b180b2966e9ed5a1ea55508a

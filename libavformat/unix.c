@@ -23,7 +23,6 @@
  * @file
  *
  * Unix socket url_protocol
- *
  */
 
 #include <sys/un.h>
@@ -73,6 +72,9 @@ static int unix_open(URLContext *h, const char *filename, int flags)
 
     if ((fd = ff_socket(AF_UNIX, s->type, 0)) < 0)
         return ff_neterrno();
+
+    if (s->timeout < 0 && h->rw_timeout)
+        s->timeout = h->rw_timeout / 1000;
 
     if (s->listen) {
         ret = ff_listen_bind(fd, (struct sockaddr *)&s->addr,
@@ -142,7 +144,7 @@ static int unix_get_file_handle(URLContext *h)
     return s->fd;
 }
 
-URLProtocol ff_unix_protocol = {
+const URLProtocol ff_unix_protocol = {
     .name                = "unix",
     .url_open            = unix_open,
     .url_read            = unix_read,

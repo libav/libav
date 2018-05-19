@@ -22,15 +22,13 @@
 #include "libavutil/attributes.h"
 
 #include "avcodec.h"
+#include "bitstream.h"
 #include "internal.h"
 #include "sinewin.h"
 #include "wma.h"
 #include "wma_common.h"
 #include "wma_freqs.h"
 #include "wmadata.h"
-
-#undef NDEBUG
-#include <assert.h>
 
 /* XXX: use same run/length optimization as mpeg decoders */
 // FIXME maybe split decode / encode or pass flag
@@ -95,7 +93,7 @@ av_cold int ff_wma_init(AVCodecContext *avctx, int flags2)
         avctx->bit_rate    <= 0)
         return -1;
 
-    avpriv_float_dsp_init(&s->fdsp, avctx->flags & CODEC_FLAG_BITEXACT);
+    avpriv_float_dsp_init(&s->fdsp, avctx->flags & AV_CODEC_FLAG_BITEXACT);
 
     if (avctx->codec->id == AV_CODEC_ID_WMAV1)
         s->version = 1;
@@ -279,16 +277,6 @@ av_cold int ff_wma_init(AVCodecContext *avctx, int flags2)
                     s->exponent_high_bands[k][j++] = end - start;
             }
             s->exponent_high_sizes[k] = j;
-#if 0
-            ff_tlog(s->avctx, "%5d: coefs_end=%d high_band_start=%d nb_high_bands=%d: ",
-                    s->frame_len >> k,
-                    s->coefs_end[k],
-                    s->high_band_start[k],
-                    s->exponent_high_sizes[k]);
-            for (j = 0; j < s->exponent_high_sizes[k]; j++)
-                ff_tlog(s->avctx, " %d", s->exponent_high_bands[k][j]);
-            ff_tlog(s->avctx, "\n");
-#endif /* 0 */
         }
     }
 
@@ -395,42 +383,42 @@ int ff_wma_end(AVCodecContext *avctx)
 
 /**
  * Decode an uncompressed coefficient.
- * @param gb GetBitContext
+ * @param bc BitstreamContext
  * @return the decoded coefficient
  */
-unsigned int ff_wma_get_large_val(GetBitContext *gb)
+unsigned int ff_wma_get_large_val(BitstreamContext *bc)
 {
     /** consumes up to 34 bits */
     int n_bits = 8;
     /** decode length */
-    if (get_bits1(gb)) {
+    if (bitstream_read_bit(bc)) {
         n_bits += 8;
-        if (get_bits1(gb)) {
+        if (bitstream_read_bit(bc)) {
             n_bits += 8;
-            if (get_bits1(gb))
+            if (bitstream_read_bit(bc))
                 n_bits += 7;
         }
     }
-    return get_bits_long(gb, n_bits);
+    return bitstream_read(bc, n_bits);
 }
 
 /**
  * Decode run level compressed coefficients.
  * @param avctx codec context
- * @param gb bitstream reader context
- * @param vlc vlc table for get_vlc2
+ * @param bc bitstream reader context
+ * @param vlc VLC table for bitstream_read_vlc
  * @param level_table level codes
  * @param run_table run codes
  * @param version 0 for wma1,2 1 for wmapro
  * @param ptr output buffer
  * @param offset offset in the output buffer
- * @param num_coefs number of input coefficents
+ * @param num_coefs number of input coefficients
  * @param block_len input buffer length (2^n)
  * @param frame_len_bits number of bits for escaped run codes
  * @param coef_nb_bits number of bits for escaped level codes
  * @return 0 on success, -1 otherwise
  */
-int ff_wma_run_level_decode(AVCodecContext *avctx, GetBitContext *gb,
+int ff_wma_run_level_decode(AVCodecContext *avctx, BitstreamContext *bc,
                             VLC *vlc, const float *level_table,
                             const uint16_t *run_table, int version,
                             WMACoef *ptr, int offset, int num_coefs,
@@ -442,11 +430,11 @@ int ff_wma_run_level_decode(AVCodecContext *avctx, GetBitContext *gb,
     uint32_t *iptr = (uint32_t *) ptr;
     const unsigned int coef_mask = block_len - 1;
     for (; offset < num_coefs; offset++) {
-        code = get_vlc2(gb, vlc->table, VLCBITS, VLCMAX);
+        code = bitstream_read_vlc(bc, vlc->table, VLCBITS, VLCMAX);
         if (code > 1) {
             /** normal code */
             offset                  += run_table[code];
-            sign                     = get_bits1(gb) - 1;
+            sign                     = bitstream_read_bit(bc) - 1;
             iptr[offset & coef_mask] = ilvl[code] ^ sign << 31;
         } else if (code == 1) {
             /** EOB */
@@ -454,26 +442,26 @@ int ff_wma_run_level_decode(AVCodecContext *avctx, GetBitContext *gb,
         } else {
             /** escape */
             if (!version) {
-                level = get_bits(gb, coef_nb_bits);
+                level = bitstream_read(bc, coef_nb_bits);
                 /** NOTE: this is rather suboptimal. reading
                  *  block_len_bits would be better */
-                offset += get_bits(gb, frame_len_bits);
+                offset += bitstream_read(bc, frame_len_bits);
             } else {
-                level = ff_wma_get_large_val(gb);
+                level = ff_wma_get_large_val(bc);
                 /** escape decode */
-                if (get_bits1(gb)) {
-                    if (get_bits1(gb)) {
-                        if (get_bits1(gb)) {
+                if (bitstream_read_bit(bc)) {
+                    if (bitstream_read_bit(bc)) {
+                        if (bitstream_read_bit(bc)) {
                             av_log(avctx, AV_LOG_ERROR,
                                    "broken escape sequence\n");
                             return -1;
                         } else
-                            offset += get_bits(gb, frame_len_bits) + 4;
+                            offset += bitstream_read(bc, frame_len_bits) + 4;
                     } else
-                        offset += get_bits(gb, 2) + 1;
+                        offset += bitstream_read(bc, 2) + 1;
                 }
             }
-            sign                    = get_bits1(gb) - 1;
+            sign                    = bitstream_read_bit(bc) - 1;
             ptr[offset & coef_mask] = (level ^ sign) - sign;
         }
     }

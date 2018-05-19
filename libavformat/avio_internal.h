@@ -1,5 +1,4 @@
 /*
- *
  * This file is part of Libav.
  *
  * Libav is free software; you can redistribute it and/or
@@ -53,14 +52,6 @@ int ffio_init_context(AVIOContext *s,
  * @return number of bytes read or AVERROR
  */
 int ffio_read_indirect(AVIOContext *s, unsigned char *buf, int size, const unsigned char **data);
-
-/**
- * Read size bytes from AVIOContext into buf.
- * This reads at most 1 packet. If that is not enough fewer bytes will be
- * returned.
- * @return number of bytes read or AVERROR
- */
-int ffio_read_partial(AVIOContext *s, unsigned char *buf, int size);
 
 void ffio_fill(AVIOContext *s, int b, int count);
 

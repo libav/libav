@@ -36,8 +36,9 @@
 
 #include "libavutil/channel_layout.h"
 #include "libavutil/opt.h"
+
 #include "avcodec.h"
-#include "get_bits.h"
+#include "bitstream.h"
 #include "g722.h"
 #include "internal.h"
 
@@ -79,9 +80,9 @@ static const int16_t low_inv_quant5[32] = {
      587,   473,   370,   276,   190,   110,    35,   -35
 };
 
-static const int16_t *low_inv_quants[3] = { ff_g722_low_inv_quant6,
-                                                    low_inv_quant5,
-                                            ff_g722_low_inv_quant4 };
+static const int16_t * const low_inv_quants[3] = { ff_g722_low_inv_quant6,
+                                                           low_inv_quant5,
+                                                   ff_g722_low_inv_quant4 };
 
 static int g722_decode_frame(AVCodecContext *avctx, void *data,
                              int *got_frame_ptr, AVPacket *avpkt)
@@ -92,7 +93,7 @@ static int g722_decode_frame(AVCodecContext *avctx, void *data,
     int j, ret;
     const int skip = 8 - c->bits_per_codeword;
     const int16_t *quantizer_table = low_inv_quants[skip];
-    GetBitContext gb;
+    BitstreamContext bc;
 
     /* get output buffer */
     frame->nb_samples = avpkt->size * 2;
@@ -102,15 +103,15 @@ static int g722_decode_frame(AVCodecContext *avctx, void *data,
     }
     out_buf = (int16_t *)frame->data[0];
 
-    init_get_bits(&gb, avpkt->data, avpkt->size * 8);
+    bitstream_init8(&bc, avpkt->data, avpkt->size);
 
     for (j = 0; j < avpkt->size; j++) {
         int ilow, ihigh, rlow, rhigh, dhigh;
         int xout[2];
 
-        ihigh = get_bits(&gb, 2);
-        ilow = get_bits(&gb, 6 - skip);
-        skip_bits(&gb, skip);
+        ihigh = bitstream_read(&bc, 2);
+        ilow  = bitstream_read(&bc, 6 - skip);
+        bitstream_skip(&bc, skip);
 
         rlow = av_clip_intp2((c->band[0].scale_factor * quantizer_table[ilow] >> 10)
                       + c->band[0].s_predictor, 14);
@@ -147,6 +148,6 @@ AVCodec ff_adpcm_g722_decoder = {
     .priv_data_size = sizeof(G722Context),
     .init           = g722_decode_init,
     .decode         = g722_decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
     .priv_class     = &g722_decoder_class,
 };

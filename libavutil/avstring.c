@@ -212,28 +212,6 @@ const char *av_dirname(char *path)
     return path;
 }
 
-int av_isdigit(int c)
-{
-    return c >= '0' && c <= '9';
-}
-
-int av_isgraph(int c)
-{
-    return c > 32 && c < 127;
-}
-
-int av_isspace(int c)
-{
-    return c == ' ' || c == '\f' || c == '\n' || c == '\r' || c == '\t' ||
-           c == '\v';
-}
-
-int av_isxdigit(int c)
-{
-    c = av_tolower(c);
-    return av_isdigit(c) || (c >= 'a' && c <= 'f');
-}
-
 int av_match_name(const char *name, const char *names)
 {
     const char *p;
@@ -251,55 +229,3 @@ int av_match_name(const char *name, const char *names)
     }
     return !av_strcasecmp(name, names);
 }
-
-
-
-#ifdef TEST
-
-int main(void)
-{
-    int i;
-    const char *strings[] = {
-        "''",
-        "",
-        ":",
-        "\\",
-        "'",
-        "    ''    :",
-        "    ''  ''  :",
-        "foo   '' :",
-        "'foo'",
-        "foo     ",
-        "  '  foo  '  ",
-        "foo\\",
-        "foo':  blah:blah",
-        "foo\\:  blah:blah",
-        "foo\'",
-        "'foo :  '  :blahblah",
-        "\\ :blah",
-        "     foo",
-        "      foo       ",
-        "      foo     \\ ",
-        "foo ':blah",
-        " foo   bar    :   blahblah",
-        "\\f\\o\\o",
-        "'foo : \\ \\  '   : blahblah",
-        "'\\fo\\o:': blahblah",
-        "\\'fo\\o\\:':  foo  '  :blahblah"
-    };
-
-    printf("Testing av_get_token()\n");
-    for (i = 0; i < FF_ARRAY_ELEMS(strings); i++) {
-        const char *p = strings[i];
-        char *q;
-        printf("|%s|", p);
-        q = av_get_token(&p, ":");
-        printf(" -> |%s|", q);
-        printf(" + |%s|\n", p);
-        av_free(q);
-    }
-
-    return 0;
-}
-
-#endif /* TEST */

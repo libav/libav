@@ -19,11 +19,13 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/avstring.h"
+
+#include "libavcodec/bitstream.h"
+
 #include "avio_internal.h"
 #include "rtpdec_formats.h"
 #include "internal.h"
-#include "libavutil/avstring.h"
-#include "libavcodec/get_bits.h"
 
 struct PayloadContext {
     AVIOContext *dyn_buf;
@@ -92,39 +94,39 @@ static int latm_parse_packet(AVFormatContext *ctx, PayloadContext *data,
 static int parse_fmtp_config(AVStream *st, const char *value)
 {
     int len = ff_hex_to_data(NULL, value), i, ret = 0;
-    GetBitContext gb;
+    BitstreamContext bc;
     uint8_t *config;
     int audio_mux_version, same_time_framing, num_programs, num_layers;
 
     /* Pad this buffer, too, to avoid out of bounds reads with get_bits below */
-    config = av_mallocz(len + FF_INPUT_BUFFER_PADDING_SIZE);
+    config = av_mallocz(len + AV_INPUT_BUFFER_PADDING_SIZE);
     if (!config)
         return AVERROR(ENOMEM);
     ff_hex_to_data(config, value);
-    init_get_bits(&gb, config, len*8);
-    audio_mux_version = get_bits(&gb, 1);
-    same_time_framing = get_bits(&gb, 1);
-    skip_bits(&gb, 6); /* num_sub_frames */
-    num_programs      = get_bits(&gb, 4);
-    num_layers        = get_bits(&gb, 3);
+    bitstream_init8(&bc, config, len);
+    audio_mux_version = bitstream_read(&bc, 1);
+    same_time_framing = bitstream_read(&bc, 1);
+    bitstream_skip(&bc, 6); /* num_sub_frames */
+    num_programs      = bitstream_read(&bc, 4);
+    num_layers        = bitstream_read(&bc, 3);
     if (audio_mux_version != 0 || same_time_framing != 1 || num_programs != 0 ||
         num_layers != 0) {
-        av_log(NULL, AV_LOG_WARNING, "Unsupported LATM config (%d,%d,%d,%d)\n",
-                                     audio_mux_version, same_time_framing,
-                                     num_programs, num_layers);
+        avpriv_report_missing_feature(NULL, "LATM config (%d,%d,%d,%d)",
+                                      audio_mux_version, same_time_framing,
+                                      num_programs, num_layers);
         ret = AVERROR_PATCHWELCOME;
         goto end;
     }
-    av_freep(&st->codec->extradata);
-    st->codec->extradata_size = (get_bits_left(&gb) + 7)/8;
-    st->codec->extradata = av_mallocz(st->codec->extradata_size +
-                                      FF_INPUT_BUFFER_PADDING_SIZE);
-    if (!st->codec->extradata) {
+    av_freep(&st->codecpar->extradata);
+    st->codecpar->extradata_size = (bitstream_bits_left(&bc) + 7) / 8;
+    st->codecpar->extradata = av_mallocz(st->codecpar->extradata_size +
+                                         AV_INPUT_BUFFER_PADDING_SIZE);
+    if (!st->codecpar->extradata) {
         ret = AVERROR(ENOMEM);
         goto end;
     }
-    for (i = 0; i < st->codec->extradata_size; i++)
-        st->codec->extradata[i] = get_bits(&gb, 8);
+    for (i = 0; i < st->codecpar->extradata_size; i++)
+        st->codecpar->extradata[i] = bitstream_read(&bc, 8);
 
 end:
     av_free(config);

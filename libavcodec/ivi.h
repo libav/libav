@@ -29,9 +29,11 @@
 #ifndef AVCODEC_IVI_H
 #define AVCODEC_IVI_H
 
-#include "avcodec.h"
-#include "get_bits.h"
 #include <stdint.h>
+
+#include "avcodec.h"
+#include "bitstream.h"
+#include "vlc.h"
 
 /**
  *  Indeo 4 frame types.
@@ -47,7 +49,6 @@ enum {
 };
 
 #define IVI_VLC_BITS 13 ///< max number of bits of the ivi's huffman codes
-#define IVI4_STREAM_ANALYSER    0
 #define IVI5_IS_PROTECTED       0x20
 
 /**
@@ -88,8 +89,8 @@ extern const uint8_t ff_ivi_direct_scan_4x4[16];
 /**
  *  Declare inverse transform function types
  */
-typedef void (InvTransformPtr)(const int32_t *in, int16_t *out, uint32_t pitch, const uint8_t *flags);
-typedef void (DCTransformPtr) (const int32_t *in, int16_t *out, uint32_t pitch, int blk_size);
+typedef void (InvTransformPtr)(const int32_t *in, int16_t *out, ptrdiff_t pitch, const uint8_t *flags);
+typedef void (DCTransformPtr) (const int32_t *in, int16_t *out, ptrdiff_t pitch, int blk_size);
 
 
 /**
@@ -154,7 +155,7 @@ typedef struct IVIBandDesc {
     int16_t         *ref_buf;       ///< pointer to the reference frame buffer (for motion compensation)
     int16_t         *b_ref_buf;     ///< pointer to the second reference frame buffer (for motion compensation)
     int16_t         *bufs[4];       ///< array of pointers to the band buffers
-    int             pitch;          ///< pitch associated with the buffers above
+    ptrdiff_t       pitch;          ///< pitch associated with the buffers above
     int             is_empty;       ///< = 1 if this band doesn't contain any data
     int             mb_size;        ///< macroblock size
     int             blk_size;       ///< block size
@@ -211,7 +212,7 @@ typedef struct IVIPicConfig {
 } IVIPicConfig;
 
 typedef struct IVI45DecContext {
-    GetBitContext   gb;
+    BitstreamContext bc;
     RVMapDesc       rvmap_tabs[9];   ///< local corrected copy of the static rvmap tables
 
     uint32_t        frame_num;
@@ -219,7 +220,6 @@ typedef struct IVI45DecContext {
     int             prev_frame_type; ///< frame type of the previous frame
     uint32_t        data_size;       ///< size of the frame data in bytes from picture header
     int             is_scalable;
-    int             transp_status;   ///< transparency mode status: 1 - enabled
     const uint8_t   *frame_data;     ///< input frame data pointer
     int             inter_scal;      ///< signals a sequence of scalable inter frames
     uint32_t        frame_size;      ///< frame size in bytes
@@ -249,13 +249,12 @@ typedef struct IVI45DecContext {
     uint8_t         gop_flags;
     uint32_t        lock_word;
 
-#if IVI4_STREAM_ANALYSER
+    int             show_indeo4_info;
     uint8_t         has_b_frames;
-    uint8_t         has_transp;
+    uint8_t         has_transp;      ///< transparency mode status: 1 - enabled
     uint8_t         uses_tiling;
     uint8_t         uses_haar;
     uint8_t         uses_fullpel;
-#endif
 
     int             (*decode_pic_hdr)  (struct IVI45DecContext *ctx, AVCodecContext *avctx);
     int             (*decode_band_hdr) (struct IVI45DecContext *ctx, IVIBandDesc *band, AVCodecContext *avctx);
@@ -305,14 +304,14 @@ void ff_ivi_init_static_vlc(void);
  *  Decode a huffman codebook descriptor from the bitstream
  *  and select specified huffman table.
  *
- *  @param[in,out]  gb          the GetBit context
+ *  @param[in,out]  bc          the Bitstream context
  *  @param[in]      desc_coded  flag signalling if table descriptor was coded
  *  @param[in]      which_tab   codebook purpose (IVI_MB_HUFF or IVI_BLK_HUFF)
  *  @param[out]     huff_tab    pointer to the descriptor of the selected table
  *  @param[in]      avctx       AVCodecContext pointer
  *  @return             zero on success, negative value otherwise
  */
-int  ff_ivi_dec_huff_desc(GetBitContext *gb, int desc_coded, int which_tab,
+int  ff_ivi_dec_huff_desc(BitstreamContext *bc, int desc_coded, int which_tab,
                           IVIHuffTab *huff_tab, AVCodecContext *avctx);
 
 /**

@@ -1,6 +1,6 @@
 /*
  * Westwood Studios VQA Video Decoder
- * Copyright (C) 2003 the ffmpeg project
+ * Copyright (C) 2003 The FFmpeg project
  *
  * This file is part of Libav.
  *
@@ -646,5 +646,5 @@ AVCodec ff_vqa_decoder = {
     .init           = vqa_decode_init,
     .close          = vqa_decode_end,
     .decode         = vqa_decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
 };

@@ -141,13 +141,13 @@ static int xwd_decode_frame(AVCodecContext *avctx, void *data,
         return AVERROR_INVALIDDATA;
     }
 
-    if (bytestream2_get_bytes_left(&gb) < ncolors * XWD_CMAP_SIZE + avctx->height * lsize) {
+    if (bytestream2_get_bytes_left(&gb) < ncolors * XWD_CMAP_SIZE + (uint64_t)avctx->height * lsize) {
         av_log(avctx, AV_LOG_ERROR, "input buffer too small\n");
         return AVERROR_INVALIDDATA;
     }
 
     if (pixformat != XWD_Z_PIXMAP) {
-        av_log(avctx, AV_LOG_ERROR, "pixmap format %"PRIu32" unsupported\n", pixformat);
+        avpriv_report_missing_feature(avctx, "Pixmap format %"PRIu32, pixformat);
         return AVERROR_PATCHWELCOME;
     }
 
@@ -155,10 +155,12 @@ static int xwd_decode_frame(AVCodecContext *avctx, void *data,
     switch (vclass) {
     case XWD_STATIC_GRAY:
     case XWD_GRAY_SCALE:
-        if (bpp != 1)
+        if (bpp != 1 && bpp != 8 || bpp != pixdepth)
             return AVERROR_INVALIDDATA;
         if (pixdepth == 1)
             avctx->pix_fmt = AV_PIX_FMT_MONOWHITE;
+        else if (pixdepth == 8)
+            avctx->pix_fmt = AV_PIX_FMT_GRAY8;
         break;
     case XWD_STATIC_COLOR:
     case XWD_PSEUDO_COLOR:
@@ -248,5 +250,5 @@ AVCodec ff_xwd_decoder = {
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_XWD,
     .decode         = xwd_decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
 };

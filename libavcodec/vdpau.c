@@ -22,15 +22,12 @@
  */
 
 #include <limits.h>
-#include "libavutil/avassert.h"
+
 #include "avcodec.h"
+#include "decode.h"
 #include "internal.h"
-#include "h264.h"
+#include "h264dec.h"
 #include "vc1.h"
-
-#undef NDEBUG
-#include <assert.h>
-
 #include "vdpau.h"
 #include "vdpau_internal.h"
 
@@ -104,6 +101,25 @@ int av_vdpau_get_surface_parameters(AVCodecContext *avctx,
     return 0;
 }
 
+int ff_vdpau_common_frame_params(AVCodecContext *avctx,
+                                 AVBufferRef *hw_frames_ctx)
+{
+    AVHWFramesContext *hw_frames = (AVHWFramesContext*)hw_frames_ctx->data;
+    VdpChromaType type;
+    uint32_t width;
+    uint32_t height;
+
+    if (av_vdpau_get_surface_parameters(avctx, &type, &width, &height))
+        return AVERROR(EINVAL);
+
+    hw_frames->format    = AV_PIX_FMT_VDPAU;
+    hw_frames->sw_format = avctx->sw_pix_fmt;
+    hw_frames->width     = width;
+    hw_frames->height    = height;
+
+    return 0;
+}
+
 int ff_vdpau_common_init(AVCodecContext *avctx, VdpDecoderProfile profile,
                          int level)
 {
@@ -119,32 +135,53 @@ int ff_vdpau_common_init(AVCodecContext *avctx, VdpDecoderProfile profile,
     VdpChromaType type;
     uint32_t width;
     uint32_t height;
+    int ret;
 
     vdctx->width            = UINT32_MAX;
     vdctx->height           = UINT32_MAX;
-    hwctx->reset            = 0;
-
-    if (hwctx->context.decoder != VDP_INVALID_HANDLE) {
-        vdctx->decoder = hwctx->context.decoder;
-        vdctx->render  = hwctx->context.render;
-        vdctx->device  = VDP_INVALID_HANDLE;
-        return 0; /* Decoder created by user */
-    }
-
-    vdctx->device           = hwctx->device;
-    vdctx->get_proc_address = hwctx->get_proc_address;
-
-    if (hwctx->flags & AV_HWACCEL_FLAG_IGNORE_LEVEL)
-        level = 0;
-    else if (level < 0)
-        return AVERROR(ENOTSUP);
 
     if (av_vdpau_get_surface_parameters(avctx, &type, &width, &height))
         return AVERROR(ENOSYS);
 
-    if (!(hwctx->flags & AV_HWACCEL_FLAG_ALLOW_HIGH_DEPTH) &&
-        type != VDP_CHROMA_TYPE_420)
-        return AVERROR(ENOSYS);
+    if (hwctx) {
+        hwctx->reset            = 0;
+
+        if (hwctx->context.decoder != VDP_INVALID_HANDLE) {
+            vdctx->decoder = hwctx->context.decoder;
+            vdctx->render  = hwctx->context.render;
+            vdctx->device  = VDP_INVALID_HANDLE;
+            return 0; /* Decoder created by user */
+        }
+
+        vdctx->device           = hwctx->device;
+        vdctx->get_proc_address = hwctx->get_proc_address;
+
+        if (hwctx->flags & AV_HWACCEL_FLAG_IGNORE_LEVEL)
+            level = 0;
+
+        if (!(hwctx->flags & AV_HWACCEL_FLAG_ALLOW_HIGH_DEPTH) &&
+            type != VDP_CHROMA_TYPE_420)
+            return AVERROR(ENOSYS);
+    } else {
+        AVHWFramesContext *frames_ctx;
+        AVVDPAUDeviceContext *dev_ctx;
+
+        ret = ff_decode_get_hw_frames_ctx(avctx, AV_HWDEVICE_TYPE_VDPAU);
+        if (ret < 0)
+            return ret;
+
+        frames_ctx = (AVHWFramesContext*)avctx->hw_frames_ctx->data;
+        dev_ctx = frames_ctx->device_ctx->hwctx;
+
+        vdctx->device           = dev_ctx->device;
+        vdctx->get_proc_address = dev_ctx->get_proc_address;
+
+        if (avctx->hwaccel_flags & AV_HWACCEL_FLAG_IGNORE_LEVEL)
+            level = 0;
+    }
+
+    if (level < 0)
+        return AVERROR(ENOTSUP);
 
     status = vdctx->get_proc_address(vdctx->device,
                                      VDP_FUNC_ID_VIDEO_SURFACE_QUERY_CAPABILITIES,
@@ -173,8 +210,7 @@ int ff_vdpau_common_init(AVCodecContext *avctx, VdpDecoderProfile profile,
     status = decoder_query_caps(vdctx->device, profile, &supported, &max_level,
                                 &max_mb, &max_width, &max_height);
 #ifdef VDP_DECODER_PROFILE_H264_CONSTRAINED_BASELINE
-    if (status != VDP_STATUS_OK && profile == VDP_DECODER_PROFILE_H264_CONSTRAINED_BASELINE) {
-        /* Run-time backward compatibility for libvdpau 0.8 and earlier */
+    if ((status != VDP_STATUS_OK || supported != VDP_TRUE) && profile == VDP_DECODER_PROFILE_H264_CONSTRAINED_BASELINE) {
         profile = VDP_DECODER_PROFILE_H264_MAIN;
         status = decoder_query_caps(vdctx->device, profile, &supported,
                                     &max_level, &max_mb,
@@ -243,7 +279,7 @@ static int ff_vdpau_common_reinit(AVCodecContext *avctx)
     if (vdctx->device == VDP_INVALID_HANDLE)
         return 0; /* Decoder created by user */
     if (avctx->coded_width == vdctx->width &&
-        avctx->coded_height == vdctx->height && !hwctx->reset)
+        avctx->coded_height == vdctx->height && (!hwctx || !hwctx->reset))
         return 0;
 
     avctx->hwaccel->uninit(avctx);
@@ -272,7 +308,7 @@ int ff_vdpau_common_end_frame(AVCodecContext *avctx, AVFrame *frame,
     if (val < 0)
         return val;
 
-    status = vdctx->render(vdctx->decoder, surf, (void *)&pic_ctx->info,
+    status = vdctx->render(vdctx->decoder, surf, &pic_ctx->info,
                            pic_ctx->bitstream_buffers_used,
                            pic_ctx->bitstream_buffers);
 
@@ -280,7 +316,7 @@ int ff_vdpau_common_end_frame(AVCodecContext *avctx, AVFrame *frame,
     return vdpau_error(status);
 }
 
-#if CONFIG_H263_VDPAU_HWACCEL  || CONFIG_MPEG1_VDPAU_HWACCEL || \
+#if CONFIG_MPEG1_VDPAU_HWACCEL || \
     CONFIG_MPEG2_VDPAU_HWACCEL || CONFIG_MPEG4_VDPAU_HWACCEL || \
     CONFIG_VC1_VDPAU_HWACCEL   || CONFIG_WMV3_VDPAU_HWACCEL
 int ff_vdpau_mpeg_end_frame(AVCodecContext *avctx)
@@ -318,6 +354,7 @@ int ff_vdpau_add_buffer(struct vdpau_picture_context *pic_ctx,
     return 0;
 }
 
+#if FF_API_VDPAU_PROFILE
 int av_vdpau_get_profile(AVCodecContext *avctx, VdpDecoderProfile *profile)
 {
 #define PROFILE(prof)                      \
@@ -364,6 +401,7 @@ do {                                       \
     return AVERROR(EINVAL);
 #undef PROFILE
 }
+#endif /* FF_API_VDPAU_PROFILE */
 
 AVVDPAUContext *av_vdpau_alloc_context(void)
 {

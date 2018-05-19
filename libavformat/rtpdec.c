@@ -21,8 +21,9 @@
 
 #include "libavutil/mathematics.h"
 #include "libavutil/avstring.h"
+#include "libavutil/intreadwrite.h"
 #include "libavutil/time.h"
-#include "libavcodec/get_bits.h"
+
 #include "avformat.h"
 #include "network.h"
 #include "srtp.h"
@@ -143,8 +144,7 @@ static int rtcp_parse_packet(RTPDemuxContext *s, const unsigned char *buf,
         switch (buf[1]) {
         case RTCP_SR:
             if (payload_len < 20) {
-                av_log(NULL, AV_LOG_ERROR,
-                       "Invalid length for RTCP SR packet\n");
+                av_log(s->ic, AV_LOG_ERROR, "Invalid RTCP SR packet length\n");
                 return AVERROR_INVALIDDATA;
             }
 
@@ -497,7 +497,7 @@ int ff_rtp_send_rtcp_feedback(RTPDemuxContext *s, URLContext *fd,
 
 /**
  * open a new RTP parse context for stream 'st'. 'st' can be NULL for
- * MPEG2-TS streams.
+ * MPEG-2 TS streams.
  */
 RTPDemuxContext *ff_rtp_parse_open(AVFormatContext *s1, AVStream *st,
                                    int payload_type, int queue_size)
@@ -513,14 +513,18 @@ RTPDemuxContext *ff_rtp_parse_open(AVFormatContext *s1, AVStream *st,
     s->ic                  = s1;
     s->st                  = st;
     s->queue_size          = queue_size;
+
+    av_log(s->ic, AV_LOG_VERBOSE, "setting jitter buffer size to %d\n",
+           s->queue_size);
+
     rtp_init_statistics(&s->statistics, 0);
     if (st) {
-        switch (st->codec->codec_id) {
+        switch (st->codecpar->codec_id) {
         case AV_CODEC_ID_ADPCM_G722:
             /* According to RFC 3551, the stream clock rate is 8000
              * even if the sample rate is 16000. */
-            if (st->codec->sample_rate == 8000)
-                st->codec->sample_rate = 16000;
+            if (st->codecpar->sample_rate == 8000)
+                st->codecpar->sample_rate = 16000;
             break;
         default:
             break;
@@ -612,7 +616,7 @@ static int rtp_parse_packet_internal(RTPDemuxContext *s, AVPacket *pkt,
     st = s->st;
     // only do something with this if all the rtp checks pass...
     if (!rtp_valid_packet_in_sequence(&s->statistics, seq)) {
-        av_log(st ? st->codec : NULL, AV_LOG_ERROR,
+        av_log(s->ic, AV_LOG_ERROR,
                "RTP: PT=%02x: bad cseq %04x expected=%04x\n",
                payload_type, seq, ((s->seq + 1) & 0xffff));
         return -1;
@@ -680,7 +684,7 @@ void ff_rtp_reset_packet_queue(RTPDemuxContext *s)
     s->prev_ret  = 0;
 }
 
-static void enqueue_packet(RTPDemuxContext *s, uint8_t *buf, int len)
+static int enqueue_packet(RTPDemuxContext *s, uint8_t *buf, int len)
 {
     uint16_t seq   = AV_RB16(buf + 2);
     RTPPacket **cur = &s->queue, *packet;
@@ -695,7 +699,7 @@ static void enqueue_packet(RTPDemuxContext *s, uint8_t *buf, int len)
 
     packet = av_mallocz(sizeof(*packet));
     if (!packet)
-        return;
+        return AVERROR(ENOMEM);
     packet->recvtime = av_gettime_relative();
     packet->seq      = seq;
     packet->len      = len;
@@ -703,6 +707,8 @@ static void enqueue_packet(RTPDemuxContext *s, uint8_t *buf, int len)
     packet->next     = *cur;
     *cur = packet;
     s->queue_len++;
+
+    return 0;
 }
 
 static int has_next_packet(RTPDemuxContext *s)
@@ -724,7 +730,7 @@ static int rtp_parse_queued_packet(RTPDemuxContext *s, AVPacket *pkt)
         return -1;
 
     if (!has_next_packet(s))
-        av_log(s->st ? s->st->codec : NULL, AV_LOG_WARNING,
+        av_log(s->ic, AV_LOG_WARNING,
                "RTP: missed %d packets\n", s->queue->seq - s->seq - 1);
 
     /* Parse the first packet in the queue, and dequeue it */
@@ -791,7 +797,7 @@ static int rtp_parse_one_packet(RTPDemuxContext *s, AVPacket *pkt,
         int16_t diff = seq - s->seq;
         if (diff < 0) {
             /* Packet older than the previously emitted one, drop */
-            av_log(s->st ? s->st->codec : NULL, AV_LOG_WARNING,
+            av_log(s->ic, AV_LOG_WARNING,
                    "RTP: dropping old packet received too late\n");
             return -1;
         } else if (diff <= 1) {
@@ -800,12 +806,16 @@ static int rtp_parse_one_packet(RTPDemuxContext *s, AVPacket *pkt,
             return rv;
         } else {
             /* Still missing some packet, enqueue this one. */
-            enqueue_packet(s, buf, len);
+            rv = enqueue_packet(s, buf, len);
+            if (rv < 0)
+                return rv;
             *bufptr = NULL;
             /* Return the first enqueued packet if the queue is full,
              * even if we're missing something */
-            if (s->queue_len >= s->queue_size)
+            if (s->queue_len >= s->queue_size) {
+                av_log(s->ic, AV_LOG_WARNING, "jitter buffer full\n");
                 return rtp_parse_queued_packet(s, pkt);
+            }
             return -1;
         }
     }
@@ -828,7 +838,7 @@ int ff_rtp_parse_packet(RTPDemuxContext *s, AVPacket *pkt,
         return -1;
     rv = rtp_parse_one_packet(s, pkt, bufptr, len);
     s->prev_ret = rv;
-    while (rv == AVERROR(EAGAIN) && has_next_packet(s))
+    while (rv < 0 && has_next_packet(s))
         rv = rtp_parse_queued_packet(s, pkt);
     return rv ? rv : has_next_packet(s);
 }
@@ -853,7 +863,7 @@ int ff_parse_fmtp(AVFormatContext *s,
     int value_size = strlen(p) + 1;
 
     if (!(value = av_malloc(value_size))) {
-        av_log(NULL, AV_LOG_ERROR, "Failed to allocate data for FMTP.");
+        av_log(s, AV_LOG_ERROR, "Failed to allocate data for FMTP.");
         return AVERROR(ENOMEM);
     }
 

@@ -21,8 +21,9 @@
 
 #include "libavutil/mathematics.h"
 #include "libavutil/imgutils.h"
+
 #include "avcodec.h"
-#include "get_bits.h"
+#include "bitstream.h"
 #include "bytestream.h"
 
 static av_cold int decode_init(AVCodecContext *avctx) {
@@ -55,7 +56,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     uint8_t *bitmap;
     int w, h, x, y, i;
     int64_t packet_time = 0;
-    GetBitContext gb;
+    BitstreamContext bc;
     int has_alpha = avctx->codec_tag == MKTAG('D','X','S','A');
 
     memset(sub, 0, sizeof(*sub));
@@ -106,13 +107,13 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     sub->rects[0]->x = x; sub->rects[0]->y = y;
     sub->rects[0]->w = w; sub->rects[0]->h = h;
     sub->rects[0]->type = SUBTITLE_BITMAP;
-    sub->rects[0]->pict.linesize[0] = w;
-    sub->rects[0]->pict.data[0] = av_malloc(w * h);
+    sub->rects[0]->linesize[0] = w;
+    sub->rects[0]->data[0] = av_malloc(w * h);
     sub->rects[0]->nb_colors = 4;
-    sub->rects[0]->pict.data[1] = av_mallocz(AVPALETTE_SIZE);
-    if (!sub->rects[0]->pict.data[0] || !sub->rects[0]->pict.data[1]) {
-        av_freep(&sub->rects[0]->pict.data[1]);
-        av_freep(&sub->rects[0]->pict.data[0]);
+    sub->rects[0]->data[1] = av_mallocz(AVPALETTE_SIZE);
+    if (!sub->rects[0]->data[0] || !sub->rects[0]->data[1]) {
+        av_freep(&sub->rects[0]->data[1]);
+        av_freep(&sub->rects[0]->data[0]);
         av_freep(&sub->rects[0]);
         av_freep(&sub->rects);
         return AVERROR(ENOMEM);
@@ -120,27 +121,41 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
     // read palette
     for (i = 0; i < sub->rects[0]->nb_colors; i++)
-        ((uint32_t*)sub->rects[0]->pict.data[1])[i] = bytestream_get_be24(&buf);
+        ((uint32_t*)sub->rects[0]->data[1])[i] = bytestream_get_be24(&buf);
 
     if (!has_alpha) {
         // make all except background (first entry) non-transparent
         for (i = 1; i < sub->rects[0]->nb_colors; i++)
-            ((uint32_t *)sub->rects[0]->pict.data[1])[i] |= 0xff000000;
+            ((uint32_t *)sub->rects[0]->data[1])[i] |= 0xff000000;
     } else {
         for (i = 0; i < sub->rects[0]->nb_colors; i++)
-            ((uint32_t *)sub->rects[0]->pict.data[1])[i] |= *buf++ << 24;
+            ((uint32_t *)sub->rects[0]->data[1])[i] |= *buf++ << 24;
     }
 
+#if FF_API_AVPICTURE
+FF_DISABLE_DEPRECATION_WARNINGS
+{
+    AVSubtitleRect *rect;
+    int j;
+    rect = sub->rects[0];
+    for (j = 0; j < 4; j++) {
+        rect->pict.data[j] = rect->data[j];
+        rect->pict.linesize[j] = rect->linesize[j];
+    }
+}
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
+
     // process RLE-compressed data
-    init_get_bits(&gb, buf, (buf_end - buf) * 8);
-    bitmap = sub->rects[0]->pict.data[0];
+    bitstream_init8(&bc, buf, buf_end - buf);
+    bitmap = sub->rects[0]->data[0];
     for (y = 0; y < h; y++) {
         // interlaced: do odd lines
-        if (y == (h + 1) / 2) bitmap = sub->rects[0]->pict.data[0] + w;
+        if (y == (h + 1) / 2) bitmap = sub->rects[0]->data[0] + w;
         for (x = 0; x < w; ) {
-            int log2 = ff_log2_tab[show_bits(&gb, 8)];
-            int run = get_bits(&gb, 14 - 4 * (log2 >> 1));
-            int color = get_bits(&gb, 2);
+            int log2 = ff_log2_tab[bitstream_peek(&bc, 8)];
+            int run = bitstream_read(&bc, 14 - 4 * (log2 >> 1));
+            int color = bitstream_read(&bc, 2);
             run = FFMIN(run, w - x);
             // run length 0 means till end of row
             if (!run) run = w - x;
@@ -150,7 +165,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         }
         // interlaced, skip every second line
         bitmap += w;
-        align_get_bits(&gb);
+        bitstream_align(&bc);
     }
     *data_size = 1;
     return buf_size;

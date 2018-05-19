@@ -35,7 +35,6 @@
  *   http://www.pcisys.net/~melanson/codecs
  *
  * Supports: BGR24 (RGB 24bpp)
- *
  */
 
 #include <stdio.h>
@@ -49,9 +48,6 @@
 
 #include <zlib.h>
 
-/*
- * Decoder context
- */
 typedef struct LclEncContext {
 
     AVCodecContext *avctx;
@@ -65,11 +61,6 @@ typedef struct LclEncContext {
     z_stream zstream;
 } LclEncContext;
 
-/*
- *
- * Encode a frame
- *
- */
 static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
                         const AVFrame *pict, int *got_packet)
 {
@@ -120,11 +111,6 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     return 0;
 }
 
-/*
- *
- * Init lcl encoder
- *
- */
 static av_cold int encode_init(AVCodecContext *avctx)
 {
     LclEncContext *c = avctx->priv_data;
@@ -138,12 +124,12 @@ static av_cold int encode_init(AVCodecContext *avctx)
     if (!avctx->extradata)
         return AVERROR(ENOMEM);
 
-    avctx->coded_frame = av_frame_alloc();
-    if (!avctx->coded_frame)
-        return AVERROR(ENOMEM);
-
+#if FF_API_CODED_FRAME
+FF_DISABLE_DEPRECATION_WARNINGS
     avctx->coded_frame->pict_type = AV_PICTURE_TYPE_I;
     avctx->coded_frame->key_frame = 1;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
 
     // Will be user settable someday
     c->compression = 6;
@@ -173,19 +159,12 @@ static av_cold int encode_init(AVCodecContext *avctx)
     return 0;
 }
 
-/*
- *
- * Uninit lcl encoder
- *
- */
 static av_cold int encode_end(AVCodecContext *avctx)
 {
     LclEncContext *c = avctx->priv_data;
 
     av_freep(&avctx->extradata);
     deflateEnd(&c->zstream);
-
-    av_frame_free(&avctx->coded_frame);
 
     return 0;
 }

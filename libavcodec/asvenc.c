@@ -206,7 +206,7 @@ static inline void dct_get(ASV1Context *a, const AVFrame *frame,
     for (i = 0; i < 4; i++)
         a->fdsp.fdct(block[i]);
 
-    if (!(a->avctx->flags & CODEC_FLAG_GRAY)) {
+    if (!(a->avctx->flags & AV_CODEC_FLAG_GRAY)) {
         a->pdsp.get_pixels(block[4], ptr_cb, frame->linesize[1]);
         a->pdsp.get_pixels(block[5], ptr_cr, frame->linesize[2]);
         for (i = 4; i < 6; i++)
@@ -223,7 +223,7 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
 
     if (!pkt->data &&
         (ret = av_new_packet(pkt, a->mb_height * a->mb_width * MAX_MB_SIZE +
-                             FF_MIN_BUFFER_SIZE)) < 0) {
+                             AV_INPUT_BUFFER_MIN_SIZE)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "Error getting output packet.\n");
         return ret;
     }
@@ -282,11 +282,12 @@ static av_cold int encode_init(AVCodecContext *avctx)
     int i;
     const int scale = avctx->codec_id == AV_CODEC_ID_ASV1 ? 1 : 2;
 
-    avctx->coded_frame = av_frame_alloc();
-    if (!avctx->coded_frame)
-        return AVERROR(ENOMEM);
+#if FF_API_CODED_FRAME
+FF_DISABLE_DEPRECATION_WARNINGS
     avctx->coded_frame->pict_type = AV_PICTURE_TYPE_I;
     avctx->coded_frame->key_frame = 1;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
 
     ff_asv_common_init(avctx);
     ff_fdctdsp_init(&a->fdsp, avctx);
@@ -313,13 +314,6 @@ static av_cold int encode_init(AVCodecContext *avctx)
     return 0;
 }
 
-static av_cold int asv_encode_close(AVCodecContext *avctx)
-{
-    av_frame_free(&avctx->coded_frame);
-
-    return 0;
-}
-
 #if CONFIG_ASV1_ENCODER
 AVCodec ff_asv1_encoder = {
     .name           = "asv1",
@@ -329,11 +323,9 @@ AVCodec ff_asv1_encoder = {
     .priv_data_size = sizeof(ASV1Context),
     .init           = encode_init,
     .encode2        = encode_frame,
-    .close          = asv_encode_close,
     .pix_fmts       = (const enum AVPixelFormat[]) { AV_PIX_FMT_YUV420P,
                                                      AV_PIX_FMT_NONE },
-    .caps_internal  = FF_CODEC_CAP_INIT_THREADSAFE |
-                      FF_CODEC_CAP_INIT_CLEANUP,
+    .caps_internal  = FF_CODEC_CAP_INIT_THREADSAFE,
 };
 #endif
 
@@ -346,10 +338,8 @@ AVCodec ff_asv2_encoder = {
     .priv_data_size = sizeof(ASV1Context),
     .init           = encode_init,
     .encode2        = encode_frame,
-    .close          = asv_encode_close,
     .pix_fmts       = (const enum AVPixelFormat[]) { AV_PIX_FMT_YUV420P,
                                                      AV_PIX_FMT_NONE },
-    .caps_internal  = FF_CODEC_CAP_INIT_THREADSAFE |
-                      FF_CODEC_CAP_INIT_CLEANUP,
+    .caps_internal  = FF_CODEC_CAP_INIT_THREADSAFE,
 };
 #endif

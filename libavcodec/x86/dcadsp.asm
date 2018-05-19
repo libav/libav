@@ -24,93 +24,7 @@
 SECTION_RODATA
 pf_inv16:  times 4 dd 0x3D800000 ; 1/16
 
-SECTION_TEXT
-
-; void decode_hf(float dst[DCA_SUBBANDS][8], const int32_t vq_num[DCA_SUBBANDS],
-;                const int8_t hf_vq[1024][32], intptr_t vq_offset,
-;                int32_t scale[DCA_SUBBANDS][2], intptr_t start, intptr_t end)
-
-%macro DECODE_HF 0
-cglobal decode_hf, 6,6,5, dst, num, src, offset, scale, start, end
-    lea       srcq, [srcq + offsetq]
-    shl     startq, 2
-    mov    offsetd, endm
-%define DICT offsetq
-    shl    offsetq, 2
-    mov       endm, offsetq
-.loop:
-%if ARCH_X86_64
-    mov    offsetd, [scaleq + 2 * startq]
-    cvtsi2ss    m0, offsetd
-%else
-    cvtsi2ss    m0, [scaleq + 2 * startq]
-%endif
-    mov    offsetd, [numq + startq]
-    mulss       m0, [pf_inv16]
-    shl       DICT, 5
-    shufps      m0, m0, 0
-%if cpuflag(sse2)
-%if cpuflag(sse4)
-    pmovsxbd    m1, [srcq + DICT + 0]
-    pmovsxbd    m2, [srcq + DICT + 4]
-%else
-    movq        m1, [srcq + DICT]
-    punpcklbw   m1, m1
-    mova        m2, m1
-    punpcklwd   m1, m1
-    punpckhwd   m2, m2
-    psrad       m1, 24
-    psrad       m2, 24
-%endif
-    cvtdq2ps    m1, m1
-    cvtdq2ps    m2, m2
-%else
-    movd       mm0, [srcq + DICT + 0]
-    movd       mm1, [srcq + DICT + 4]
-    punpcklbw  mm0, mm0
-    punpcklbw  mm1, mm1
-    movq       mm2, mm0
-    movq       mm3, mm1
-    punpcklwd  mm0, mm0
-    punpcklwd  mm1, mm1
-    punpckhwd  mm2, mm2
-    punpckhwd  mm3, mm3
-    psrad      mm0, 24
-    psrad      mm1, 24
-    psrad      mm2, 24
-    psrad      mm3, 24
-    cvtpi2ps    m1, mm0
-    cvtpi2ps    m2, mm1
-    cvtpi2ps    m3, mm2
-    cvtpi2ps    m4, mm3
-    shufps      m0, m0, 0
-    shufps      m1, m3, q1010
-    shufps      m2, m4, q1010
-%endif
-    mulps       m1, m0
-    mulps       m2, m0
-    mova [dstq + 8 * startq +  0], m1
-    mova [dstq + 8 * startq + 16], m2
-    add     startq, 4
-    cmp     startq, endm
-    jl       .loop
-.end:
-%if notcpuflag(sse2)
-    emms
-%endif
-    REP_RET
-%endmacro
-
-%if ARCH_X86_32
-INIT_XMM sse
-DECODE_HF
-%endif
-
-INIT_XMM sse2
-DECODE_HF
-
-INIT_XMM sse4
-DECODE_HF
+SECTION .text
 
 ; %1=v0/v1  %2=in1  %3=in2
 %macro FIR_LOOP 2-3
@@ -148,7 +62,7 @@ DECODE_HF
     addps       m4, va ; va1+3 vb1+3 va2+4 vb2+4
     movhlps     vb, m4 ; va1+3  vb1+3
     addps       vb, m4 ; va0..4 vb0..4
-    movh    [outq + count], vb
+    movlps  [outq + count], vb
 %if %1
     sub       cf0q, 8*NUM_COEF
 %endif
@@ -324,7 +238,7 @@ cglobal synth_filter_inner, 0, 6 + 4 * ARCH_X86_64, 7 + 6 * ARCH_X86_64, \
 %if ARCH_X86_32
     mov         buf2, synth_buf2mp
 %endif
-.mainloop
+.mainloop:
     ; m1 = a  m2 = b  m3 = c  m4 = d
     SETZERO       m3
     SETZERO       m4

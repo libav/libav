@@ -98,7 +98,7 @@ static const uint8_t swb_size_1024_8[] = {
     32, 36, 36, 40, 44, 48, 52, 56, 60, 64, 80
 };
 
-static const uint8_t *swb_size_1024[] = {
+static const uint8_t * const swb_size_1024[] = {
     swb_size_1024_96, swb_size_1024_96, swb_size_1024_64,
     swb_size_1024_48, swb_size_1024_48, swb_size_1024_32,
     swb_size_1024_24, swb_size_1024_24, swb_size_1024_16,
@@ -125,7 +125,7 @@ static const uint8_t swb_size_128_8[] = {
     4, 4, 4, 4, 4, 4, 4, 8, 8, 8, 8, 12, 16, 20, 20
 };
 
-static const uint8_t *swb_size_128[] = {
+static const uint8_t * const swb_size_128[] = {
     /* the last entry on the following row is swb_size_128_64 but is a
        duplicate of swb_size_128_96 */
     swb_size_128_96, swb_size_128_96, swb_size_128_96,
@@ -510,6 +510,7 @@ static int aac_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
     ChannelElement *cpe;
     int i, ch, w, g, chans, tag, start_ch, ret;
     int chan_el_counter[4];
+    int frame_bits;
     FFPsyWindowInfo windows[AAC_MAX_CHANNELS];
 
     if (s->last_frame == 2)
@@ -577,11 +578,9 @@ static int aac_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
     }
 
     do {
-        int frame_bits;
-
         init_put_bits(&s->pb, avpkt->data, avpkt->size);
 
-        if ((avctx->frame_number & 0xFF)==1 && !(avctx->flags & CODEC_FLAG_BITEXACT))
+        if ((avctx->frame_number & 0xFF)==1 && !(avctx->flags & AV_CODEC_FLAG_BITEXACT))
             put_bitstream_info(s, LIBAVCODEC_IDENT);
         start_ch = 0;
         memset(chan_el_counter, 0, sizeof(chan_el_counter));
@@ -651,11 +650,16 @@ static int aac_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
 
     put_bits(&s->pb, 3, TYPE_END);
     flush_put_bits(&s->pb);
-    avctx->frame_bits = put_bits_count(&s->pb);
+    frame_bits = put_bits_count(&s->pb);
+#if FF_API_STAT_BITS
+FF_DISABLE_DEPRECATION_WARNINGS
+    avctx->frame_bits = frame_bits;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
 
     // rate control stuff
-    if (!(avctx->flags & CODEC_FLAG_QSCALE)) {
-        float ratio = avctx->bit_rate * 1024.0f / avctx->sample_rate / avctx->frame_bits;
+    if (!(avctx->flags & AV_CODEC_FLAG_QSCALE)) {
+        float ratio = avctx->bit_rate * 1024.0f / avctx->sample_rate / frame_bits;
         s->lambda *= ratio;
         s->lambda = FFMIN(s->lambda, 65536.f);
     }
@@ -690,7 +694,7 @@ static av_cold int dsp_init(AVCodecContext *avctx, AACEncContext *s)
 {
     int ret = 0;
 
-    avpriv_float_dsp_init(&s->fdsp, avctx->flags & CODEC_FLAG_BITEXACT);
+    avpriv_float_dsp_init(&s->fdsp, avctx->flags & AV_CODEC_FLAG_BITEXACT);
 
     // window init
     ff_kbd_window_init(ff_aac_kbd_long_1024, 4.0, 1024);
@@ -711,7 +715,7 @@ static av_cold int alloc_buffers(AVCodecContext *avctx, AACEncContext *s)
     int ch;
     FF_ALLOCZ_OR_GOTO(avctx, s->buffer.samples, 3 * 1024 * s->channels * sizeof(s->buffer.samples[0]), alloc_fail);
     FF_ALLOCZ_OR_GOTO(avctx, s->cpe, sizeof(ChannelElement) * s->chan_map[0], alloc_fail);
-    FF_ALLOCZ_OR_GOTO(avctx, avctx->extradata, 5 + FF_INPUT_BUFFER_PADDING_SIZE, alloc_fail);
+    FF_ALLOCZ_OR_GOTO(avctx, avctx->extradata, 5 + AV_INPUT_BUFFER_PADDING_SIZE, alloc_fail);
 
     for(ch = 0; ch < s->channels; ch++)
         s->planar_samples[ch] = s->buffer.samples + 3 * 1024 * ch;
@@ -744,7 +748,9 @@ static av_cold int aac_encode_init(AVCodecContext *avctx)
     ERROR_IF(avctx->profile != FF_PROFILE_UNKNOWN && avctx->profile != FF_PROFILE_AAC_LOW,
              "Unsupported profile %d\n", avctx->profile);
     ERROR_IF(1024.0 * avctx->bit_rate / avctx->sample_rate > 6144 * s->channels,
-             "Too many bits per frame requested\n");
+             "Too many bits %f > %d per frame requested\n",
+             1024.0 * avctx->bit_rate / avctx->sample_rate,
+             6144 * s->channels);
 
     s->samplerate_index = i;
 
@@ -797,10 +803,10 @@ static const AVOption aacenc_options[] = {
 };
 
 static const AVClass aacenc_class = {
-    "AAC encoder",
-    av_default_item_name,
-    aacenc_options,
-    LIBAVUTIL_VERSION_INT,
+    .class_name = "AAC encoder",
+    .item_name  = av_default_item_name,
+    .option     = aacenc_options,
+    .version    = LIBAVUTIL_VERSION_INT,
 };
 
 AVCodec ff_aac_encoder = {
@@ -812,8 +818,8 @@ AVCodec ff_aac_encoder = {
     .init           = aac_encode_init,
     .encode2        = aac_encode_frame,
     .close          = aac_encode_end,
-    .capabilities   = CODEC_CAP_SMALL_LAST_FRAME | CODEC_CAP_DELAY |
-                      CODEC_CAP_EXPERIMENTAL,
+    .capabilities   = AV_CODEC_CAP_SMALL_LAST_FRAME | AV_CODEC_CAP_DELAY |
+                      AV_CODEC_CAP_EXPERIMENTAL,
     .sample_fmts    = (const enum AVSampleFormat[]){ AV_SAMPLE_FMT_FLTP,
                                                      AV_SAMPLE_FMT_NONE },
     .priv_class     = &aacenc_class,

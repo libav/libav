@@ -53,7 +53,7 @@ typedef struct Rl2Context {
  * @param s rl2 context
  * @param in input buffer
  * @param size input buffer size
- * @param out ouput buffer
+ * @param out output buffer
  * @param stride stride of the output buffer
  * @param video_base offset of the rle data inside the frame
  */
@@ -224,5 +224,5 @@ AVCodec ff_rl2_decoder = {
     .init           = rl2_decode_init,
     .close          = rl2_decode_end,
     .decode         = rl2_decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
 };

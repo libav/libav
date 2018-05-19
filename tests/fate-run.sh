@@ -24,6 +24,7 @@ size_tolerance=${14:-0}
 cmp_unit=${15:-2}
 gen=${16:-no}
 hwaccel=${17:-none}
+report_type=${18:-standard}
 
 outdir="tests/data/fate"
 outfile="${outdir}/${test}"
@@ -74,6 +75,10 @@ run(){
 
 probefmt(){
     run avprobe -show_format_entry format_name -v 0 "$@"
+}
+
+probestream(){
+    run avprobe -show_stream_entry "$1" -v 0 "$2"
 }
 
 avconv(){
@@ -159,15 +164,15 @@ video_filter(){
     label=${test#filter-}
     raw_src="${target_path}/tests/vsynth1/%02d.pgm"
     printf '%-20s' $label
-    avconv $DEC_OPTS -f image2 -vcodec pgmyuv -i $raw_src \
-        $FLAGS $ENC_OPTS -vf "$filters" -vcodec rawvideo -frames:v 5 $* -f nut md5:
+    avconv $DEC_OPTS -f image2 -c:v pgmyuv -i $raw_src \
+        $FLAGS $ENC_OPTS -vf "$filters" -c:v rawvideo -frames:v 5 $* -f nut md5:
 }
 
 pixfmts(){
     filter=${test#filter-pixfmts-}
     filter_args=$1
 
-    showfiltfmts="$target_exec $target_path/libavfilter/filtfmts-test"
+    showfiltfmts="$target_exec $target_path/libavfilter/tests/filtfmts"
     exclude_fmts=${outfile}${filter}_exclude_fmts
     out_fmts=${outfile}${filter}_out_fmts
 
@@ -187,6 +192,10 @@ pixfmts(){
     test=$outertest
 }
 
+null(){
+    :
+}
+
 mkdir -p "$outdir"
 
 exec 3>&2
@@ -198,7 +207,7 @@ if [ $err -gt 128 ]; then
     test "${sig}" = "${sig%[!A-Za-z]*}" || unset sig
 fi
 
-if test -e "$ref" || test $cmp = "oneline" ; then
+if test -e "$ref" || test $cmp = "oneline" || test $cmp = "null" ; then
     case $cmp in
         diff)   diff -u -b "$ref" "$outfile"            >$cmpfile ;;
         oneoff) oneoff     "$ref" "$outfile"            >$cmpfile ;;
@@ -208,13 +217,17 @@ if test -e "$ref" || test $cmp = "oneline" ; then
     esac
     cmperr=$?
     test $err = 0 && err=$cmperr
-    test $err = 0 || cat $cmpfile
+    if [ "$report_type" = "ignore" ]; then
+        test $err = 0 || echo "IGNORE\t${test}" && err=0 && unset sig
+    else
+        test $err = 0 || cat $cmpfile
+    fi
 else
     echo "reference file '$ref' not found"
     err=1
 fi
 
-if [ $err -eq 0 ]; then
+if [ $err -eq 0 ] && test $report_type = "standard" ; then
     unset cmpo erro
 else
     cmpo="$($base64 <$cmpfile)"

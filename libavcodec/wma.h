@@ -25,9 +25,10 @@
 #include "libavutil/float_dsp.h"
 
 #include "avcodec.h"
+#include "bitstream.h"
 #include "fft.h"
-#include "get_bits.h"
 #include "put_bits.h"
+#include "vlc.h"
 
 /* size of blocks */
 #define BLOCK_MIN_BITS 7
@@ -66,7 +67,7 @@ typedef struct CoefVLCTable {
 
 typedef struct WMACodecContext {
     AVCodecContext *avctx;
-    GetBitContext gb;
+    BitstreamContext bc;
     PutBitContext pb;
     int version;                            ///< 1 = 0x160 (WMAV1), 2 = 0x161 (WMAV2)
     int use_bit_reservoir;
@@ -120,7 +121,7 @@ typedef struct WMACodecContext {
     /* output buffer for one frame and the last for IMDCT windowing */
     DECLARE_ALIGNED(32, float, frame_out)[MAX_CHANNELS][BLOCK_MAX_SIZE * 2];
     /* last frame info */
-    uint8_t last_superframe[MAX_CODED_SUPERFRAME_SIZE + FF_INPUT_BUFFER_PADDING_SIZE]; /* padding added */
+    uint8_t last_superframe[MAX_CODED_SUPERFRAME_SIZE + AV_INPUT_BUFFER_PADDING_SIZE]; /* padding added */
     int last_bitoffset;
     int last_superframe_len;
     float noise_table[NOISE_TAB_SIZE];
@@ -147,8 +148,8 @@ extern const uint8_t  ff_aac_scalefactor_bits[121];
 int ff_wma_init(AVCodecContext *avctx, int flags2);
 int ff_wma_total_gain_to_bits(int total_gain);
 int ff_wma_end(AVCodecContext *avctx);
-unsigned int ff_wma_get_large_val(GetBitContext *gb);
-int ff_wma_run_level_decode(AVCodecContext *avctx, GetBitContext *gb,
+unsigned int ff_wma_get_large_val(BitstreamContext *bc);
+int ff_wma_run_level_decode(AVCodecContext *avctx, BitstreamContext *bc,
                             VLC *vlc, const float *level_table,
                             const uint16_t *run_table, int version,
                             WMACoef *ptr, int offset, int num_coefs,

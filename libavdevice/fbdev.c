@@ -58,6 +58,7 @@ static struct rgb_pixfmt_map_entry rgb_pixfmt_map[] = {
     {  32,       3,           2,           8,            0,   AV_PIX_FMT_ABGR  },
     {  24,       0,           8,          16,            0,   AV_PIX_FMT_RGB24 },
     {  24,      16,           8,           0,            0,   AV_PIX_FMT_BGR24 },
+    {  16,      11,           5,           0,            0,   AV_PIX_FMT_RGB565 },
 };
 
 static enum AVPixelFormat get_pixfmt_from_fb_varinfo(struct fb_var_screeninfo *varinfo)
@@ -163,21 +164,21 @@ static av_cold int fbdev_read_header(AVFormatContext *avctx)
         goto fail;
     }
 
-    st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
-    st->codec->codec_id   = AV_CODEC_ID_RAWVIDEO;
-    st->codec->width      = fbdev->width;
-    st->codec->height     = fbdev->height;
-    st->codec->pix_fmt    = pix_fmt;
-    st->codec->time_base  = (AVRational){fbdev->framerate_q.den, fbdev->framerate_q.num};
-    st->codec->bit_rate   =
+    st->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
+    st->codecpar->codec_id   = AV_CODEC_ID_RAWVIDEO;
+    st->codecpar->width      = fbdev->width;
+    st->codecpar->height     = fbdev->height;
+    st->codecpar->format     = pix_fmt;
+    st->codecpar->bit_rate   =
         fbdev->width * fbdev->height * fbdev->bytes_per_pixel * av_q2d(fbdev->framerate_q) * 8;
+    st->avg_frame_rate  = fbdev->framerate_q;
 
     av_log(avctx, AV_LOG_INFO,
            "w:%d h:%d bpp:%d pixfmt:%s fps:%d/%d bit_rate:%d\n",
            fbdev->width, fbdev->height, fbdev->varinfo.bits_per_pixel,
            av_get_pix_fmt_name(pix_fmt),
            fbdev->framerate_q.num, fbdev->framerate_q.den,
-           st->codec->bit_rate);
+           st->codecpar->bit_rate);
     return 0;
 
 fail:

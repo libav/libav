@@ -22,11 +22,11 @@
 #ifndef AVCODEC_CAVS_H
 #define AVCODEC_CAVS_H
 
+#include "bitstream.h"
 #include "cavsdsp.h"
 #include "blockdsp.h"
 #include "h264chroma.h"
 #include "idctdsp.h"
-#include "get_bits.h"
 #include "videodsp.h"
 
 #define SLICE_MAX_START_CODE    0x000001af
@@ -167,7 +167,7 @@ typedef struct AVSContext {
     IDCTDSPContext idsp;
     VideoDSPContext vdsp;
     CAVSDSPContext  cdsp;
-    GetBitContext gb;
+    BitstreamContext bc;
     AVSFrame cur;     ///< currently decoded frame
     AVSFrame DPB[2];  ///< reference frames
     int dist[2];     ///< temporal distances from current frame to ref frames
@@ -226,8 +226,8 @@ typedef struct AVSContext {
     uint8_t intern_border_y[26];
     uint8_t topleft_border_y, topleft_border_u, topleft_border_v;
 
-    void (*intra_pred_l[8])(uint8_t *d,uint8_t *top,uint8_t *left,int stride);
-    void (*intra_pred_c[7])(uint8_t *d,uint8_t *top,uint8_t *left,int stride);
+    void (*intra_pred_l[8])(uint8_t *d, uint8_t *top, uint8_t *left, ptrdiff_t stride);
+    void (*intra_pred_c[7])(uint8_t *d, uint8_t *top, uint8_t *left, ptrdiff_t stride);
     uint8_t *col_type_base;
 
     /* scaling factors for MV prediction */

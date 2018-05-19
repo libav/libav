@@ -36,11 +36,9 @@
 #include "libavutil/attributes.h"
 
 #include "avcodec.h"
+#include "bitstream.h"
 #include "internal.h"
 #include "wma.h"
-
-#undef NDEBUG
-#include <assert.h>
 
 #define EXPVLCBITS 8
 #define EXPMAX     ((19 + EXPVLCBITS - 1) / EXPVLCBITS)
@@ -82,7 +80,7 @@ static av_cold int wma_decode_init(AVCodecContext *avctx)
 
     s->avctx = avctx;
 
-    /* extract flag infos */
+    /* extract flag info */
     flags2    = 0;
     extradata = avctx->extradata;
     if (avctx->codec->id == AV_CODEC_ID_WMAV1 && avctx->extradata_size >= 4)
@@ -212,9 +210,9 @@ static void decode_exp_lsp(WMACodecContext *s, int ch)
 
     for (i = 0; i < NB_LSP_COEFS; i++) {
         if (i == 0 || i >= 8)
-            val = get_bits(&s->gb, 3);
+            val = bitstream_read(&s->bc, 3);
         else
-            val = get_bits(&s->gb, 4);
+            val = bitstream_read(&s->bc, 4);
         lsp_coefs[i] = ff_wma_lsp_codebook[i][val];
     }
 
@@ -321,7 +319,7 @@ static int decode_exp_vlc(WMACodecContext *s, int ch)
     q_end     = q + s->block_len;
     max_scale = 0;
     if (s->version == 1) {
-        last_exp  = get_bits(&s->gb, 5) + 10;
+        last_exp  = bitstream_read(&s->bc, 5) + 10;
         v         = ptab[last_exp];
         iv        = iptab[last_exp];
         max_scale = v;
@@ -336,12 +334,12 @@ static int decode_exp_vlc(WMACodecContext *s, int ch)
         last_exp = 36;
 
     while (q < q_end) {
-        code = get_vlc2(&s->gb, s->exp_vlc.table, EXPVLCBITS, EXPMAX);
+        code = bitstream_read_vlc(&s->bc, s->exp_vlc.table, EXPVLCBITS, EXPMAX);
         if (code < 0) {
             av_log(s->avctx, AV_LOG_ERROR, "Exponent vlc invalid\n");
             return -1;
         }
-        /* NOTE: this offset is the same as MPEG4 AAC ! */
+        /* NOTE: this offset is the same as MPEG-4 AAC! */
         last_exp += code - 60;
         if ((unsigned) last_exp + 60 >= FF_ARRAY_ELEMS(pow_tab)) {
             av_log(s->avctx, AV_LOG_ERROR, "Exponent out of range: %d\n",
@@ -418,7 +416,7 @@ static void wma_window(WMACodecContext *s, float *out)
 
 /**
  * @return 0 if OK. 1 if last block of frame. return -1 if
- * unrecorrable error.
+ * unrecoverable error.
  */
 static int wma_decode_block(WMACodecContext *s)
 {
@@ -439,7 +437,7 @@ static int wma_decode_block(WMACodecContext *s)
 
         if (s->reset_block_lengths) {
             s->reset_block_lengths = 0;
-            v                      = get_bits(&s->gb, n);
+            v                      = bitstream_read(&s->bc, n);
             if (v >= s->nb_block_sizes) {
                 av_log(s->avctx, AV_LOG_ERROR,
                        "prev_block_len_bits %d out of range\n",
@@ -447,7 +445,7 @@ static int wma_decode_block(WMACodecContext *s)
                 return -1;
             }
             s->prev_block_len_bits = s->frame_len_bits - v;
-            v                      = get_bits(&s->gb, n);
+            v                      = bitstream_read(&s->bc, n);
             if (v >= s->nb_block_sizes) {
                 av_log(s->avctx, AV_LOG_ERROR,
                        "block_len_bits %d out of range\n",
@@ -460,7 +458,7 @@ static int wma_decode_block(WMACodecContext *s)
             s->prev_block_len_bits = s->block_len_bits;
             s->block_len_bits      = s->next_block_len_bits;
         }
-        v = get_bits(&s->gb, n);
+        v = bitstream_read(&s->bc, n);
         if (v >= s->nb_block_sizes) {
             av_log(s->avctx, AV_LOG_ERROR,
                    "next_block_len_bits %d out of range\n",
@@ -483,10 +481,10 @@ static int wma_decode_block(WMACodecContext *s)
     }
 
     if (s->avctx->channels == 2)
-        s->ms_stereo = get_bits1(&s->gb);
+        s->ms_stereo = bitstream_read_bit(&s->bc);
     v = 0;
     for (ch = 0; ch < s->avctx->channels; ch++) {
-        a                    = get_bits1(&s->gb);
+        a                    = bitstream_read_bit(&s->bc);
         s->channel_coded[ch] = a;
         v                   |= a;
     }
@@ -502,7 +500,7 @@ static int wma_decode_block(WMACodecContext *s)
      * coef escape coding */
     total_gain = 1;
     for (;;) {
-        a           = get_bits(&s->gb, 7);
+        a           = bitstream_read(&s->bc, 7);
         total_gain += a;
         if (a != 127)
             break;
@@ -522,7 +520,7 @@ static int wma_decode_block(WMACodecContext *s)
                 int i, n, a;
                 n = s->exponent_high_sizes[bsize];
                 for (i = 0; i < n; i++) {
-                    a                         = get_bits1(&s->gb);
+                    a                         = bitstream_read_bit(&s->bc);
                     s->high_band_coded[ch][i] = a;
                     /* if noise coding, the coefficients are not transmitted */
                     if (a)
@@ -539,10 +537,11 @@ static int wma_decode_block(WMACodecContext *s)
                 for (i = 0; i < n; i++) {
                     if (s->high_band_coded[ch][i]) {
                         if (val == (int) 0x80000000) {
-                            val = get_bits(&s->gb, 7) - 19;
+                            val = bitstream_read(&s->bc, 7) - 19;
                         } else {
-                            code = get_vlc2(&s->gb, s->hgain_vlc.table,
-                                            HGAINVLCBITS, HGAINMAX);
+                            code = bitstream_read_vlc(&s->bc,
+                                                      s->hgain_vlc.table,
+                                                      HGAINVLCBITS, HGAINMAX);
                             if (code < 0) {
                                 av_log(s->avctx, AV_LOG_ERROR,
                                        "hgain vlc invalid\n");
@@ -558,7 +557,7 @@ static int wma_decode_block(WMACodecContext *s)
     }
 
     /* exponents can be reused in short blocks. */
-    if ((s->block_len_bits == s->frame_len_bits) || get_bits1(&s->gb)) {
+    if ((s->block_len_bits == s->frame_len_bits) || bitstream_read_bit(&s->bc)) {
         for (ch = 0; ch < s->avctx->channels; ch++) {
             if (s->channel_coded[ch]) {
                 if (s->use_exp_vlc) {
@@ -582,13 +581,13 @@ static int wma_decode_block(WMACodecContext *s)
              * there is potentially less energy there */
             tindex = (ch == 1 && s->ms_stereo);
             memset(ptr, 0, s->block_len * sizeof(WMACoef));
-            ff_wma_run_level_decode(s->avctx, &s->gb, &s->coef_vlc[tindex],
+            ff_wma_run_level_decode(s->avctx, &s->bc, &s->coef_vlc[tindex],
                                     s->level_table[tindex], s->run_table[tindex],
                                     0, ptr, 0, nb_coefs[ch],
                                     s->block_len, s->frame_len_bits, coef_nb_bits);
         }
         if (s->version == 1 && s->avctx->channels >= 2)
-            align_get_bits(&s->gb);
+            bitstream_align(&s->bc);
     }
 
     /* normalize */
@@ -813,12 +812,12 @@ static int wma_decode_superframe(AVCodecContext *avctx, void *data,
     }
     buf_size = avctx->block_align;
 
-    init_get_bits(&s->gb, buf, buf_size * 8);
+    bitstream_init8(&s->bc, buf, buf_size);
 
     if (s->use_bit_reservoir) {
         /* read super frame header */
-        skip_bits(&s->gb, 4); /* super frame index */
-        nb_frames = get_bits(&s->gb, 4) - (s->last_superframe_len <= 0);
+        bitstream_skip(&s->bc, 4); /* super frame index */
+        nb_frames = bitstream_read(&s->bc, 4) - (s->last_superframe_len <= 0);
     } else
         nb_frames = 1;
 
@@ -832,11 +831,11 @@ static int wma_decode_superframe(AVCodecContext *avctx, void *data,
     samples_offset = 0;
 
     if (s->use_bit_reservoir) {
-        bit_offset = get_bits(&s->gb, s->byte_offset_bits + 3);
-        if (bit_offset > get_bits_left(&s->gb)) {
+        bit_offset = bitstream_read(&s->bc, s->byte_offset_bits + 3);
+        if (bit_offset > bitstream_bits_left(&s->bc)) {
             av_log(avctx, AV_LOG_ERROR,
                    "Invalid last frame bit offset %d > buf size %d (%d)\n",
-                   bit_offset, get_bits_left(&s->gb), buf_size);
+                   bit_offset, bitstream_bits_left(&s->bc), buf_size);
             goto fail;
         }
 
@@ -848,19 +847,19 @@ static int wma_decode_superframe(AVCodecContext *avctx, void *data,
             q   = s->last_superframe + s->last_superframe_len;
             len = bit_offset;
             while (len > 7) {
-                *q++ = (get_bits) (&s->gb, 8);
+                *q++ = bitstream_read(&s->bc, 8);
                 len -= 8;
             }
             if (len > 0)
-                *q++ = (get_bits) (&s->gb, len) << (8 - len);
-            memset(q, 0, FF_INPUT_BUFFER_PADDING_SIZE);
+                *q++ = bitstream_read(&s->bc, len) << (8 - len);
+            memset(q, 0, AV_INPUT_BUFFER_PADDING_SIZE);
 
             /* XXX: bit_offset bits into last frame */
-            init_get_bits(&s->gb, s->last_superframe,
-                          s->last_superframe_len * 8 + bit_offset);
+            bitstream_init(&s->bc, s->last_superframe,
+                           s->last_superframe_len * 8 + bit_offset);
             /* skip unused bits */
             if (s->last_bitoffset > 0)
-                skip_bits(&s->gb, s->last_bitoffset);
+                bitstream_skip(&s->bc, s->last_bitoffset);
             /* this frame is stored in the last superframe and in the
              * current one */
             if (wma_decode_frame(s, samples, samples_offset) < 0)
@@ -873,10 +872,10 @@ static int wma_decode_superframe(AVCodecContext *avctx, void *data,
         pos = bit_offset + 4 + 4 + s->byte_offset_bits + 3;
         if (pos >= MAX_CODED_SUPERFRAME_SIZE * 8 || pos > buf_size * 8)
             return AVERROR_INVALIDDATA;
-        init_get_bits(&s->gb, buf + (pos >> 3), (buf_size - (pos >> 3)) * 8);
+        bitstream_init8(&s->bc, buf + (pos >> 3), buf_size - (pos >> 3));
         len = pos & 7;
         if (len > 0)
-            skip_bits(&s->gb, len);
+            bitstream_skip(&s->bc, len);
 
         s->reset_block_lengths = 1;
         for (i = 0; i < nb_frames; i++) {
@@ -886,7 +885,7 @@ static int wma_decode_superframe(AVCodecContext *avctx, void *data,
         }
 
         /* we copy the end of the frame in the last frame buffer */
-        pos               = get_bits_count(&s->gb) +
+        pos               = bitstream_tell(&s->bc) +
                             ((bit_offset + 4 + 4 + s->byte_offset_bits + 3) & ~7);
         s->last_bitoffset = pos & 7;
         pos             >>= 3;
@@ -936,7 +935,7 @@ AVCodec ff_wmav1_decoder = {
     .close          = ff_wma_end,
     .decode         = wma_decode_superframe,
     .flush          = flush,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
     .sample_fmts    = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_FLTP,
                                                       AV_SAMPLE_FMT_NONE },
 };
@@ -951,7 +950,7 @@ AVCodec ff_wmav2_decoder = {
     .close          = ff_wma_end,
     .decode         = wma_decode_superframe,
     .flush          = flush,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
     .sample_fmts    = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_FLTP,
                                                       AV_SAMPLE_FMT_NONE },
 };

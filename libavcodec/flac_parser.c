@@ -92,9 +92,9 @@ typedef struct FLACParseContext {
 static int frame_header_is_valid(AVCodecContext *avctx, const uint8_t *buf,
                                  FLACFrameInfo *fi)
 {
-    GetBitContext gb;
-    init_get_bits(&gb, buf, MAX_FRAME_HEADER_SIZE * 8);
-    return !ff_flac_decode_frame_header(avctx, &gb, fi, 127);
+    BitstreamContext bc;
+    bitstream_init8(&bc, buf, MAX_FRAME_HEADER_SIZE);
+    return !ff_flac_decode_frame_header(avctx, &bc, fi, 127);
 }
 
 /**
@@ -588,7 +588,7 @@ static int flac_parse(AVCodecParserContext *s, AVCodecContext *avctx,
                                   read_end - read_start, NULL);
         } else {
             int8_t pad[MAX_FRAME_HEADER_SIZE] = { 0 };
-            av_fifo_generic_write(fpc->fifo_buf, (void*) pad, sizeof(pad), NULL);
+            av_fifo_generic_write(fpc->fifo_buf, pad, sizeof(pad), NULL);
         }
 
         /* Tag headers and update sequences. */

@@ -27,7 +27,6 @@
 #include <string.h>
 
 #include "avcodec.h"
-#include "get_bits.h"
 #include "internal.h"
 
 #include "vp56.h"
@@ -52,7 +51,7 @@ static int vp5_parse_header(VP56Context *s, const uint8_t *buf, int buf_size,
             return AVERROR_INVALIDDATA;
         vp56_rac_gets(c, 2);
         if (vp56_rac_get(c)) {
-            av_log(s->avctx, AV_LOG_ERROR, "interlacing not supported\n");
+            avpriv_report_missing_feature(s->avctx, "Interlacing");
             return AVERROR_PATCHWELCOME;
         }
         rows = vp56_rac_gets(c, 8);  /* number of stored macroblock rows */
@@ -271,6 +270,7 @@ static av_cold int vp5_decode_init(AVCodecContext *avctx)
 
     if ((ret = ff_vp56_init(avctx, 1, 0)) < 0)
         return ret;
+    ff_vp5dsp_init(&s->vp56dsp);
     s->vp56_coord_div = vp5_coord_div;
     s->parse_vector_adjustment = vp5_parse_vector_adjustment;
     s->parse_coeff = vp5_parse_coeff;
@@ -291,5 +291,5 @@ AVCodec ff_vp5_decoder = {
     .init           = vp5_decode_init,
     .close          = ff_vp56_free,
     .decode         = ff_vp56_decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
 };

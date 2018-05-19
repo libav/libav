@@ -33,8 +33,9 @@
 #include <stdio.h>
 
 #include "libavutil/float_dsp.h"
+
 #include "avcodec.h"
-#include "get_bits.h"
+#include "bitstream.h"
 #include "fft.h"
 #include "internal.h"
 #include "sinewin.h"
@@ -164,30 +165,31 @@ static int at1_imdct_block(AT1SUCtx* su, AT1Ctx *q)
  * Parse the block size mode byte
  */
 
-static int at1_parse_bsm(GetBitContext* gb, int log2_block_cnt[AT1_QMF_BANDS])
+static int at1_parse_bsm(BitstreamContext *bc,
+                         int log2_block_cnt[AT1_QMF_BANDS])
 {
     int log2_block_count_tmp, i;
 
     for (i = 0; i < 2; i++) {
         /* low and mid band */
-        log2_block_count_tmp = get_bits(gb, 2);
+        log2_block_count_tmp = bitstream_read(bc, 2);
         if (log2_block_count_tmp & 1)
             return AVERROR_INVALIDDATA;
         log2_block_cnt[i] = 2 - log2_block_count_tmp;
     }
 
     /* high band */
-    log2_block_count_tmp = get_bits(gb, 2);
+    log2_block_count_tmp = bitstream_read(bc, 2);
     if (log2_block_count_tmp != 0 && log2_block_count_tmp != 3)
         return AVERROR_INVALIDDATA;
     log2_block_cnt[IDX_HIGH_BAND] = 3 - log2_block_count_tmp;
 
-    skip_bits(gb, 2);
+    bitstream_skip(bc, 2);
     return 0;
 }
 
 
-static int at1_unpack_dequant(GetBitContext* gb, AT1SUCtx* su,
+static int at1_unpack_dequant(BitstreamContext *bc, AT1SUCtx *su,
                               float spec[AT1_SU_SAMPLES])
 {
     int bits_used, band_num, bfu_num, i;
@@ -195,22 +197,22 @@ static int at1_unpack_dequant(GetBitContext* gb, AT1SUCtx* su,
     uint8_t idsfs[AT1_MAX_BFU];                 ///< the scalefactor indexes for each BFU
 
     /* parse the info byte (2nd byte) telling how much BFUs were coded */
-    su->num_bfus = bfu_amount_tab1[get_bits(gb, 3)];
+    su->num_bfus = bfu_amount_tab1[bitstream_read(bc, 3)];
 
     /* calc number of consumed bits:
         num_BFUs * (idwl(4bits) + idsf(6bits)) + log2_block_count(8bits) + info_byte(8bits)
         + info_byte_copy(8bits) + log2_block_count_copy(8bits) */
     bits_used = su->num_bfus * 10 + 32 +
-                bfu_amount_tab2[get_bits(gb, 2)] +
-                (bfu_amount_tab3[get_bits(gb, 3)] << 1);
+                bfu_amount_tab2[bitstream_read(bc, 2)] +
+                (bfu_amount_tab3[bitstream_read(bc, 3)] << 1);
 
     /* get word length index (idwl) for each BFU */
     for (i = 0; i < su->num_bfus; i++)
-        idwls[i] = get_bits(gb, 4);
+        idwls[i] = bitstream_read(bc, 4);
 
     /* get scalefactor index (idsf) for each BFU */
     for (i = 0; i < su->num_bfus; i++)
-        idsfs[i] = get_bits(gb, 6);
+        idsfs[i] = bitstream_read(bc, 6);
 
     /* zero idwl/idsf for empty BFUs */
     for (i = su->num_bfus; i < AT1_MAX_BFU; i++)
@@ -240,7 +242,7 @@ static int at1_unpack_dequant(GetBitContext* gb, AT1SUCtx* su,
                     /* read in a quantized spec and convert it to
                      * signed int and then inverse quantization
                      */
-                    spec[pos+i] = get_sbits(gb, word_len) * scale_factor * max_quant;
+                    spec[pos+i] = bitstream_read_signed(bc, word_len) * scale_factor * max_quant;
                 }
             } else { /* word_len = 0 -> empty BFU, zero all specs in the emty BFU */
                 memset(&spec[pos], 0, num_specs * sizeof(float));
@@ -277,7 +279,7 @@ static int atrac1_decode_frame(AVCodecContext *avctx, void *data,
     int buf_size       = avpkt->size;
     AT1Ctx *q          = avctx->priv_data;
     int ch, ret;
-    GetBitContext gb;
+    BitstreamContext bc;
 
 
     if (buf_size < 212 * avctx->channels) {
@@ -295,14 +297,14 @@ static int atrac1_decode_frame(AVCodecContext *avctx, void *data,
     for (ch = 0; ch < avctx->channels; ch++) {
         AT1SUCtx* su = &q->SUs[ch];
 
-        init_get_bits(&gb, &buf[212 * ch], 212 * 8);
+        bitstream_init8(&bc, &buf[212 * ch], 212);
 
         /* parse block_size_mode, 1st byte */
-        ret = at1_parse_bsm(&gb, su->log2_block_count);
+        ret = at1_parse_bsm(&bc, su->log2_block_count);
         if (ret < 0)
             return ret;
 
-        ret = at1_unpack_dequant(&gb, su, q->spec);
+        ret = at1_unpack_dequant(&bc, su, q->spec);
         if (ret < 0)
             return ret;
 
@@ -356,7 +358,7 @@ static av_cold int atrac1_decode_init(AVCodecContext *avctx)
 
     ff_atrac_generate_tables();
 
-    avpriv_float_dsp_init(&q->fdsp, avctx->flags & CODEC_FLAG_BITEXACT);
+    avpriv_float_dsp_init(&q->fdsp, avctx->flags & AV_CODEC_FLAG_BITEXACT);
 
     q->bands[0] = q->low;
     q->bands[1] = q->mid;
@@ -381,7 +383,7 @@ AVCodec ff_atrac1_decoder = {
     .init           = atrac1_decode_init,
     .close          = atrac1_decode_end,
     .decode         = atrac1_decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
     .sample_fmts    = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_FLTP,
                                                       AV_SAMPLE_FMT_NONE },
 };

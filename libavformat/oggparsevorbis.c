@@ -28,9 +28,10 @@
 #include "libavutil/base64.h"
 #include "libavutil/bswap.h"
 #include "libavutil/dict.h"
+
 #include "libavcodec/bytestream.h"
-#include "libavcodec/get_bits.h"
 #include "libavcodec/vorbis_parser.h"
+
 #include "avformat.h"
 #include "flac_picture.h"
 #include "internal.h"
@@ -234,7 +235,7 @@ static int fixup_vorbis_headers(AVFormatContext *as,
         offset += priv->len[i];
         av_freep(&priv->packet[i]);
     }
-    if ((err = av_reallocp(buf, offset + FF_INPUT_BUFFER_PADDING_SIZE)) < 0)
+    if ((err = av_reallocp(buf, offset + AV_INPUT_BUFFER_PADDING_SIZE)) < 0)
         return err;
     return offset;
 }
@@ -295,10 +296,10 @@ static int vorbis_header(AVFormatContext *s, int idx)
         if (bytestream_get_le32(&p) != 0) /* vorbis_version */
             return AVERROR_INVALIDDATA;
 
-        st->codec->channels = bytestream_get_byte(&p);
+        st->codecpar->channels = bytestream_get_byte(&p);
         srate               = bytestream_get_le32(&p);
         p += 4; // skip maximum bitrate
-        st->codec->bit_rate = bytestream_get_le32(&p); // nominal bitrate
+        st->codecpar->bit_rate = bytestream_get_le32(&p); // nominal bitrate
         p += 4; // skip minimum bitrate
 
         blocksize = bytestream_get_byte(&p);
@@ -313,11 +314,11 @@ static int vorbis_header(AVFormatContext *s, int idx)
         if (bytestream_get_byte(&p) != 1) /* framing_flag */
             return AVERROR_INVALIDDATA;
 
-        st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
-        st->codec->codec_id   = AV_CODEC_ID_VORBIS;
+        st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+        st->codecpar->codec_id   = AV_CODEC_ID_VORBIS;
 
         if (srate > 0) {
-            st->codec->sample_rate = srate;
+            st->codecpar->sample_rate = srate;
             avpriv_set_pts_info(st, 64, 1, srate);
         }
     } else if (os->buf[os->pstart] == 3) {
@@ -339,17 +340,17 @@ static int vorbis_header(AVFormatContext *s, int idx)
             }
         }
     } else {
-        int ret = fixup_vorbis_headers(s, priv, &st->codec->extradata);
+        int ret = fixup_vorbis_headers(s, priv, &st->codecpar->extradata);
         if (ret < 0) {
-            st->codec->extradata_size = 0;
+            st->codecpar->extradata_size = 0;
             return ret;
         }
-        st->codec->extradata_size = ret;
+        st->codecpar->extradata_size = ret;
 
-        priv->vp = av_vorbis_parse_init(st->codec->extradata, st->codec->extradata_size);
+        priv->vp = av_vorbis_parse_init(st->codecpar->extradata, st->codecpar->extradata_size);
         if (!priv->vp) {
-            av_freep(&st->codec->extradata);
-            st->codec->extradata_size = 0;
+            av_freep(&st->codecpar->extradata);
+            st->codecpar->extradata_size = 0;
             return ret;
         }
     }
@@ -363,6 +364,9 @@ static int vorbis_packet(AVFormatContext *s, int idx)
     struct ogg_stream *os = ogg->streams + idx;
     struct oggvorbis_private *priv = os->private;
     int duration;
+
+    if (!priv->vp)
+        return AVERROR_INVALIDDATA;
 
     /* first packet handling
      * here we parse the duration of each packet in the first page and compare

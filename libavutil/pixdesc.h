@@ -31,30 +31,41 @@ typedef struct AVComponentDescriptor {
     /**
      * Which of the 4 planes contains the component.
      */
-    uint16_t plane        : 2;
+    int plane;
 
     /**
-     * Number of elements between 2 horizontally consecutive pixels minus 1.
+     * Number of elements between 2 horizontally consecutive pixels.
      * Elements are bits for bitstream formats, bytes otherwise.
      */
-    uint16_t step_minus1  : 3;
+    int step;
 
     /**
-     * Number of elements before the component of the first pixel plus 1.
+     * Number of elements before the component of the first pixel.
      * Elements are bits for bitstream formats, bytes otherwise.
      */
-    uint16_t offset_plus1 : 3;
+    int offset;
 
     /**
      * Number of least significant bits that must be shifted away
      * to get the value.
      */
-    uint16_t shift        : 3;
+    int shift;
 
     /**
-     * Number of bits in the component minus 1.
+     * Number of bits in the component.
      */
-    uint16_t depth_minus1 : 4;
+    int depth;
+
+#if FF_API_PLUS1_MINUS1
+    /** deprecated, use step instead */
+    attribute_deprecated int step_minus1;
+
+    /** deprecated, use depth instead */
+    attribute_deprecated int depth_minus1;
+
+    /** deprecated, use offset instead */
+    attribute_deprecated int offset_plus1;
+#endif
 } AVComponentDescriptor;
 
 /**
@@ -73,26 +84,37 @@ typedef struct AVPixFmtDescriptor {
     /**
      * Amount to shift the luma width right to find the chroma width.
      * For YV12 this is 1 for example.
-     * chroma_width = -((-luma_width) >> log2_chroma_w)
+     * chroma_width = AV_CEIL_RSHIFT(luma_width, log2_chroma_w)
      * The note above is needed to ensure rounding up.
      * This value only refers to the chroma components.
      */
-    uint8_t log2_chroma_w;  ///< chroma_width = -((-luma_width )>>log2_chroma_w)
+    uint8_t log2_chroma_w;
 
     /**
      * Amount to shift the luma height right to find the chroma height.
      * For YV12 this is 1 for example.
-     * chroma_height= -((-luma_height) >> log2_chroma_h)
+     * chroma_height= AV_CEIL_RSHIFT(luma_height, log2_chroma_h)
      * The note above is needed to ensure rounding up.
      * This value only refers to the chroma components.
      */
     uint8_t log2_chroma_h;
-    uint8_t flags;
+
+    /**
+     * Combination of AV_PIX_FMT_FLAG_... flags.
+     */
+    uint64_t flags;
 
     /**
      * Parameters that describe how pixels are packed. If the format
      * has chroma components, they must be stored in comp[1] and
      * comp[2].
+     * If the format is RGB-like, the first component is R, followed
+     * by G and B.
+     *
+     * If the format is YUV-like, the first component is Y, followed
+     * by U and V.
+     *
+     * If present, the Alpha channel is always the last component.
      */
     AVComponentDescriptor comp[4];
 
@@ -136,27 +158,6 @@ typedef struct AVPixFmtDescriptor {
  * The pixel format has an alpha channel.
  */
 #define AV_PIX_FMT_FLAG_ALPHA        (1 << 7)
-
-#if FF_API_PIX_FMT
-/**
- * @deprecated use the AV_PIX_FMT_FLAG_* flags
- */
-#define PIX_FMT_BE        AV_PIX_FMT_FLAG_BE
-#define PIX_FMT_PAL       AV_PIX_FMT_FLAG_PAL
-#define PIX_FMT_BITSTREAM AV_PIX_FMT_FLAG_BITSTREAM
-#define PIX_FMT_HWACCEL   AV_PIX_FMT_FLAG_HWACCEL
-#define PIX_FMT_PLANAR    AV_PIX_FMT_FLAG_PLANAR
-#define PIX_FMT_RGB       AV_PIX_FMT_FLAG_RGB
-#define PIX_FMT_PSEUDOPAL AV_PIX_FMT_FLAG_PSEUDOPAL
-#define PIX_FMT_ALPHA     AV_PIX_FMT_FLAG_ALPHA
-#endif
-
-#if FF_API_PIX_FMT_DESC
-/**
- * The array of all the pixel format descriptors.
- */
-extern attribute_deprecated const AVPixFmtDescriptor av_pix_fmt_descriptors[];
-#endif
 
 /**
  * Read a line from an image, and write the values of the
@@ -267,8 +268,8 @@ enum AVPixelFormat av_pix_fmt_desc_get_id(const AVPixFmtDescriptor *desc);
  * the pixel format AVPixFmtDescriptor.
  *
  * @param[in]  pix_fmt the pixel format
- * @param[out] h_shift store log2_chroma_h
- * @param[out] v_shift store log2_chroma_w
+ * @param[out] h_shift store log2_chroma_w (horizontal/width shift)
+ * @param[out] v_shift store log2_chroma_h (vertical/height shift)
  *
  * @return 0 on success, AVERROR(ENOSYS) on invalid or unknown pixel format
  */
@@ -297,9 +298,19 @@ enum AVPixelFormat av_pix_fmt_swap_endianness(enum AVPixelFormat pix_fmt);
 const char *av_color_range_name(enum AVColorRange range);
 
 /**
+ * @return the AVColorRange value for name or an AVError if not found.
+ */
+int av_color_range_from_name(const char *name);
+
+/**
  * @return the name for provided color primaries or NULL if unknown.
  */
 const char *av_color_primaries_name(enum AVColorPrimaries primaries);
+
+/**
+ * @return the AVColorPrimaries value for name or an AVError if not found.
+ */
+int av_color_primaries_from_name(const char *name);
 
 /**
  * @return the name for provided color transfer or NULL if unknown.
@@ -307,13 +318,28 @@ const char *av_color_primaries_name(enum AVColorPrimaries primaries);
 const char *av_color_transfer_name(enum AVColorTransferCharacteristic transfer);
 
 /**
+ * @return the AVColorTransferCharacteristic value for name or an AVError if not found.
+ */
+int av_color_transfer_from_name(const char *name);
+
+/**
  * @return the name for provided color space or NULL if unknown.
  */
 const char *av_color_space_name(enum AVColorSpace space);
 
 /**
+ * @return the AVColorSpace value for name or an AVError if not found.
+ */
+int av_color_space_from_name(const char *name);
+
+/**
  * @return the name for provided chroma location or NULL if unknown.
  */
 const char *av_chroma_location_name(enum AVChromaLocation location);
+
+/**
+ * @return the AVChromaLocation value for name or an AVError if not found.
+ */
+int av_chroma_location_from_name(const char *name);
 
 #endif /* AVUTIL_PIXDESC_H */

@@ -80,6 +80,10 @@ static const VideoSizeAbbr video_size_abbrs[] = {
     { "hd480",     852, 480 },
     { "hd720",    1280, 720 },
     { "hd1080",   1920,1080 },
+    { "2kdci",    2048,1080 },
+    { "4kdci",    4096,2160 },
+    { "uhd2160",  3840,2160 },
+    { "uhd4320",  7680,4320 },
 };
 
 static const VideoRateAbbr video_rate_abbrs[]= {
@@ -148,7 +152,7 @@ typedef struct ColorEntry {
     uint8_t     rgb_color[3];    ///< RGB values for the color
 } ColorEntry;
 
-static ColorEntry color_table[] = {
+static const ColorEntry color_table[] = {
     { "AliceBlue",            { 0xF0, 0xF8, 0xFF } },
     { "AntiqueWhite",         { 0xFA, 0xEB, 0xD7 } },
     { "Aqua",                 { 0x00, 0xFF, 0xFF } },
@@ -650,102 +654,3 @@ int av_find_info_tag(char *arg, int arg_size, const char *tag1, const char *info
     }
     return 0;
 }
-
-#ifdef TEST
-
-int main(void)
-{
-    printf("Testing av_parse_video_rate()\n");
-    {
-        int i;
-        static const char *const rates[] = {
-            "-inf",
-            "inf",
-            "nan",
-            "123/0",
-            "-123 / 0",
-            "",
-            "/",
-            " 123  /  321",
-            "foo/foo",
-            "foo/1",
-            "1/foo",
-            "0/0",
-            "/0",
-            "1/",
-            "1",
-            "0",
-            "-123/123",
-            "-foo",
-            "123.23",
-            ".23",
-            "-.23",
-            "-0.234",
-            "-0.0000001",
-            "  21332.2324   ",
-            " -21332.2324   ",
-        };
-
-        for (i = 0; i < FF_ARRAY_ELEMS(rates); i++) {
-            int ret;
-            AVRational q = { 0, 0 };
-            ret = av_parse_video_rate(&q, rates[i]);
-            printf("'%s' -> %d/%d %s\n",
-                   rates[i], q.num, q.den, ret ? "ERROR" : "OK");
-        }
-    }
-
-    printf("\nTesting av_parse_color()\n");
-    {
-        int i;
-        uint8_t rgba[4];
-        static const char *const color_names[] = {
-            "foo",
-            "red",
-            "Red ",
-            "RED",
-            "Violet",
-            "Yellow",
-            "Red",
-            "0x000000",
-            "0x0000000",
-            "0xff000000",
-            "0x3e34ff",
-            "0x3e34ffaa",
-            "0xffXXee",
-            "0xfoobar",
-            "0xffffeeeeeeee",
-            "#ff0000",
-            "#ffXX00",
-            "ff0000",
-            "ffXX00",
-            "red@foo",
-            "random@10",
-            "0xff0000@1.0",
-            "red@",
-            "red@0xfff",
-            "red@0xf",
-            "red@2",
-            "red@0.1",
-            "red@-1",
-            "red@0.5",
-            "red@1.0",
-            "red@256",
-            "red@10foo",
-            "red@-1.0",
-            "red@-0.0",
-        };
-
-        av_log_set_level(AV_LOG_DEBUG);
-
-        for (i = 0;  i < FF_ARRAY_ELEMS(color_names); i++) {
-            if (av_parse_color(rgba, color_names[i], -1, NULL) >= 0)
-                printf("%s -> R(%d) G(%d) B(%d) A(%d)\n",
-                       color_names[i], rgba[0], rgba[1], rgba[2], rgba[3]);
-        }
-    }
-
-    return 0;
-}
-
-#endif /* TEST */

@@ -25,11 +25,12 @@
 #include <stdio.h>
 
 #include "config.h"
+
 #include "libavutil/attributes.h"
 #include "libavutil/cpu.h"
 #include "libavutil/ppc/cpu.h"
-#include "libavutil/ppc/types_altivec.h"
 #include "libavutil/ppc/util_altivec.h"
+
 #include "libavcodec/mpegvideo.h"
 
 #if HAVE_ALTIVEC && HAVE_BIGENDIAN
@@ -113,7 +114,7 @@ static void dct_unquantize_h263_altivec(MpegEncContext *s,
     }
 }
 
-#endif /* HAVE_ALTIVEC */
+#endif /* HAVE_ALTIVEC && HAVE_BIGENDIAN */
 
 av_cold void ff_mpv_common_init_ppc(MpegEncContext *s)
 {
@@ -126,5 +127,5 @@ av_cold void ff_mpv_common_init_ppc(MpegEncContext *s)
         s->dct_unquantize_h263_intra = dct_unquantize_h263_altivec;
         s->dct_unquantize_h263_inter = dct_unquantize_h263_altivec;
     }
-#endif /* HAVE_ALTIVEC */
+#endif /* HAVE_ALTIVEC && HAVE_BIGENDIAN */
 }

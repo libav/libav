@@ -17,16 +17,14 @@
  */
 
 #include "config.h"
+
 #include <stdint.h>
-#if HAVE_ALTIVEC_H
-#include <altivec.h>
-#endif
 
 #include "libavutil/attributes.h"
 #include "libavutil/cpu.h"
 #include "libavutil/ppc/cpu.h"
-#include "libavutil/ppc/types_altivec.h"
 #include "libavutil/ppc/util_altivec.h"
+
 #include "libavcodec/mpegvideoencdsp.h"
 
 #if HAVE_ALTIVEC && HAVE_BIGENDIAN
@@ -88,7 +86,7 @@ static int pix_sum_altivec(uint8_t *pix, int line_size)
     return s;
 }
 
-#endif /* HAVE_ALTIVEC */
+#endif /* HAVE_ALTIVEC && HAVE_BIGENDIAN */
 
 av_cold void ff_mpegvideoencdsp_init_ppc(MpegvideoEncDSPContext *c,
                                          AVCodecContext *avctx)
@@ -99,5 +97,5 @@ av_cold void ff_mpegvideoencdsp_init_ppc(MpegvideoEncDSPContext *c,
 
     c->pix_norm1 = pix_norm1_altivec;
     c->pix_sum   = pix_sum_altivec;
-#endif /* HAVE_ALTIVEC */
+#endif /* HAVE_ALTIVEC && HAVE_BIGENDIAN */
 }

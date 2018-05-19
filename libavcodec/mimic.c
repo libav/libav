@@ -24,14 +24,15 @@
 #include <stdint.h>
 
 #include "avcodec.h"
+#include "bitstream.h"
 #include "blockdsp.h"
 #include "internal.h"
-#include "get_bits.h"
 #include "bytestream.h"
 #include "bswapdsp.h"
 #include "hpeldsp.h"
 #include "idctdsp.h"
 #include "thread.h"
+#include "vlc.h"
 
 #define MIMIC_HEADER_SIZE   20
 
@@ -48,11 +49,10 @@ typedef struct MimicContext {
     int             prev_index;
 
     ThreadFrame     frames     [16];
-    AVPicture       flipped_ptrs[16];
 
     DECLARE_ALIGNED(16, int16_t, dct_block)[64];
 
-    GetBitContext   gb;
+    BitstreamContext bc;
     ScanTable       scantable;
     BlockDSPContext bdsp;
     BswapDSPContext bbdsp;
@@ -149,7 +149,7 @@ static av_cold int mimic_decode_init(AVCodecContext *avctx)
         av_log(avctx, AV_LOG_ERROR, "error initializing vlc table\n");
         return ret;
     }
-    ff_blockdsp_init(&ctx->bdsp, avctx);
+    ff_blockdsp_init(&ctx->bdsp);
     ff_bswapdsp_init(&ctx->bbdsp);
     ff_hpeldsp_init(&ctx->hdsp, avctx->flags);
     ff_idctdsp_init(&ctx->idsp, avctx);
@@ -176,8 +176,6 @@ static int mimic_decode_update_thread_context(AVCodecContext *avctx, const AVCod
 
     dst->cur_index  = src->next_cur_index;
     dst->prev_index = src->next_prev_index;
-
-    memcpy(dst->flipped_ptrs, src->flipped_ptrs, sizeof(src->flipped_ptrs));
 
     for (i = 0; i < FF_ARRAY_ELEMS(dst->frames); i++) {
         ff_thread_release_buffer(avctx, &dst->frames[i]);
@@ -235,14 +233,14 @@ static int vlc_decode_block(MimicContext *ctx, int num_coeffs, int qscale)
 
     ctx->bdsp.clear_block(block);
 
-    block[0] = get_bits(&ctx->gb, 8) << 3;
+    block[0] = bitstream_read(&ctx->bc, 8) << 3;
 
     for (pos = 1; pos < num_coeffs; pos++) {
         uint32_t vlc, num_bits;
         int value;
         int coeff;
 
-        vlc = get_vlc2(&ctx->gb, ctx->vlc.table, ctx->vlc.bits, 3);
+        vlc = bitstream_read_vlc(&ctx->bc, ctx->vlc.table, ctx->vlc.bits, 3);
         if (!vlc) /* end-of-block code */
             return 0;
         if (vlc == -1)
@@ -255,7 +253,7 @@ static int vlc_decode_block(MimicContext *ctx, int num_coeffs, int qscale)
         if (pos >= 64)
             return AVERROR_INVALIDDATA;
 
-        value = get_bits(&ctx->gb, num_bits);
+        value = bitstream_read(&ctx->bc, num_bits);
 
         /* Libav's IDCT behaves somewhat different from the original code, so
          * a factor of 4 was added to the input */
@@ -281,21 +279,21 @@ static int decode(MimicContext *ctx, int quality, int num_coeffs,
         const int is_chroma = !!plane;
         const int qscale    = av_clip(10000 - quality, is_chroma ? 1000 : 2000,
                                       10000) << 2;
-        const int stride    = ctx->flipped_ptrs[ctx->cur_index ].linesize[plane];
-        const uint8_t *src  = ctx->flipped_ptrs[ctx->prev_index].data[plane];
-        uint8_t       *dst  = ctx->flipped_ptrs[ctx->cur_index ].data[plane];
+        const int stride    = ctx->frames[ctx->cur_index ].f->linesize[plane];
+        const uint8_t *src  = ctx->frames[ctx->prev_index].f->data[plane];
+        uint8_t       *dst  = ctx->frames[ctx->cur_index ].f->data[plane];
 
         for (y = 0; y < ctx->num_vblocks[plane]; y++) {
             for (x = 0; x < ctx->num_hblocks[plane]; x++) {
                 /* Check for a change condition in the current block.
                  * - iframes always change.
-                 * - Luma plane changes on get_bits1 == 0
-                 * - Chroma planes change on get_bits1 == 1 */
-                if (is_iframe || get_bits1(&ctx->gb) == is_chroma) {
+                 * - Luma plane changes on bitstream_read_bit == 0
+                 * - Chroma planes change on bitstream_read_bit == 1 */
+                if (is_iframe || bitstream_read_bit(&ctx->bc) == is_chroma) {
                     /* Luma planes may use a backreference from the 15 last
-                     * frames preceding the previous. (get_bits1 == 1)
+                     * frames preceding the previous. (bitstream_read_bit == 1)
                      * Chroma planes don't use backreferences. */
-                    if (is_chroma || is_iframe || !get_bits1(&ctx->gb)) {
+                    if (is_chroma || is_iframe || !bitstream_read_bit(&ctx->bc)) {
                         if ((ret = vlc_decode_block(ctx, num_coeffs,
                                                     qscale)) < 0) {
                             av_log(ctx->avctx, AV_LOG_ERROR, "Error decoding "
@@ -304,15 +302,15 @@ static int decode(MimicContext *ctx, int quality, int num_coeffs,
                         }
                         ctx->idsp.idct_put(dst, stride, ctx->dct_block);
                     } else {
-                        unsigned int backref = get_bits(&ctx->gb, 4);
+                        unsigned int backref = bitstream_read(&ctx->bc, 4);
                         int index            = (ctx->cur_index + backref) & 15;
-                        uint8_t *p           = ctx->flipped_ptrs[index].data[0];
+                        uint8_t *p           = ctx->frames[index].f->data[0];
 
                         if (index != ctx->cur_index && p) {
                             ff_thread_await_progress(&ctx->frames[index],
                                                      cur_row, 0);
                             p += src -
-                                 ctx->flipped_ptrs[ctx->prev_index].data[plane];
+                                 ctx->frames[ctx->prev_index].f->data[plane];
                             ctx->hdsp.put_pixels_tab[1][0](dst, p, stride, 8);
                         } else {
                             av_log(ctx->avctx, AV_LOG_ERROR,
@@ -339,17 +337,18 @@ static int decode(MimicContext *ctx, int quality, int num_coeffs,
 }
 
 /**
- * Flip the buffer upside-down and put it in the YVU order to match the
+ * Flip the buffer upside-down and put it in the YVU order to revert the
  * way Mimic encodes frames.
  */
-static void prepare_avpic(MimicContext *ctx, AVPicture *dst, AVFrame *src)
+static void flip_swap_frame(AVFrame *f)
 {
     int i;
-    dst->data[0] = src->data[0] + ( ctx->avctx->height       - 1) * src->linesize[0];
-    dst->data[1] = src->data[2] + ((ctx->avctx->height >> 1) - 1) * src->linesize[2];
-    dst->data[2] = src->data[1] + ((ctx->avctx->height >> 1) - 1) * src->linesize[1];
+    uint8_t *data_1 = f->data[1];
+    f->data[0] = f->data[0] + ( f->height       - 1) * f->linesize[0];
+    f->data[1] = f->data[2] + ((f->height >> 1) - 1) * f->linesize[2];
+    f->data[2] = data_1     + ((f->height >> 1) - 1) * f->linesize[1];
     for (i = 0; i < 3; i++)
-        dst->linesize[i] = -src->linesize[i];
+        f->linesize[i] *= -1;
 }
 
 static int mimic_decode_frame(AVCodecContext *avctx, void *data,
@@ -394,8 +393,8 @@ static int mimic_decode_frame(AVCodecContext *avctx, void *data,
         avctx->height  = height;
         avctx->pix_fmt = AV_PIX_FMT_YUV420P;
         for (i = 0; i < 3; i++) {
-            ctx->num_vblocks[i] = -((-height) >> (3 + !!i));
-            ctx->num_hblocks[i] =     width   >> (3 + !!i);
+            ctx->num_vblocks[i] = AV_CEIL_RSHIFT(height,   3 + !!i);
+            ctx->num_hblocks[i] =                width >> (3 + !!i);
         }
     } else if (width != ctx->avctx->width || height != ctx->avctx->height) {
         avpriv_request_sample(avctx, "Resolution changing");
@@ -419,9 +418,6 @@ static int mimic_decode_frame(AVCodecContext *avctx, void *data,
     ctx->next_prev_index = ctx->cur_index;
     ctx->next_cur_index  = (ctx->cur_index - 1) & 15;
 
-    prepare_avpic(ctx, &ctx->flipped_ptrs[ctx->cur_index],
-                  ctx->frames[ctx->cur_index].f);
-
     ff_thread_finish_setup(avctx);
 
     av_fast_padded_malloc(&ctx->swap_buf, &ctx->swap_buf_size, swap_buf_size);
@@ -431,26 +427,24 @@ static int mimic_decode_frame(AVCodecContext *avctx, void *data,
     ctx->bbdsp.bswap_buf(ctx->swap_buf,
                          (const uint32_t *) (buf + MIMIC_HEADER_SIZE),
                          swap_buf_size >> 2);
-    init_get_bits(&ctx->gb, ctx->swap_buf, swap_buf_size << 3);
+    bitstream_init8(&ctx->bc, ctx->swap_buf, swap_buf_size);
 
     res = decode(ctx, quality, num_coeffs, !is_pframe);
     ff_thread_report_progress(&ctx->frames[ctx->cur_index], INT_MAX, 0);
     if (res < 0) {
-        if (!(avctx->active_thread_type & FF_THREAD_FRAME)) {
+        if (!(avctx->active_thread_type & FF_THREAD_FRAME))
             ff_thread_release_buffer(avctx, &ctx->frames[ctx->cur_index]);
-            return res;
-        }
+        return res;
     }
 
     if ((res = av_frame_ref(data, ctx->frames[ctx->cur_index].f)) < 0)
         return res;
     *got_frame      = 1;
 
+    flip_swap_frame(data);
+
     ctx->prev_index = ctx->next_prev_index;
     ctx->cur_index  = ctx->next_cur_index;
-
-    /* Only release frames that aren't used for backreferences anymore */
-    ff_thread_release_buffer(avctx, &ctx->frames[ctx->cur_index]);
 
     return buf_size;
 }
@@ -480,7 +474,7 @@ AVCodec ff_mimic_decoder = {
     .init                  = mimic_decode_init,
     .close                 = mimic_decode_end,
     .decode                = mimic_decode_frame,
-    .capabilities          = CODEC_CAP_DR1 | CODEC_CAP_FRAME_THREADS,
+    .capabilities          = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_FRAME_THREADS,
     .update_thread_context = ONLY_IF_THREADS_ENABLED(mimic_decode_update_thread_context),
     .init_thread_copy      = ONLY_IF_THREADS_ENABLED(mimic_init_thread_copy),
 };

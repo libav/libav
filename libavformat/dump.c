@@ -27,6 +27,7 @@
 #include "libavutil/log.h"
 #include "libavutil/mathematics.h"
 #include "libavutil/replaygain.h"
+#include "libavutil/spherical.h"
 #include "libavutil/stereo3d.h"
 
 #include "avformat.h"
@@ -241,35 +242,7 @@ static void dump_stereo3d(void *ctx, AVPacketSideData *sd)
 
     stereo = (AVStereo3D *)sd->data;
 
-    switch (stereo->type) {
-    case AV_STEREO3D_2D:
-        av_log(ctx, AV_LOG_INFO, "2D");
-        break;
-    case AV_STEREO3D_SIDEBYSIDE:
-        av_log(ctx, AV_LOG_INFO, "side by side");
-        break;
-    case AV_STEREO3D_TOPBOTTOM:
-        av_log(ctx, AV_LOG_INFO, "top and bottom");
-        break;
-    case AV_STEREO3D_FRAMESEQUENCE:
-        av_log(ctx, AV_LOG_INFO, "frame alternate");
-        break;
-    case AV_STEREO3D_CHECKERBOARD:
-        av_log(ctx, AV_LOG_INFO, "checkerboard");
-        break;
-    case AV_STEREO3D_LINES:
-        av_log(ctx, AV_LOG_INFO, "interleaved lines");
-        break;
-    case AV_STEREO3D_COLUMNS:
-        av_log(ctx, AV_LOG_INFO, "interleaved columns");
-        break;
-    case AV_STEREO3D_SIDEBYSIDE_QUINCUNX:
-        av_log(ctx, AV_LOG_INFO, "side by side (quincunx subsampling)");
-        break;
-    default:
-        av_log(ctx, AV_LOG_WARNING, "unknown");
-        break;
-    }
+    av_log(ctx, AV_LOG_INFO, "%s", av_stereo3d_type_name(stereo->type));
 
     if (stereo->flags & AV_STEREO3D_FLAG_INVERT)
         av_log(ctx, AV_LOG_INFO, " (inverted)");
@@ -318,6 +291,49 @@ static void dump_audioservicetype(void *ctx, AVPacketSideData *sd)
     }
 }
 
+static void dump_cpb(void *ctx, AVPacketSideData *sd)
+{
+    AVCPBProperties *cpb = (AVCPBProperties *)sd->data;
+
+    if (sd->size < sizeof(*cpb)) {
+        av_log(ctx, AV_LOG_INFO, "invalid data");
+        return;
+    }
+
+    av_log(ctx, AV_LOG_INFO,
+           "bitrate max/min/avg: %d/%d/%d buffer size: %d vbv_delay: %"PRId64,
+           cpb->max_bitrate, cpb->min_bitrate, cpb->avg_bitrate,
+           cpb->buffer_size,
+           cpb->vbv_delay);
+}
+
+static void dump_spherical(void *ctx, AVCodecParameters *par, AVPacketSideData *sd)
+{
+    AVSphericalMapping *spherical = (AVSphericalMapping *)sd->data;
+    double yaw, pitch, roll;
+
+    if (sd->size < sizeof(*spherical)) {
+        av_log(ctx, AV_LOG_INFO, "invalid data");
+        return;
+    }
+
+    av_log(ctx, AV_LOG_INFO, "%s ", av_spherical_projection_name(spherical->projection));
+
+    yaw = ((double)spherical->yaw) / (1 << 16);
+    pitch = ((double)spherical->pitch) / (1 << 16);
+    roll = ((double)spherical->roll) / (1 << 16);
+    av_log(ctx, AV_LOG_INFO, "(%f/%f/%f) ", yaw, pitch, roll);
+
+    if (spherical->projection == AV_SPHERICAL_EQUIRECTANGULAR_TILE) {
+        size_t l, t, r, b;
+        av_spherical_tile_bounds(spherical, par->width, par->height,
+                                 &l, &t, &r, &b);
+        av_log(ctx, AV_LOG_INFO, "[%zu, %zu, %zu, %zu] ", l, t, r, b);
+    } else if (spherical->projection == AV_SPHERICAL_CUBEMAP) {
+        av_log(ctx, AV_LOG_INFO, "[pad %"PRIu32"] ", spherical->padding);
+    }
+}
+
 static void dump_sidedata(void *ctx, AVStream *st, const char *indent)
 {
     int i;
@@ -341,7 +357,7 @@ static void dump_sidedata(void *ctx, AVStream *st, const char *indent)
             dump_paramchange(ctx, &sd);
             break;
         case AV_PKT_DATA_H263_MB_INFO:
-            av_log(ctx, AV_LOG_INFO, "h263 macroblock info");
+            av_log(ctx, AV_LOG_INFO, "H.263 macroblock info");
             break;
         case AV_PKT_DATA_REPLAYGAIN:
             av_log(ctx, AV_LOG_INFO, "replaygain: ");
@@ -358,6 +374,17 @@ static void dump_sidedata(void *ctx, AVStream *st, const char *indent)
         case AV_PKT_DATA_AUDIO_SERVICE_TYPE:
             av_log(ctx, AV_LOG_INFO, "audio service type: ");
             dump_audioservicetype(ctx, &sd);
+            break;
+        case AV_PKT_DATA_QUALITY_FACTOR:
+            av_log(ctx, AV_LOG_INFO, "quality factor: %d", *(int *)sd.data);
+            break;
+        case AV_PKT_DATA_CPB_PROPERTIES:
+            av_log(ctx, AV_LOG_INFO, "cpb: ");
+            dump_cpb(ctx, &sd);
+            break;
+        case AV_PKT_DATA_SPHERICAL:
+            av_log(ctx, AV_LOG_INFO, "spherical: ");
+            dump_spherical(ctx, st->codecpar, &sd);
             break;
         default:
             av_log(ctx, AV_LOG_WARNING,
@@ -377,8 +404,22 @@ static void dump_stream_format(AVFormatContext *ic, int i,
     int flags = (is_output ? ic->oformat->flags : ic->iformat->flags);
     AVStream *st = ic->streams[i];
     AVDictionaryEntry *lang = av_dict_get(st->metadata, "language", NULL, 0);
+    AVCodecContext *avctx;
+    int ret;
 
-    avcodec_string(buf, sizeof(buf), st->codec, is_output);
+    avctx = avcodec_alloc_context3(NULL);
+    if (!avctx)
+        return;
+
+    ret = avcodec_parameters_to_context(avctx, st->codecpar);
+    if (ret < 0) {
+        avcodec_free_context(&avctx);
+        return;
+    }
+
+    avcodec_string(buf, sizeof(buf), avctx, is_output);
+    avcodec_free_context(&avctx);
+
     av_log(NULL, AV_LOG_INFO, "    Stream #%d:%d", index, i);
 
     /* the pid is an important information, so we display it */
@@ -391,31 +432,27 @@ static void dump_stream_format(AVFormatContext *ic, int i,
            st->time_base.num, st->time_base.den);
     av_log(NULL, AV_LOG_INFO, ": %s", buf);
 
-    if (st->sample_aspect_ratio.num && // default
-        av_cmp_q(st->sample_aspect_ratio, st->codec->sample_aspect_ratio)) {
+    if (st->sample_aspect_ratio.num) {
         AVRational display_aspect_ratio;
         av_reduce(&display_aspect_ratio.num, &display_aspect_ratio.den,
-                  st->codec->width  * st->sample_aspect_ratio.num,
-                  st->codec->height * st->sample_aspect_ratio.den,
+                  st->codecpar->width  * st->sample_aspect_ratio.num,
+                  st->codecpar->height * st->sample_aspect_ratio.den,
                   1024 * 1024);
         av_log(NULL, AV_LOG_INFO, ", PAR %d:%d DAR %d:%d",
                st->sample_aspect_ratio.num, st->sample_aspect_ratio.den,
                display_aspect_ratio.num, display_aspect_ratio.den);
     }
 
-    if (st->codec->codec_type == AVMEDIA_TYPE_VIDEO) {
+    if (st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
         int fps = st->avg_frame_rate.den && st->avg_frame_rate.num;
         int tbn = st->time_base.den && st->time_base.num;
-        int tbc = st->codec->time_base.den && st->codec->time_base.num;
 
-        if (fps || tbn || tbc)
+        if (fps || tbn)
             av_log(NULL, AV_LOG_INFO, "\n      ");
         if (fps)
-            print_fps(av_q2d(st->avg_frame_rate), tbn || tbc ? "fps, " : "fps");
+            print_fps(av_q2d(st->avg_frame_rate), tbn ? "fps, " : "fps");
         if (tbn)
-            print_fps(1 / av_q2d(st->time_base), tbc ? "tbn, " : "tbn");
-        if (tbc)
-            print_fps(1 / av_q2d(st->codec->time_base), "tbc");
+            print_fps(1 / av_q2d(st->time_base), "tbn");
     }
 
     if (st->disposition & AV_DISPOSITION_DEFAULT)

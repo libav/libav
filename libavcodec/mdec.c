@@ -30,7 +30,6 @@
 #include "avcodec.h"
 #include "blockdsp.h"
 #include "idctdsp.h"
-#include "mpegvideo.h"
 #include "mpeg12.h"
 #include "thread.h"
 
@@ -130,7 +129,7 @@ static inline int mdec_decode_block_intra(MDECContext *a, int16_t *block, int n)
 static inline int decode_mb(MDECContext *a, int16_t block[6][64])
 {
     int i, ret;
-    const int block_index[6] = { 5, 4, 0, 1, 2, 3 };
+    static const int block_index[6] = { 5, 4, 0, 1, 2, 3 };
 
     a->bdsp.clear_blocks(block[0]);
 
@@ -158,7 +157,7 @@ static inline void idct_put(MDECContext *a, AVFrame *frame, int mb_x, int mb_y)
     a->idsp.idct_put(dest_y + 8 * linesize,     linesize, block[2]);
     a->idsp.idct_put(dest_y + 8 * linesize + 8, linesize, block[3]);
 
-    if (!(a->avctx->flags & CODEC_FLAG_GRAY)) {
+    if (!(a->avctx->flags & AV_CODEC_FLAG_GRAY)) {
         a->idsp.idct_put(dest_cb, frame->linesize[1], block[4]);
         a->idsp.idct_put(dest_cr, frame->linesize[2], block[5]);
     }
@@ -181,7 +180,7 @@ static int decode_frame(AVCodecContext *avctx,
     frame.f->pict_type = AV_PICTURE_TYPE_I;
     frame.f->key_frame = 1;
 
-    av_fast_malloc(&a->bitstream_buffer, &a->bitstream_buffer_size, buf_size + FF_INPUT_BUFFER_PADDING_SIZE);
+    av_fast_malloc(&a->bitstream_buffer, &a->bitstream_buffer_size, buf_size + AV_INPUT_BUFFER_PADDING_SIZE);
     if (!a->bitstream_buffer)
         return AVERROR(ENOMEM);
     for (i = 0; i < buf_size; i += 2) {
@@ -221,7 +220,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
 
     a->avctx           = avctx;
 
-    ff_blockdsp_init(&a->bdsp, avctx);
+    ff_blockdsp_init(&a->bdsp);
     ff_idctdsp_init(&a->idsp, avctx);
     ff_mpeg12_init_vlcs();
     ff_init_scantable(a->idsp.idct_permutation, &a->scantable,
@@ -263,6 +262,6 @@ AVCodec ff_mdec_decoder = {
     .init             = decode_init,
     .close            = decode_end,
     .decode           = decode_frame,
-    .capabilities     = CODEC_CAP_DR1 | CODEC_CAP_FRAME_THREADS,
+    .capabilities     = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_FRAME_THREADS,
     .init_thread_copy = ONLY_IF_THREADS_ENABLED(decode_init_thread_copy)
 };

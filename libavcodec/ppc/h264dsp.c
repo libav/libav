@@ -19,13 +19,18 @@
  */
 
 #include "config.h"
+
+#include <stdint.h>
+#include <string.h>
+
 #include "libavutil/attributes.h"
 #include "libavutil/cpu.h"
 #include "libavutil/intreadwrite.h"
+#include "libavutil/mem.h"
 #include "libavutil/ppc/cpu.h"
-#include "libavutil/ppc/types_altivec.h"
 #include "libavutil/ppc/util_altivec.h"
-#include "libavcodec/h264data.h"
+
+#include "libavcodec/h264dec.h"
 #include "libavcodec/h264dsp.h"
 
 #if HAVE_ALTIVEC && HAVE_BIGENDIAN
@@ -740,7 +745,7 @@ static void biweight_h264_pixels ## W ## _altivec(uint8_t *dst, uint8_t *src, in
 
 H264_WEIGHT(16)
 H264_WEIGHT( 8)
-#endif /* HAVE_ALTIVEC */
+#endif /* HAVE_ALTIVEC && HAVE_BIGENDIAN */
 
 av_cold void ff_h264dsp_init_ppc(H264DSPContext *c, const int bit_depth,
                                  const int chroma_format_idc)
@@ -767,5 +772,5 @@ av_cold void ff_h264dsp_init_ppc(H264DSPContext *c, const int bit_depth,
         c->biweight_h264_pixels_tab[0] = biweight_h264_pixels16_altivec;
         c->biweight_h264_pixels_tab[1] = biweight_h264_pixels8_altivec;
     }
-#endif /* HAVE_ALTIVEC */
+#endif /* HAVE_ALTIVEC && HAVE_BIGENDIAN */
 }

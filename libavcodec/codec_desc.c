@@ -20,8 +20,9 @@
 
 #include "libavutil/common.h"
 #include "libavutil/internal.h"
+
 #include "avcodec.h"
-#include "version.h"
+#include "profiles.h"
 
 static const AVCodecDescriptor codec_descriptors[] = {
     /* video codecs */
@@ -38,16 +39,8 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .name      = "mpeg2video",
         .long_name = NULL_IF_CONFIG_SMALL("MPEG-2 video"),
         .props     = AV_CODEC_PROP_LOSSY | AV_CODEC_PROP_REORDER,
+        .profiles  = NULL_IF_CONFIG_SMALL(ff_mpeg2_video_profiles),
     },
-#if FF_API_XVMC
-    {
-        .id        = AV_CODEC_ID_MPEG2VIDEO_XVMC,
-        .type      = AVMEDIA_TYPE_VIDEO,
-        .name      = "mpegvideo_xvmc",
-        .long_name = NULL_IF_CONFIG_SMALL("MPEG-1/2 video XvMC (X-Video Motion Compensation)"),
-        .props     = AV_CODEC_PROP_LOSSY,
-    },
-#endif /* FF_API_XVMC */
     {
         .id        = AV_CODEC_ID_H261,
         .type      = AVMEDIA_TYPE_VIDEO,
@@ -96,6 +89,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .name      = "mpeg4",
         .long_name = NULL_IF_CONFIG_SMALL("MPEG-4 part 2"),
         .props     = AV_CODEC_PROP_LOSSY | AV_CODEC_PROP_REORDER,
+        .profiles  = NULL_IF_CONFIG_SMALL(ff_mpeg4_video_profiles),
     },
     {
         .id        = AV_CODEC_ID_RAWVIDEO,
@@ -201,6 +195,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .name      = "h264",
         .long_name = NULL_IF_CONFIG_SMALL("H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10"),
         .props     = AV_CODEC_PROP_LOSSY | AV_CODEC_PROP_LOSSLESS | AV_CODEC_PROP_REORDER,
+        .profiles  = NULL_IF_CONFIG_SMALL(ff_h264_profiles),
     },
     {
         .id        = AV_CODEC_ID_INDEO3,
@@ -460,6 +455,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .name      = "vc1",
         .long_name = NULL_IF_CONFIG_SMALL("SMPTE VC-1"),
         .props     = AV_CODEC_PROP_LOSSY | AV_CODEC_PROP_REORDER,
+        .profiles  = NULL_IF_CONFIG_SMALL(ff_vc1_profiles),
     },
     {
         .id        = AV_CODEC_ID_WMV3,
@@ -467,6 +463,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .name      = "wmv3",
         .long_name = NULL_IF_CONFIG_SMALL("Windows Media Video 9"),
         .props     = AV_CODEC_PROP_LOSSY | AV_CODEC_PROP_REORDER,
+        .profiles  = NULL_IF_CONFIG_SMALL(ff_vc1_profiles),
     },
     {
         .id        = AV_CODEC_ID_LOCO,
@@ -587,6 +584,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("JPEG 2000"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY |
                      AV_CODEC_PROP_LOSSLESS,
+        .profiles  = NULL_IF_CONFIG_SMALL(ff_jpeg2000_profiles),
     },
     {
         .id        = AV_CODEC_ID_VMNC,
@@ -1098,6 +1096,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .name      = "hevc",
         .long_name = NULL_IF_CONFIG_SMALL("HEVC (High Efficiency Video Coding)"),
         .props     = AV_CODEC_PROP_LOSSY | AV_CODEC_PROP_REORDER,
+        .profiles  = NULL_IF_CONFIG_SMALL(ff_hevc_profiles),
     },
     {
         .id        = AV_CODEC_ID_FIC,
@@ -1154,6 +1153,76 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .name      = "hap",
         .long_name = NULL_IF_CONFIG_SMALL("Vidvox Hap decoder"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_DXV,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "dxv",
+        .long_name = NULL_IF_CONFIG_SMALL("Resolume DXV"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_SCREENPRESSO,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "screenpresso",
+        .long_name = NULL_IF_CONFIG_SMALL("Screenpresso"),
+        .props     = AV_CODEC_PROP_LOSSLESS,
+    },
+    {
+        .id        = AV_CODEC_ID_WRAPPED_AVFRAME,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "wrapped_avframe",
+        .long_name = NULL_IF_CONFIG_SMALL("AVFrame to AVPacket passthrough"),
+        .props     = AV_CODEC_PROP_LOSSLESS,
+    },
+    {
+        .id        = AV_CODEC_ID_RSCC,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "rscc",
+        .long_name = NULL_IF_CONFIG_SMALL("innoHeim/Rsupport Screen Capture Codec"),
+        .props     = AV_CODEC_PROP_LOSSLESS,
+    },
+    {
+        .id        = AV_CODEC_ID_MAGICYUV,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "magicyuv",
+        .long_name = NULL_IF_CONFIG_SMALL("MagicYUV video"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSLESS,
+    },
+    {
+        .id        = AV_CODEC_ID_TRUEMOTION2RT,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "truemotion2rt",
+        .long_name = NULL_IF_CONFIG_SMALL("Duck TrueMotion 2.0 Real Time"),
+        .props     = AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_AV1,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "av1",
+        .long_name = NULL_IF_CONFIG_SMALL("Alliance for Open Media AV1"),
+        .props     = AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_PIXLET,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "pixlet",
+        .long_name = NULL_IF_CONFIG_SMALL("Apple Pixlet"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_FMVC,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "fmvc",
+        .long_name = NULL_IF_CONFIG_SMALL("FM Screen Capture Codec"),
+        .props     = AV_CODEC_PROP_LOSSLESS,
+    },
+    {
+        .id        = AV_CODEC_ID_CLEARVIDEO,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "clearvideo",
+        .long_name = NULL_IF_CONFIG_SMALL("Iterated Systems ClearVideo"),
+        .props     = AV_CODEC_PROP_LOSSY,
     },
 
     /* image codecs */
@@ -1363,6 +1432,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .name      = "xwd",
         .long_name = NULL_IF_CONFIG_SMALL("XWD (X Window Dump) image"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSLESS,
+    },
+    {
+        .id        = AV_CODEC_ID_CFHD,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "cfhd",
+        .long_name = NULL_IF_CONFIG_SMALL("Cineform HD"),
+        .props     = AV_CODEC_PROP_LOSSY,
     },
 
     /* various PCM "codecs" */
@@ -1884,6 +1960,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .name      = "aac",
         .long_name = NULL_IF_CONFIG_SMALL("AAC (Advanced Audio Coding)"),
         .props     = AV_CODEC_PROP_LOSSY,
+        .profiles  = NULL_IF_CONFIG_SMALL(ff_aac_profiles),
     },
     {
         .id        = AV_CODEC_ID_AC3,
@@ -1898,6 +1975,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .name      = "dts",
         .long_name = NULL_IF_CONFIG_SMALL("DCA (DTS Coherent Acoustics)"),
         .props     = AV_CODEC_PROP_LOSSY | AV_CODEC_PROP_LOSSLESS,
+        .profiles  = NULL_IF_CONFIG_SMALL(ff_dca_profiles),
     },
     {
         .id        = AV_CODEC_ID_VORBIS,
@@ -2088,15 +2166,6 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("ATRAC3 (Adaptive TRansform Acoustic Coding 3)"),
         .props     = AV_CODEC_PROP_LOSSY,
     },
-#if FF_API_VOXWARE
-    {
-        .id        = AV_CODEC_ID_VOXWARE,
-        .type      = AVMEDIA_TYPE_AUDIO,
-        .name      = "voxware",
-        .long_name = NULL_IF_CONFIG_SMALL("Voxware RT29 Metasound"),
-        .props     = AV_CODEC_PROP_LOSSY,
-    },
-#endif
     {
         .id        = AV_CODEC_ID_APE,
         .type      = AVMEDIA_TYPE_AUDIO,
@@ -2427,4 +2496,10 @@ const AVCodecDescriptor *avcodec_descriptor_get_by_name(const char *name)
         if (!strcmp(desc->name, name))
             return desc;
     return NULL;
+}
+
+enum AVMediaType avcodec_get_type(enum AVCodecID codec_id)
+{
+    const AVCodecDescriptor *desc = avcodec_descriptor_get(codec_id);
+    return desc ? desc->type : AVMEDIA_TYPE_UNKNOWN;
 }

@@ -22,6 +22,7 @@
 #define AVUTIL_XTEA_H
 
 #include <stdint.h>
+#include "version.h"
 
 /**
  * @file
@@ -31,20 +32,40 @@
  * @{
  */
 
+#if FF_API_CRYPTO_CONTEXT
 typedef struct AVXTEA {
     uint32_t key[16];
 } AVXTEA;
+#else
+typedef struct AVXTEA AVXTEA;
+#endif
+
+/**
+ * Allocate an AVXTEA context.
+ */
+AVXTEA *av_xtea_alloc(void);
 
 /**
  * Initialize an AVXTEA context.
  *
  * @param ctx an AVXTEA context
- * @param key a key of 16 bytes used for encryption/decryption
+ * @param key a key of 16 bytes used for encryption/decryption,
+ *            interpreted as big endian 32 bit numbers
  */
 void av_xtea_init(struct AVXTEA *ctx, const uint8_t key[16]);
 
 /**
- * Encrypt or decrypt a buffer using a previously initialized context.
+ * Initialize an AVXTEA context.
+ *
+ * @param ctx an AVXTEA context
+ * @param key a key of 16 bytes used for encryption/decryption,
+ *            interpreted as little endian 32 bit numbers
+ */
+void av_xtea_le_init(struct AVXTEA *ctx, const uint8_t key[16]);
+
+/**
+ * Encrypt or decrypt a buffer using a previously initialized context,
+ * in big endian format.
  *
  * @param ctx an AVXTEA context
  * @param dst destination array, can be equal to src
@@ -55,6 +76,20 @@ void av_xtea_init(struct AVXTEA *ctx, const uint8_t key[16]);
  */
 void av_xtea_crypt(struct AVXTEA *ctx, uint8_t *dst, const uint8_t *src,
                    int count, uint8_t *iv, int decrypt);
+
+/**
+ * Encrypt or decrypt a buffer using a previously initialized context,
+ * in little endian format.
+ *
+ * @param ctx an AVXTEA context
+ * @param dst destination array, can be equal to src
+ * @param src source array, can be equal to dst
+ * @param count number of 8 byte blocks
+ * @param iv initialization vector for CBC mode, if NULL then ECB will be used
+ * @param decrypt 0 for encryption, 1 for decryption
+ */
+void av_xtea_le_crypt(struct AVXTEA *ctx, uint8_t *dst, const uint8_t *src,
+                      int count, uint8_t *iv, int decrypt);
 
 /**
  * @}

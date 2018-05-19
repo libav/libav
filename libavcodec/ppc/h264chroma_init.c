@@ -19,12 +19,13 @@
  */
 
 #include "config.h"
+
 #include "libavutil/attributes.h"
 #include "libavutil/cpu.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/ppc/cpu.h"
-#include "libavutil/ppc/types_altivec.h"
 #include "libavutil/ppc/util_altivec.h"
+
 #include "libavcodec/h264chroma.h"
 
 #if HAVE_ALTIVEC && HAVE_BIGENDIAN
@@ -46,7 +47,7 @@
 #undef OP_U8_ALTIVEC
 #undef PREFIX_h264_chroma_mc8_altivec
 #undef PREFIX_h264_chroma_mc8_num
-#endif /* HAVE_ALTIVEC */
+#endif /* HAVE_ALTIVEC && HAVE_BIGENDIAN */
 
 av_cold void ff_h264chroma_init_ppc(H264ChromaContext *c, int bit_depth)
 {
@@ -60,5 +61,5 @@ av_cold void ff_h264chroma_init_ppc(H264ChromaContext *c, int bit_depth)
         c->put_h264_chroma_pixels_tab[0] = put_h264_chroma_mc8_altivec;
         c->avg_h264_chroma_pixels_tab[0] = avg_h264_chroma_mc8_altivec;
     }
-#endif /* HAVE_ALTIVEC */
+#endif /* HAVE_ALTIVEC && HAVE_BIGENDIAN */
 }

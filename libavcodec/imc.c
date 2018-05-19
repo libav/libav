@@ -27,7 +27,6 @@
  *  A mdct based codec using a 256 points large transform
  *  divided into 32 bands with some mix of scale factors.
  *  Only mono is supported.
- *
  */
 
 
@@ -38,12 +37,14 @@
 #include "libavutil/channel_layout.h"
 #include "libavutil/float_dsp.h"
 #include "libavutil/internal.h"
+
 #include "avcodec.h"
+#include "bitstream.h"
 #include "bswapdsp.h"
-#include "get_bits.h"
 #include "fft.h"
 #include "internal.h"
 #include "sinewin.h"
+#include "vlc.h"
 
 #include "imcdata.h"
 
@@ -70,7 +71,7 @@ typedef struct IMCChannel {
     int sumLenArr[BANDS];      ///< bits for all coeffs in band
     int skipFlagRaw[BANDS];    ///< skip flags are stored in raw form or not
     int skipFlagBits[BANDS];   ///< bits used to code skip flags
-    int skipFlagCount[BANDS];  ///< skipped coeffients per band
+    int skipFlagCount[BANDS];  ///< skipped coefficients per band
     int skipFlags[COEFFS];     ///< skip coefficient decoding or not
     int codewords[COEFFS];     ///< raw codewords read from bitstream
 
@@ -92,7 +93,7 @@ typedef struct IMCContext {
     //@}
 
     float sqrt_tab[30];
-    GetBitContext gb;
+    BitstreamContext bc;
 
     BswapDSPContext bdsp;
     AVFloatDSPContext fdsp;
@@ -247,7 +248,7 @@ static av_cold int imc_decode_init(AVCodecContext *avctx)
         return ret;
     }
     ff_bswapdsp_init(&q->bdsp);
-    avpriv_float_dsp_init(&q->fdsp, avctx->flags & CODEC_FLAG_BITEXACT);
+    avpriv_float_dsp_init(&q->fdsp, avctx->flags & AV_CODEC_FLAG_BITEXACT);
     avctx->sample_fmt     = AV_SAMPLE_FMT_FLTP;
     avctx->channel_layout = avctx->channels == 1 ? AV_CH_LAYOUT_MONO
                                                  : AV_CH_LAYOUT_STEREO;
@@ -329,12 +330,12 @@ static void imc_read_level_coeffs(IMCContext *q, int stream_format_code,
     if (stream_format_code & 4)
         start = 1;
     if (start)
-        levlCoeffs[0] = get_bits(&q->gb, 7);
+        levlCoeffs[0] = bitstream_read(&q->bc, 7);
     for (i = start; i < BANDS; i++) {
-        levlCoeffs[i] = get_vlc2(&q->gb, hufftab[cb_sel[i]]->table,
-                                 hufftab[cb_sel[i]]->bits, 2);
+        levlCoeffs[i] = bitstream_read_vlc(&q->bc, hufftab[cb_sel[i]]->table,
+                                           hufftab[cb_sel[i]]->bits, 2);
         if (levlCoeffs[i] == 17)
-            levlCoeffs[i] += get_bits(&q->gb, 4);
+            levlCoeffs[i] += bitstream_read(&q->bc, 4);
     }
 }
 
@@ -343,10 +344,10 @@ static void imc_read_level_coeffs_raw(IMCContext *q, int stream_format_code,
 {
     int i;
 
-    q->coef0_pos  = get_bits(&q->gb, 5);
-    levlCoeffs[0] = get_bits(&q->gb, 7);
+    q->coef0_pos  = bitstream_read(&q->bc, 5);
+    levlCoeffs[0] = bitstream_read(&q->bc, 7);
     for (i = 1; i < BANDS; i++)
-        levlCoeffs[i] = get_bits(&q->gb, 4);
+        levlCoeffs[i] = bitstream_read(&q->bc, 4);
 }
 
 static void imc_decode_level_coefficients(IMCContext *q, int *levlCoeffBuf,
@@ -411,7 +412,7 @@ static void imc_decode_level_coefficients_raw(IMCContext *q, int *levlCoeffBuf,
 
     pos = q->coef0_pos;
     flcoeffs1[pos] = 20000.0 / pow (2, levlCoeffBuf[0] * 0.18945); // 0.18945 = log2(10) * 0.05703125
-    flcoeffs2[pos] = log2f(flcoeffs1[0]);
+    flcoeffs2[pos] = log2f(flcoeffs1[pos]);
     tmp  = flcoeffs1[pos];
     tmp2 = flcoeffs2[pos];
 
@@ -613,19 +614,19 @@ static void imc_get_skip_coeff(IMCContext *q, IMCChannel *chctx)
             chctx->skipFlagBits[i] = band_tab[i + 1] - band_tab[i];
 
             for (j = band_tab[i]; j < band_tab[i + 1]; j++) {
-                chctx->skipFlags[j] = get_bits1(&q->gb);
+                chctx->skipFlags[j] = bitstream_read_bit(&q->bc);
                 if (chctx->skipFlags[j])
                     chctx->skipFlagCount[i]++;
             }
         } else {
             for (j = band_tab[i]; j < band_tab[i + 1] - 1; j += 2) {
-                if (!get_bits1(&q->gb)) { // 0
+                if (!bitstream_read_bit(&q->bc)) { // 0
                     chctx->skipFlagBits[i]++;
                     chctx->skipFlags[j]      = 1;
                     chctx->skipFlags[j + 1]  = 1;
                     chctx->skipFlagCount[i] += 2;
                 } else {
-                    if (get_bits1(&q->gb)) { // 11
+                    if (bitstream_read_bit(&q->bc)) { // 11
                         chctx->skipFlagBits[i] += 2;
                         chctx->skipFlags[j]     = 0;
                         chctx->skipFlags[j + 1] = 1;
@@ -633,7 +634,7 @@ static void imc_get_skip_coeff(IMCContext *q, IMCChannel *chctx)
                     } else {
                         chctx->skipFlagBits[i] += 3;
                         chctx->skipFlags[j + 1] = 0;
-                        if (!get_bits1(&q->gb)) { // 100
+                        if (!bitstream_read_bit(&q->bc)) { // 100
                             chctx->skipFlags[j] = 1;
                             chctx->skipFlagCount[i]++;
                         } else { // 101
@@ -645,7 +646,7 @@ static void imc_get_skip_coeff(IMCContext *q, IMCChannel *chctx)
 
             if (j < band_tab[i + 1]) {
                 chctx->skipFlagBits[i]++;
-                if ((chctx->skipFlags[j] = get_bits1(&q->gb)))
+                if ((chctx->skipFlags[j] = bitstream_read_bit(&q->bc)))
                     chctx->skipFlagCount[i]++;
             }
         }
@@ -782,13 +783,13 @@ static int imc_get_coeffs(IMCContext *q, IMCChannel *chctx)
                 cw_len = chctx->CWlengthT[j];
                 cw = 0;
 
-                if (get_bits_count(&q->gb) + cw_len > 512) {
+                if (bitstream_tell(&q->bc) + cw_len > 512) {
                     ff_dlog(NULL, "Band %i coeff %i cw_len %i\n", i, j, cw_len);
                     return AVERROR_INVALIDDATA;
                 }
 
                 if (cw_len && (!chctx->bandFlagsBuf[i] || !chctx->skipFlags[j]))
-                    cw = get_bits(&q->gb, cw_len);
+                    cw = bitstream_read(&q->bc, cw_len);
 
                 chctx->codewords[j] = cw;
             }
@@ -852,13 +853,13 @@ static int imc_decode_block(AVCodecContext *avctx, IMCContext *q, int ch)
 
 
     /* Check the frame header */
-    imc_hdr = get_bits(&q->gb, 9);
+    imc_hdr = bitstream_read(&q->bc, 9);
     if (imc_hdr & 0x18) {
         av_log(avctx, AV_LOG_ERROR, "frame header check failed!\n");
         av_log(avctx, AV_LOG_ERROR, "got %X.\n", imc_hdr);
         return AVERROR_INVALIDDATA;
     }
-    stream_format_code = get_bits(&q->gb, 3);
+    stream_format_code = bitstream_read(&q->bc, 3);
 
     if (stream_format_code & 0x04)
         chctx->decoder_reset = 1;
@@ -871,7 +872,7 @@ static int imc_decode_block(AVCodecContext *avctx, IMCContext *q, int ch)
         chctx->decoder_reset = 0;
     }
 
-    flag = get_bits1(&q->gb);
+    flag = bitstream_read_bit(&q->bc);
     if (stream_format_code & 0x1)
         imc_read_level_coeffs_raw(q, stream_format_code, chctx->levlCoeffBuf);
     else
@@ -909,7 +910,7 @@ static int imc_decode_block(AVCodecContext *avctx, IMCContext *q, int ch)
         memset(chctx->bandFlagsBuf, 0, BANDS * sizeof(int));
         for (i = 0; i < BANDS - 1; i++)
             if (chctx->bandWidthT[i])
-                chctx->bandFlagsBuf[i] = get_bits1(&q->gb);
+                chctx->bandFlagsBuf[i] = bitstream_read_bit(&q->bc);
 
         imc_calculate_coeffs(q, chctx->flcoeffs1, chctx->flcoeffs2,
                              chctx->bandWidthT, chctx->flcoeffs3,
@@ -944,7 +945,7 @@ static int imc_decode_block(AVCodecContext *avctx, IMCContext *q, int ch)
     }
 
     if ((ret = bit_allocation(q, chctx, stream_format_code,
-                              512 - bitscount - get_bits_count(&q->gb),
+                              512 - bitscount - bitstream_tell(&q->bc),
                               flag)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "Bit allocations failed\n");
         chctx->decoder_reset = 1;
@@ -997,7 +998,7 @@ static int imc_decode_frame(AVCodecContext *avctx, void *data,
 
     IMCContext *q = avctx->priv_data;
 
-    LOCAL_ALIGNED_16(uint16_t, buf16, [(IMC_BLOCK_SIZE + FF_INPUT_BUFFER_PADDING_SIZE) / 2]);
+    LOCAL_ALIGNED_16(uint16_t, buf16, [(IMC_BLOCK_SIZE + AV_INPUT_BUFFER_PADDING_SIZE) / 2]);
 
     if (buf_size < IMC_BLOCK_SIZE * avctx->channels) {
         av_log(avctx, AV_LOG_ERROR, "frame too small!\n");
@@ -1016,7 +1017,7 @@ static int imc_decode_frame(AVCodecContext *avctx, void *data,
 
         q->bdsp.bswap16_buf(buf16, (const uint16_t *) buf, IMC_BLOCK_SIZE / 2);
 
-        init_get_bits(&q->gb, (const uint8_t*)buf16, IMC_BLOCK_SIZE * 8);
+        bitstream_init8(&q->bc, (const uint8_t *)buf16, IMC_BLOCK_SIZE);
 
         buf += IMC_BLOCK_SIZE;
 
@@ -1054,7 +1055,7 @@ AVCodec ff_imc_decoder = {
     .init           = imc_decode_init,
     .close          = imc_decode_close,
     .decode         = imc_decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
     .sample_fmts    = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_FLTP,
                                                       AV_SAMPLE_FMT_NONE },
 };
@@ -1068,7 +1069,7 @@ AVCodec ff_iac_decoder = {
     .init           = imc_decode_init,
     .close          = imc_decode_close,
     .decode         = imc_decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
     .sample_fmts    = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_FLTP,
                                                       AV_SAMPLE_FMT_NONE },
 };

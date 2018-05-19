@@ -27,12 +27,7 @@
 
 // The idiosyncrasies of GSM-in-WAV are explained at http://kbs.cs.tu-berlin.de/~jutta/toast.html
 
-#include "config.h"
-#if HAVE_GSM_H
 #include <gsm.h>
-#else
-#include <gsm/gsm.h>
-#endif
 
 #include "libavutil/channel_layout.h"
 #include "libavutil/common.h"
@@ -134,7 +129,8 @@ AVCodec ff_libgsm_decoder = {
     .close          = libgsm_decode_close,
     .decode         = libgsm_decode_frame,
     .flush          = libgsm_flush,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
+    .wrapper_name   = "libgsm",
 };
 
 AVCodec ff_libgsm_ms_decoder = {
@@ -147,5 +143,6 @@ AVCodec ff_libgsm_ms_decoder = {
     .close          = libgsm_decode_close,
     .decode         = libgsm_decode_frame,
     .flush          = libgsm_flush,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
+    .wrapper_name   = "libgsm",
 };

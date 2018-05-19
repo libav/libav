@@ -16,6 +16,14 @@ for more formats. None of them are used by default, their use has to be
 explicitly requested by passing the appropriate flags to
 @command{./configure}.
 
+@section Alliance for Open Media libaom
+
+Libav can make use of the libaom library for AV1 decoding.
+
+Go to @url{http://aomedia.org/} and follow the instructions for
+installing the library. Then pass @code{--enable-libaom} to configure to
+enable it.
+
 @section OpenCORE and VisualOn libraries
 
 Spun off Google Android sources, OpenCore, VisualOn and Fraunhofer
@@ -95,13 +103,28 @@ Go to @url{http://www.wavpack.com/} and follow the instructions for
 installing the library. Then pass @code{--enable-libwavpack} to configure to
 enable it.
 
+@section libxavs
+
+Libav can make use of the libxavs library for Xavs encoding.
+
+Go to @url{http://xavs.sf.net/} and follow the instructions for
+installing the library. Then pass @code{--enable-libxavs} to configure to
+enable it.
+
 @section OpenH264
 
-Libav can make use of the OpenH264 library for H.264 encoding.
+Libav can make use of the OpenH264 library for H.264 encoding and decoding.
 
 Go to @url{http://www.openh264.org/} and follow the instructions for
 installing the library. Then pass @code{--enable-libopenh264} to configure to
 enable it.
+
+For decoding, this library is much more limited than the built-in decoder
+in libavcodec; currently, this library lacks support for decoding B-frames
+and some other main/high profile features. (It currently only supports
+constrained baseline profile and CABAC.) Using it is mostly useful for
+testing and for taking advantage of Cisco's patent portfolio license
+(@url{http://www.openh264.org/BINARY_LICENSE.txt}).
 
 @section x264
 
@@ -131,6 +154,14 @@ x265 is under the GNU Public License Version 2 or later
 details), you must upgrade Libav's license to GPL in order to use it.
 @end float
 
+@section kvazaar
+
+Libav can make use of the kvazaar library for HEVC encoding.
+
+Go to @url{https://github.com/ultravideo/kvazaar} and follow the
+instructions for installing the library. Then pass
+@code{--enable-libkvazaar} to configure to enable it.
+
 @section libilbc
 
 iLBC is a narrowband speech codec that has been made freely available
@@ -140,6 +171,15 @@ iLBC encoding and decoding.
 
 Go to @url{https://github.com/dekkers/libilbc} and follow the instructions for
 installing the library. Then pass @code{--enable-libilbc} to configure to
+enable it.
+
+@section libhdcd
+
+Libav can make use of the libhdcd library for High Definition Compatible
+Digital (HDCD) decoding via the @code{hdcd} filter.
+
+Go to @url{https://github.com/bp0/libhdcd} and follow the instructions for
+installing the library. Then pass @code{--enable-libhdcd} to configure to
 enable it.
 
 @section AviSynth
@@ -156,6 +196,19 @@ For Windows, supported AviSynth variants are
 @url{https://github.com/AviSynth/AviSynthPlus, AviSynth+'s git repository}
 provides a GNU-style Makefile which can install just the headers using
 @code{make install PREFIX=/install/prefix}.
+
+@float NOTE
+There is currently a regression in AviSynth+'s @code{capi.h} header as of
+October 2016, which interferes with the ability for builds of Libav to use
+MSVC-built binaries of AviSynth. Until this is resolved, you can make sure
+a known good version is installed by checking out a version from before
+the regression occurred:
+
+@code{git clone -b MT git://github.com/AviSynth/AviSynthPlus.git @*
+cd AviSynthPlus @*
+git checkout -b oldheader b4f292b4dbfad149697fb65c6a037bb3810813f9 @*
+make install PREFIX=/install/prefix}
+@end float
 
 @float NOTE
 When using AviSynth+'s installed headers, the user must also pass
@@ -180,6 +233,27 @@ with @code{--enable-avisynth}, and the binaries will work regardless of the
 end user having AviSynth or AvxSynth installed - they'll only need to be
 installed to use AviSynth scripts (obviously).
 @end float
+
+@section Intel QuickSync Video
+
+Libav can use Intel QuickSync Video (QSV) for accelerated encoding and decoding
+of multiple codecs. To use QSV, Libav must be linked against the @code{libmfx}
+dispatcher, which loads the actual decoding libraries.
+
+The dispatcher is open source and can be downloaded from
+@url{https://github.com/lu-zero/mfx_dispatch.git}. Libav needs to be configured
+with the @code{--enable-libmfx} option and @code{pkg-config} needs to be able to
+locate the dispatcher's @code{.pc} files.
+
+@section AMD VCE
+
+Libav can use the AMD Advanced Media Framework library for accelerated H.264 and HEVC encoding on VCE enabled hardware under Windows.
+
+To enable support you must obtain the AMF framework header files from @url{https://github.com/GPUOpen-LibrariesAndSDKs/AMF.git}.
+
+Create an @code{AMF/} directory in the system include path.
+Copy the contents of @code{AMF/amf/public/include/} into that directory.
+Then Configure Libav with @code{--enable-amf}.
 
 @chapter Supported File Formats and Codecs
 
@@ -388,6 +462,7 @@ library:
 @item RealMedia                 @tab X @tab X
 @item Redirector                @tab   @tab X
 @item Renderware TeXture Dictionary @tab   @tab X
+@item Resolume DXV              @tab   @tab X
 @item RL2                       @tab   @tab X
     @tab Audio and video format used in some games by Entertainment Software Partners.
 @item RPL/ARMovie               @tab   @tab X
@@ -397,6 +472,7 @@ library:
 @item RTP                       @tab X @tab X
 @item RTSP                      @tab X @tab X
 @item SAP                       @tab X @tab X
+@item Screenpresso              @tab   @tab X
 @item SDP                       @tab   @tab X
 @item Sega FILM/CPK             @tab   @tab X
     @tab Used in many Sega Saturn console games.
@@ -532,6 +608,7 @@ following image formats are supported:
 @item ANSI/ASCII art         @tab     @tab  X
 @item Apple Intermediate Codec @tab     @tab  X
 @item Apple MJPEG-B          @tab     @tab  X
+@item Apple Pixlet           @tab     @tab  X
 @item Apple ProRes           @tab  X  @tab  X
 @item Apple QuickDraw        @tab     @tab  X
     @tab fourcc: qdrw
@@ -548,6 +625,8 @@ following image formats are supported:
 @item Autodesk Animator Flic video  @tab     @tab  X
 @item Autodesk RLE           @tab     @tab  X
     @tab fourcc: AASC
+@item AV1                    @tab     @tab  E
+    @tab Supported through external library libaom
 @item AVS (Audio Video Standard) video  @tab     @tab  X
     @tab Video encoding used by the Creature Shock game.
 @item Beam Software VB       @tab     @tab  X
@@ -567,11 +646,12 @@ following image formats are supported:
     @tab Amiga CD video codec
 @item Chinese AVS video      @tab  E  @tab  X
     @tab AVS1-P2, JiZhun profile, encoding through external library libxavs
+@item Cineform HD            @tab     @tab  X
 @item Delphine Software International CIN video  @tab     @tab  X
     @tab Codec used in Delphine Software International games.
 @item Discworld II BMV Video @tab     @tab  X
 @item Canopus Lossless Codec @tab     @tab  X
-@item Cinepak                @tab     @tab  X
+@item Cinepak                @tab  X  @tab  X
 @item Cirrus Logic AccuPak   @tab  X  @tab  X
     @tab fourcc: CLJR
 @item Creative YUV (CYUV)    @tab     @tab  X
@@ -586,6 +666,8 @@ following image formats are supported:
     @tab fourcc: DUCK
 @item Duck TrueMotion 2.0    @tab     @tab  X
     @tab fourcc: TM20
+@item Duck TrueMotion 2.0 RT @tab     @tab  X
+    @tab fourcc: TR20
 @item DV (Digital Video)     @tab  X  @tab  X
 @item Dxtory capture format  @tab     @tab  X
 @item Feeble Files/ScummVM DXA  @tab     @tab  X
@@ -605,6 +687,7 @@ following image formats are supported:
 @item Flash Screen Video v2  @tab     @tab  X
 @item Flash Video (FLV)      @tab  X  @tab  X
     @tab Sorenson H.263 used in Flash
+@item FM Screen Capture Codec  @tab     @tab  X
 @item Forward Uncompressed   @tab     @tab  X
 @item Fraps                  @tab     @tab  X
 @item Go2Meeting             @tab     @tab  X
@@ -617,7 +700,7 @@ following image formats are supported:
 @item H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10  @tab  E  @tab  X
     @tab encoding supported through external library libx264 and OpenH264
 @item HEVC                   @tab  X  @tab  X
-    @tab encoding supported through the external library libx265
+    @tab encoding supported through external library libx265 and libkvazaar
 @item HNM version 4          @tab     @tab  X
 @item HuffYUV                @tab  X  @tab  X
 @item HuffYUV FFmpeg variant @tab  X  @tab  X
@@ -640,6 +723,8 @@ following image formats are supported:
     @tab Used in the game Cyberia from Interplay.
 @item Interplay MVE video    @tab     @tab  X
     @tab Used in Interplay .MVE files.
+@item Iterated Systems ClearVideo @tab     @tab  X
+    @tab I-frames only
 @item Karl Morton's video codec  @tab     @tab  X
     @tab Codec used in Worms games.
 @item Kega Game Video (KGV1) @tab      @tab  X
@@ -651,6 +736,7 @@ following image formats are supported:
 @item LucasArts SANM         @tab     @tab  X
     @tab Used in LucasArts SMUSH animations.
 @item lossless MJPEG         @tab  X  @tab  X
+@item MagicYUV Lossless Video @tab    @tab  X
 @item Microsoft ATC Screen   @tab     @tab  X
     @tab Also known as Microsoft Screen 3.
 @item Microsoft Expression Encoder Screen  @tab     @tab  X
@@ -853,7 +939,7 @@ following image formats are supported:
 @item DV audio               @tab     @tab  X
 @item Enhanced AC-3          @tab  X  @tab  X
 @item FLAC (Free Lossless Audio Codec)  @tab  X  @tab  IX
-@item G.723.1                @tab     @tab  X
+@item G.723.1                @tab  X  @tab  X
 @item GSM                    @tab  E  @tab  X
     @tab encoding supported through external library libgsm
 @item GSM Microsoft variant  @tab  E  @tab  X
@@ -1001,7 +1087,6 @@ performance on systems without hardware floating point support).
 @item Name              @tab Input  @tab Output
 @item ALSA              @tab X      @tab X
 @item BKTR              @tab X      @tab
-@item DV1394            @tab X      @tab
 @item Linux framebuffer @tab X      @tab
 @item JACK              @tab X      @tab
 @item LIBCDIO           @tab X

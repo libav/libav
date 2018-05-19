@@ -20,13 +20,14 @@
 
 #include "config.h"
 
+#define _DEFAULT_SOURCE
 #define _SVID_SOURCE // needed for MAP_ANONYMOUS
 #include <assert.h>
 #include <inttypes.h>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
-#if HAVE_SYS_MMAN_H
+#if HAVE_MMAP
 #include <sys/mman.h>
 #if defined(MAP_ANON) && !defined(MAP_ANONYMOUS)
 #define MAP_ANONYMOUS MAP_ANON
@@ -107,6 +108,8 @@ static const FormatEntry format_entries[AV_PIX_FMT_NB] = {
     [AV_PIX_FMT_RGBA]        = { 1, 1 },
     [AV_PIX_FMT_ABGR]        = { 1, 1 },
     [AV_PIX_FMT_BGRA]        = { 1, 1 },
+    [AV_PIX_FMT_GRAY12BE]    = { 1, 1 },
+    [AV_PIX_FMT_GRAY12LE]    = { 1, 1 },
     [AV_PIX_FMT_GRAY16BE]    = { 1, 1 },
     [AV_PIX_FMT_GRAY16LE]    = { 1, 1 },
     [AV_PIX_FMT_YUV440P]     = { 1, 1 },
@@ -165,26 +168,40 @@ static const FormatEntry format_entries[AV_PIX_FMT_NB] = {
     [AV_PIX_FMT_YUV420P9LE]  = { 1, 1 },
     [AV_PIX_FMT_YUV420P10BE] = { 1, 1 },
     [AV_PIX_FMT_YUV420P10LE] = { 1, 1 },
+    [AV_PIX_FMT_YUV420P12BE] = { 1, 1 },
+    [AV_PIX_FMT_YUV420P12LE] = { 1, 1 },
     [AV_PIX_FMT_YUV422P9BE]  = { 1, 1 },
     [AV_PIX_FMT_YUV422P9LE]  = { 1, 1 },
     [AV_PIX_FMT_YUV422P10BE] = { 1, 1 },
     [AV_PIX_FMT_YUV422P10LE] = { 1, 1 },
+    [AV_PIX_FMT_YUV422P12BE] = { 1, 1 },
+    [AV_PIX_FMT_YUV422P12LE] = { 1, 1 },
     [AV_PIX_FMT_YUV444P9BE]  = { 1, 1 },
     [AV_PIX_FMT_YUV444P9LE]  = { 1, 1 },
     [AV_PIX_FMT_YUV444P10BE] = { 1, 1 },
     [AV_PIX_FMT_YUV444P10LE] = { 1, 1 },
+    [AV_PIX_FMT_YUV444P12BE] = { 1, 1 },
+    [AV_PIX_FMT_YUV444P12LE] = { 1, 1 },
     [AV_PIX_FMT_GBRP]        = { 1, 1 },
     [AV_PIX_FMT_GBRP9LE]     = { 1, 1 },
     [AV_PIX_FMT_GBRP9BE]     = { 1, 1 },
     [AV_PIX_FMT_GBRP10LE]    = { 1, 1 },
     [AV_PIX_FMT_GBRP10BE]    = { 1, 1 },
+    [AV_PIX_FMT_GBRP12LE]    = { 1, 1 },
+    [AV_PIX_FMT_GBRP12BE]    = { 1, 1 },
     [AV_PIX_FMT_GBRP16LE]    = { 1, 0 },
     [AV_PIX_FMT_GBRP16BE]    = { 1, 0 },
     [AV_PIX_FMT_GBRAP]       = { 1, 1 },
+    [AV_PIX_FMT_GBRAP10LE]   = { 1, 1 },
+    [AV_PIX_FMT_GBRAP10BE]   = { 1, 1 },
+    [AV_PIX_FMT_GBRAP12LE]   = { 1, 1 },
+    [AV_PIX_FMT_GBRAP12BE]   = { 1, 1 },
     [AV_PIX_FMT_GBRAP16LE]   = { 1, 0 },
     [AV_PIX_FMT_GBRAP16BE]   = { 1, 0 },
     [AV_PIX_FMT_XYZ12BE]     = { 0, 0, 1 },
     [AV_PIX_FMT_XYZ12LE]     = { 0, 0, 1 },
+    [AV_PIX_FMT_P010LE]      = { 1, 0 },
+    [AV_PIX_FMT_P010BE]      = { 1, 0 },
 };
 
 int sws_isSupportedInput(enum AVPixelFormat pix_fmt)
@@ -370,13 +387,6 @@ static av_cold int initFilter(int16_t **outFilter, int32_t **filterPos,
                     }
                     coeff *= fone >> (30 + 24);
                 }
-#if 0
-                else if (flags & SWS_X) {
-                    double p  = param ? param * 0.01 : 0.3;
-                    coeff     = d ? sin(d * M_PI) / (d * M_PI) : 1.0;
-                    coeff    *= pow(2.0, -p * d * d);
-                }
-#endif
                 else if (flags & SWS_X) {
                     double A = param[0] != SWS_PARAM_DEFAULT ? param[0] : 1.0;
                     double c;
@@ -649,9 +659,9 @@ static av_cold int init_hscaler_mmxext(int dstW, int xInc, uint8_t *filterCode,
         "jmp                         9f                 \n\t"
         // Begin
         "0:                                             \n\t"
-        "movq    (%%"REG_d", %%"REG_a"), %%mm3          \n\t"
-        "movd    (%%"REG_c", %%"REG_S"), %%mm0          \n\t"
-        "movd   1(%%"REG_c", %%"REG_S"), %%mm1          \n\t"
+        "movq  (%%"FF_REG_d", %%"FF_REG_a"), %%mm3      \n\t"
+        "movd  (%%"FF_REG_c", %%"FF_REG_S"), %%mm0      \n\t"
+        "movd 1(%%"FF_REG_c", %%"FF_REG_S"), %%mm1      \n\t"
         "punpcklbw                %%mm7, %%mm1          \n\t"
         "punpcklbw                %%mm7, %%mm0          \n\t"
         "pshufw                   $0xFF, %%mm1, %%mm1   \n\t"
@@ -659,14 +669,14 @@ static av_cold int init_hscaler_mmxext(int dstW, int xInc, uint8_t *filterCode,
         "pshufw                   $0xFF, %%mm0, %%mm0   \n\t"
         "2:                                             \n\t"
         "psubw                    %%mm1, %%mm0          \n\t"
-        "movl   8(%%"REG_b", %%"REG_a"), %%esi          \n\t"
+        "movl 8(%%"FF_REG_b", %%"FF_REG_a"), %%esi      \n\t"
         "pmullw                   %%mm3, %%mm0          \n\t"
         "psllw                       $7, %%mm1          \n\t"
         "paddw                    %%mm1, %%mm0          \n\t"
 
-        "movq                     %%mm0, (%%"REG_D", %%"REG_a") \n\t"
+        "movq       %%mm0, (%%"FF_REG_D", %%"FF_REG_a") \n\t"
 
-        "add                         $8, %%"REG_a"      \n\t"
+        "add                         $8, %%"FF_REG_a"   \n\t"
         // End
         "9:                                             \n\t"
         // "int $3                                         \n\t"
@@ -689,22 +699,22 @@ static av_cold int init_hscaler_mmxext(int dstW, int xInc, uint8_t *filterCode,
         "jmp                         9f                 \n\t"
         // Begin
         "0:                                             \n\t"
-        "movq    (%%"REG_d", %%"REG_a"), %%mm3          \n\t"
-        "movd    (%%"REG_c", %%"REG_S"), %%mm0          \n\t"
+        "movq (%%"FF_REG_d", %%"FF_REG_a"), %%mm3       \n\t"
+        "movd (%%"FF_REG_c", %%"FF_REG_S"), %%mm0       \n\t"
         "punpcklbw                %%mm7, %%mm0          \n\t"
         "pshufw                   $0xFF, %%mm0, %%mm1   \n\t"
         "1:                                             \n\t"
         "pshufw                   $0xFF, %%mm0, %%mm0   \n\t"
         "2:                                             \n\t"
         "psubw                    %%mm1, %%mm0          \n\t"
-        "movl   8(%%"REG_b", %%"REG_a"), %%esi          \n\t"
+        "movl 8(%%"FF_REG_b", %%"FF_REG_a"), %%esi      \n\t"
         "pmullw                   %%mm3, %%mm0          \n\t"
         "psllw                       $7, %%mm1          \n\t"
         "paddw                    %%mm1, %%mm0          \n\t"
 
-        "movq                     %%mm0, (%%"REG_D", %%"REG_a") \n\t"
+        "movq       %%mm0, (%%"FF_REG_D", %%"FF_REG_a") \n\t"
 
-        "add                         $8, %%"REG_a"      \n\t"
+        "add                      $8, %%"FF_REG_a"      \n\t"
         // End
         "9:                                             \n\t"
         // "int                       $3                   \n\t"
@@ -865,7 +875,7 @@ SwsContext *sws_alloc_context(void)
     SwsContext *c = av_mallocz(sizeof(SwsContext));
 
     if (c) {
-        c->av_class = &sws_context_class;
+        c->av_class = &ff_sws_context_class;
         av_opt_set_defaults(c);
     }
 
@@ -895,7 +905,7 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
     flags     = c->flags;
     emms_c();
     if (!rgb15to16)
-        sws_rgb2rgb_init();
+        ff_rgb2rgb_init();
 
     unscaled = (srcW == dstW && srcH == dstH);
 
@@ -1014,16 +1024,18 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
         srcFormat != AV_PIX_FMT_RGB4_BYTE && srcFormat != AV_PIX_FMT_BGR4_BYTE &&
         srcFormat != AV_PIX_FMT_GBRP9BE   && srcFormat != AV_PIX_FMT_GBRP9LE  &&
         srcFormat != AV_PIX_FMT_GBRP10BE  && srcFormat != AV_PIX_FMT_GBRP10LE &&
+        srcFormat != AV_PIX_FMT_GBRAP10BE && srcFormat != AV_PIX_FMT_GBRAP10LE &&
+        srcFormat != AV_PIX_FMT_GBRP12BE  && srcFormat != AV_PIX_FMT_GBRP12LE &&
         srcFormat != AV_PIX_FMT_GBRP16BE  && srcFormat != AV_PIX_FMT_GBRP16LE &&
         ((dstW >> c->chrDstHSubSample) <= (srcW >> 1) ||
          (flags & SWS_FAST_BILINEAR)))
         c->chrSrcHSubSample = 1;
 
-    // Note the -((-x)>>y) is so that we always round toward +inf.
-    c->chrSrcW = -((-srcW) >> c->chrSrcHSubSample);
-    c->chrSrcH = -((-srcH) >> c->chrSrcVSubSample);
-    c->chrDstW = -((-dstW) >> c->chrDstHSubSample);
-    c->chrDstH = -((-dstH) >> c->chrDstVSubSample);
+    // Note the AV_CEIL_RSHIFT is so that we always round toward +inf.
+    c->chrSrcW = AV_CEIL_RSHIFT(srcW, c->chrSrcHSubSample);
+    c->chrSrcH = AV_CEIL_RSHIFT(srcH, c->chrSrcVSubSample);
+    c->chrDstW = AV_CEIL_RSHIFT(dstW, c->chrDstHSubSample);
+    c->chrDstH = AV_CEIL_RSHIFT(dstH, c->chrDstVSubSample);
 
     /* unscaled special cases */
     if (unscaled && !usesHFilter && !usesVFilter &&
@@ -1039,10 +1051,10 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
         }
     }
 
-    c->srcBpc = 1 + desc_src->comp[0].depth_minus1;
+    c->srcBpc = desc_src->comp[0].depth;
     if (c->srcBpc < 8)
         c->srcBpc = 8;
-    c->dstBpc = 1 + desc_dst->comp[0].depth_minus1;
+    c->dstBpc = desc_dst->comp[0].depth;
     if (c->dstBpc < 8)
         c->dstBpc = 8;
     if (c->dstBpc == 16)
@@ -1050,7 +1062,7 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
     FF_ALLOC_OR_GOTO(c, c->formatConvBuffer,
                      (FFALIGN(srcW, 16) * 2 * FFALIGN(c->srcBpc, 8) >> 3) + 16,
                      fail);
-    if (INLINE_MMXEXT(cpu_flags) && c->srcBpc == 8 && c->dstBpc <= 10) {
+    if (INLINE_MMXEXT(cpu_flags) && c->srcBpc == 8 && c->dstBpc <= 12) {
         c->canMMXEXTBeUsed = (dstW >= srcW && (dstW & 31) == 0 &&
                               (srcW & 15) == 0) ? 1 : 0;
         if (!c->canMMXEXTBeUsed && dstW >= srcW && (srcW & 15) == 0
@@ -1086,7 +1098,11 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
         }
     }
 
-#define USE_MMAP (HAVE_MMAP && HAVE_MPROTECT && defined MAP_ANONYMOUS)
+#if HAVE_MMAP && HAVE_MPROTECT && defined(MAP_ANONYMOUS)
+#define USE_MMAP 1
+#else
+#define USE_MMAP 0
+#endif
 
     /* precalculate horizontal scaler filter coefficients */
     {

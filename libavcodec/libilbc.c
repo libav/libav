@@ -51,7 +51,10 @@ static const AVOption ilbc_dec_options[] = {
 };
 
 static const AVClass ilbc_dec_class = {
-    "libilbc", av_default_item_name, ilbc_dec_options, LIBAVUTIL_VERSION_INT
+    .class_name = "libilbc",
+    .item_name  = av_default_item_name,
+    .option     = ilbc_dec_options,
+    .version    = LIBAVUTIL_VERSION_INT,
 };
 
 static av_cold int ilbc_decode_init(AVCodecContext *avctx)
@@ -95,8 +98,7 @@ static int ilbc_decode_frame(AVCodecContext *avctx, void *data,
         return ret;
     }
 
-    WebRtcIlbcfix_DecodeImpl((WebRtc_Word16*) frame->data[0],
-                             (const WebRtc_UWord16*) buf, &s->decoder, 1);
+    WebRtcIlbcfix_DecodeImpl((int16_t *) frame->data[0], (const uint16_t *) buf, &s->decoder, 1);
 
     *got_frame_ptr = 1;
 
@@ -111,7 +113,7 @@ AVCodec ff_libilbc_decoder = {
     .priv_data_size = sizeof(ILBCDecContext),
     .init           = ilbc_decode_init,
     .decode         = ilbc_decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
     .priv_class     = &ilbc_dec_class,
 };
 
@@ -127,7 +129,10 @@ static const AVOption ilbc_enc_options[] = {
 };
 
 static const AVClass ilbc_enc_class = {
-    "libilbc", av_default_item_name, ilbc_enc_options, LIBAVUTIL_VERSION_INT
+    .class_name = "libilbc",
+    .item_name  = av_default_item_name,
+    .option     = ilbc_enc_options,
+    .version    = LIBAVUTIL_VERSION_INT,
 };
 
 static av_cold int ilbc_encode_init(AVCodecContext *avctx)
@@ -168,7 +173,7 @@ static int ilbc_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
         return ret;
     }
 
-    WebRtcIlbcfix_EncodeImpl((WebRtc_UWord16*) avpkt->data, (const WebRtc_Word16*) frame->data[0], &s->encoder);
+    WebRtcIlbcfix_EncodeImpl((uint16_t *) avpkt->data, (const int16_t *) frame->data[0], &s->encoder);
 
     avpkt->size     = s->encoder.no_of_bytes;
     *got_packet_ptr = 1;
@@ -192,4 +197,5 @@ AVCodec ff_libilbc_encoder = {
                                                      AV_SAMPLE_FMT_NONE },
     .defaults       = ilbc_encode_defaults,
     .priv_class     = &ilbc_enc_class,
+    .wrapper_name   = "libbilbc",
 };

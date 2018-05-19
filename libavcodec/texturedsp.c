@@ -31,7 +31,10 @@
 
 #include "texturedsp.h"
 
-#define RGBA(r, g, b, a) (r) | ((g) << 8) | ((b) << 16) | ((a) << 24)
+#define RGBA(r, g, b, a) ((uint8_t)(r) <<  0) | \
+                         ((uint8_t)(g) <<  8) | \
+                         ((uint8_t)(b) << 16) | \
+                         ((uint8_t)(a) << 24)
 
 static av_always_inline void extract_color(uint32_t colors[4],
                                            uint16_t color0,
@@ -163,7 +166,7 @@ static inline void dxt3_block_internal(uint8_t *dst, ptrdiff_t stride,
     }
 }
 
-/** Convert a premultiplied alpha pixel to a straigth alpha pixel. */
+/** Convert a premultiplied alpha pixel to a straight alpha pixel. */
 static av_always_inline void premult2straight(uint8_t *src)
 {
     int r = src[0];

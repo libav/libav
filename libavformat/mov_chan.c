@@ -344,7 +344,7 @@ static const struct MovChannelLayoutMap mov_ch_layout_map_9ch[] = {
     { 0, 0 },
 };
 
-static const struct MovChannelLayoutMap *mov_ch_layout_map[] = {
+static const struct MovChannelLayoutMap * const mov_ch_layout_map[] = {
     mov_ch_layout_map_misc,
     mov_ch_layout_map_1ch,
     mov_ch_layout_map_2ch,
@@ -556,8 +556,9 @@ int ff_mov_read_chan(AVFormatContext *s, AVIOContext *pb, AVStream *st,
     bitmap     = avio_rb32(pb);
     num_descr  = avio_rb32(pb);
 
-    av_log(s, AV_LOG_TRACE, "chan: layout=%u bitmap=%u num_descr=%u\n",
-            layout_tag, bitmap, num_descr);
+    av_log(s, AV_LOG_TRACE,
+           "chan: layout=%"PRIu32" bitmap=%"PRIu32" num_descr=%"PRIu32"\n",
+           layout_tag, bitmap, num_descr);
 
     if (size < 12ULL + num_descr * 20ULL)
         return 0;
@@ -586,9 +587,9 @@ int ff_mov_read_chan(AVFormatContext *s, AVIOContext *pb, AVStream *st,
     }
     if (layout_tag == 0) {
         if (label_mask)
-            st->codec->channel_layout = label_mask;
+            st->codecpar->channel_layout = label_mask;
     } else
-        st->codec->channel_layout = ff_mov_get_channel_layout(layout_tag, bitmap);
+        st->codecpar->channel_layout = ff_mov_get_channel_layout(layout_tag, bitmap);
 
     return 0;
 }

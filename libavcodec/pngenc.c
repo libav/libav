@@ -19,6 +19,9 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/opt.h"
+#include "libavutil/stereo3d.h"
+
 #include "avcodec.h"
 #include "bytestream.h"
 #include "huffyuvencdsp.h"
@@ -33,6 +36,7 @@
 #define IOBUF_SIZE 4096
 
 typedef struct PNGEncContext {
+    AVClass *class;
     HuffYUVEncDSPContext hdsp;
 
     uint8_t *bytestream;
@@ -233,6 +237,7 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
                         const AVFrame *pict, int *got_packet)
 {
     PNGEncContext *s       = avctx->priv_data;
+    AVFrameSideData *side_data;
     const AVFrame *const p = pict;
     int bit_depth, color_type, y, len, row_size, ret, is_progressive;
     int bits_per_pixel, pass_row_size, enc_row_size, max_packet_size;
@@ -243,7 +248,7 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     uint8_t *rgba_buf        = NULL;
     uint8_t *top_buf         = NULL;
 
-    is_progressive = !!(avctx->flags & CODEC_FLAG_INTERLACED_DCT);
+    is_progressive = !!(avctx->flags & AV_CODEC_FLAG_INTERLACED_DCT);
     switch (avctx->pix_fmt) {
     case AV_PIX_FMT_RGBA64BE:
         bit_depth = 16;
@@ -297,7 +302,7 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     enc_row_size    = deflateBound(&s->zstream, row_size);
     max_packet_size = avctx->height * (enc_row_size +
                                        ((enc_row_size + IOBUF_SIZE - 1) / IOBUF_SIZE) * 12)
-                      + FF_MIN_BUFFER_SIZE;
+                      + AV_INPUT_BUFFER_MIN_SIZE;
     if (!pkt->data &&
         (ret = av_new_packet(pkt, max_packet_size)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "Could not allocate output packet of size %d.\n",
@@ -368,6 +373,25 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
         if (has_alpha) {
             png_write_chunk(&s->bytestream,
                             MKTAG('t', 'R', 'N', 'S'), s->buf + 256 * 3, 256);
+        }
+    }
+
+    /* write stereoscopic information */
+    side_data = av_frame_get_side_data(pict, AV_FRAME_DATA_STEREO3D);
+    if (side_data) {
+        AVStereo3D *stereo3d = (AVStereo3D *)side_data->data;
+        uint8_t sm;
+        switch (stereo3d->type) {
+        case AV_STEREO3D_SIDEBYSIDE:
+            sm = !(stereo3d->flags & AV_STEREO3D_FLAG_INVERT);
+            png_write_chunk(&s->bytestream, MKTAG('s', 'T', 'E', 'R'), &sm, 1);
+            break;
+        case AV_STEREO3D_2D:
+            break;
+        default:
+            av_log(avctx, AV_LOG_WARNING,
+                   "Only side-by-side stereo3d flag can be defined within sTER chunk\n");
+            break;
         }
     }
 
@@ -455,38 +479,58 @@ static av_cold int png_enc_init(AVCodecContext *avctx)
 {
     PNGEncContext *s = avctx->priv_data;
 
-    avctx->coded_frame = av_frame_alloc();
-    if (!avctx->coded_frame)
-        return AVERROR(ENOMEM);
-
+#if FF_API_CODED_FRAME
+FF_DISABLE_DEPRECATION_WARNINGS
     avctx->coded_frame->pict_type = AV_PICTURE_TYPE_I;
     avctx->coded_frame->key_frame = 1;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
 
     ff_huffyuvencdsp_init(&s->hdsp);
 
-    s->filter_type = av_clip(avctx->prediction_method,
-                             PNG_FILTER_VALUE_NONE,
-                             PNG_FILTER_VALUE_MIXED);
+#if FF_API_PRIVATE_OPT
+FF_DISABLE_DEPRECATION_WARNINGS
+    if (avctx->prediction_method)
+        s->filter_type = av_clip(avctx->prediction_method,
+                                 PNG_FILTER_VALUE_NONE,
+                                 PNG_FILTER_VALUE_MIXED);
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
+
     if (avctx->pix_fmt == AV_PIX_FMT_MONOBLACK)
         s->filter_type = PNG_FILTER_VALUE_NONE;
 
     return 0;
 }
 
-static av_cold int png_enc_close(AVCodecContext *avctx)
-{
-    av_frame_free(&avctx->coded_frame);
-    return 0;
-}
+#define OFFSET(x) offsetof(PNGEncContext, x)
+#define VE AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
+static const AVOption options[] = {
+{ "pred", "Prediction method", OFFSET(filter_type), AV_OPT_TYPE_INT, { .i64 = PNG_FILTER_VALUE_NONE }, PNG_FILTER_VALUE_NONE, PNG_FILTER_VALUE_MIXED, VE, "pred" },
+    { "none",  NULL, 0, AV_OPT_TYPE_CONST, { .i64 = PNG_FILTER_VALUE_NONE },  INT_MIN, INT_MAX, VE, "pred" },
+    { "sub",   NULL, 0, AV_OPT_TYPE_CONST, { .i64 = PNG_FILTER_VALUE_SUB },   INT_MIN, INT_MAX, VE, "pred" },
+    { "up",    NULL, 0, AV_OPT_TYPE_CONST, { .i64 = PNG_FILTER_VALUE_UP },    INT_MIN, INT_MAX, VE, "pred" },
+    { "avg",   NULL, 0, AV_OPT_TYPE_CONST, { .i64 = PNG_FILTER_VALUE_AVG },   INT_MIN, INT_MAX, VE, "pred" },
+    { "paeth", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = PNG_FILTER_VALUE_PAETH }, INT_MIN, INT_MAX, VE, "pred" },
+    { "mixed", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = PNG_FILTER_VALUE_MIXED }, INT_MIN, INT_MAX, VE, "pred" },
 
+    { NULL},
+};
+
+static const AVClass png_class = {
+    .class_name = "png",
+    .item_name  = av_default_item_name,
+    .option     = options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
 AVCodec ff_png_encoder = {
     .name           = "png",
     .long_name      = NULL_IF_CONFIG_SMALL("PNG (Portable Network Graphics) image"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_PNG,
     .priv_data_size = sizeof(PNGEncContext),
+    .priv_class     = &png_class,
     .init           = png_enc_init,
-    .close          = png_enc_close,
     .encode2        = encode_frame,
     .pix_fmts       = (const enum AVPixelFormat[]) {
         AV_PIX_FMT_RGB24, AV_PIX_FMT_RGB32, AV_PIX_FMT_PAL8, AV_PIX_FMT_GRAY8,

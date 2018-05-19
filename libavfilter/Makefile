@@ -1,7 +1,7 @@
 NAME = avfilter
+DESC = Libav video filtering library
 
 HEADERS = avfilter.h                                                    \
-          avfiltergraph.h                                               \
           buffersink.h                                                  \
           buffersrc.h                                                   \
           version.h                                                     \
@@ -10,7 +10,6 @@ OBJS = allfilters.o                                                     \
        audio.o                                                          \
        avfilter.o                                                       \
        avfiltergraph.o                                                  \
-       buffer.o                                                         \
        buffersink.o                                                     \
        buffersrc.o                                                      \
        drawutils.o                                                      \
@@ -19,6 +18,12 @@ OBJS = allfilters.o                                                     \
        graphparser.o                                                    \
        video.o                                                          \
 
+OBJS-$(HAVE_THREADS)                         += pthread.o
+
+# subsystems
+OBJS-$(CONFIG_QSVVPP)                        += qsvvpp.o
+
+# audio filters
 OBJS-$(CONFIG_AFORMAT_FILTER)                += af_aformat.o
 OBJS-$(CONFIG_AMIX_FILTER)                   += af_amix.o
 OBJS-$(CONFIG_ANULL_FILTER)                  += af_anull.o
@@ -32,19 +37,22 @@ OBJS-$(CONFIG_BS2B_FILTER)                   += af_bs2b.o
 OBJS-$(CONFIG_CHANNELMAP_FILTER)             += af_channelmap.o
 OBJS-$(CONFIG_CHANNELSPLIT_FILTER)           += af_channelsplit.o
 OBJS-$(CONFIG_COMPAND_FILTER)                += af_compand.o
+OBJS-$(CONFIG_HDCD_FILTER)                   += af_hdcd.o
 OBJS-$(CONFIG_JOIN_FILTER)                   += af_join.o
 OBJS-$(CONFIG_RESAMPLE_FILTER)               += af_resample.o
 OBJS-$(CONFIG_VOLUME_FILTER)                 += af_volume.o
 
+OBJS-$(CONFIG_ANULLSINK_FILTER)              += asink_anullsink.o
 OBJS-$(CONFIG_ANULLSRC_FILTER)               += asrc_anullsrc.o
 
-OBJS-$(CONFIG_ANULLSINK_FILTER)              += asink_anullsink.o
-
+# video filters
 OBJS-$(CONFIG_BLACKFRAME_FILTER)             += vf_blackframe.o
 OBJS-$(CONFIG_BOXBLUR_FILTER)                += vf_boxblur.o
 OBJS-$(CONFIG_COPY_FILTER)                   += vf_copy.o
 OBJS-$(CONFIG_CROP_FILTER)                   += vf_crop.o
 OBJS-$(CONFIG_CROPDETECT_FILTER)             += vf_cropdetect.o
+OBJS-$(CONFIG_DEINTERLACE_QSV_FILTER)        += vf_deinterlace_qsv.o
+OBJS-$(CONFIG_DEINTERLACE_VAAPI_FILTER)      += vf_deinterlace_vaapi.o
 OBJS-$(CONFIG_DELOGO_FILTER)                 += vf_delogo.o
 OBJS-$(CONFIG_DRAWBOX_FILTER)                += vf_drawbox.o
 OBJS-$(CONFIG_DRAWTEXT_FILTER)               += vf_drawtext.o
@@ -57,6 +65,10 @@ OBJS-$(CONFIG_FREI0R_FILTER)                 += vf_frei0r.o
 OBJS-$(CONFIG_GRADFUN_FILTER)                += vf_gradfun.o
 OBJS-$(CONFIG_HFLIP_FILTER)                  += vf_hflip.o
 OBJS-$(CONFIG_HQDN3D_FILTER)                 += vf_hqdn3d.o
+OBJS-$(CONFIG_HWDOWNLOAD_FILTER)             += vf_hwdownload.o
+OBJS-$(CONFIG_HWMAP_FILTER)                  += vf_hwmap.o
+OBJS-$(CONFIG_HWUPLOAD_CUDA_FILTER)          += vf_hwupload_cuda.o
+OBJS-$(CONFIG_HWUPLOAD_FILTER)               += vf_hwupload.o
 OBJS-$(CONFIG_INTERLACE_FILTER)              += vf_interlace.o
 OBJS-$(CONFIG_LUT_FILTER)                    += vf_lut.o
 OBJS-$(CONFIG_LUTRGB_FILTER)                 += vf_lut.o
@@ -66,9 +78,13 @@ OBJS-$(CONFIG_NOFORMAT_FILTER)               += vf_format.o
 OBJS-$(CONFIG_NULL_FILTER)                   += vf_null.o
 OBJS-$(CONFIG_OCV_FILTER)                    += vf_libopencv.o
 OBJS-$(CONFIG_OVERLAY_FILTER)                += vf_overlay.o
+OBJS-$(CONFIG_OVERLAY_QSV_FILTER)            += vf_overlay_qsv.o
 OBJS-$(CONFIG_PAD_FILTER)                    += vf_pad.o
 OBJS-$(CONFIG_PIXDESCTEST_FILTER)            += vf_pixdesctest.o
 OBJS-$(CONFIG_SCALE_FILTER)                  += vf_scale.o
+OBJS-$(CONFIG_SCALE_NPP_FILTER)              += vf_scale_npp.o
+OBJS-$(CONFIG_SCALE_QSV_FILTER)              += vf_scale_qsv.o
+OBJS-$(CONFIG_SCALE_VAAPI_FILTER)            += vf_scale_vaapi.o
 OBJS-$(CONFIG_SELECT_FILTER)                 += vf_select.o
 OBJS-$(CONFIG_SETDAR_FILTER)                 += vf_aspect.o
 OBJS-$(CONFIG_SETPTS_FILTER)                 += setpts.o
@@ -81,7 +97,10 @@ OBJS-$(CONFIG_TRANSPOSE_FILTER)              += vf_transpose.o
 OBJS-$(CONFIG_TRIM_FILTER)                   += trim.o
 OBJS-$(CONFIG_UNSHARP_FILTER)                += vf_unsharp.o
 OBJS-$(CONFIG_VFLIP_FILTER)                  += vf_vflip.o
+OBJS-$(CONFIG_VPP_QSV_FILTER)                += vf_vpp_qsv.o
 OBJS-$(CONFIG_YADIF_FILTER)                  += vf_yadif.o
+
+OBJS-$(CONFIG_NULLSINK_FILTER)               += vsink_nullsink.o
 
 OBJS-$(CONFIG_COLOR_FILTER)                  += vsrc_color.o
 OBJS-$(CONFIG_FREI0R_SRC_FILTER)             += vf_frei0r.o
@@ -90,9 +109,7 @@ OBJS-$(CONFIG_NULLSRC_FILTER)                += vsrc_nullsrc.o
 OBJS-$(CONFIG_RGBTESTSRC_FILTER)             += vsrc_testsrc.o
 OBJS-$(CONFIG_TESTSRC_FILTER)                += vsrc_testsrc.o
 
-OBJS-$(CONFIG_NULLSINK_FILTER)               += vsink_nullsink.o
-
-OBJS-$(HAVE_THREADS)                         += pthread.o
+SKIPHEADERS-$(CONFIG_QSVVPP)                 += qsvvpp.h
 
 TOOLS     = graph2dot
 TESTPROGS = filtfmts

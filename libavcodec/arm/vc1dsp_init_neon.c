@@ -22,17 +22,15 @@
 #include "libavcodec/vc1dsp.h"
 #include "vc1dsp.h"
 
-#include "config.h"
-
 void ff_vc1_inv_trans_8x8_neon(int16_t *block);
-void ff_vc1_inv_trans_4x8_neon(uint8_t *dest, int linesize, int16_t *block);
-void ff_vc1_inv_trans_8x4_neon(uint8_t *dest, int linesize, int16_t *block);
-void ff_vc1_inv_trans_4x4_neon(uint8_t *dest, int linesize, int16_t *block);
+void ff_vc1_inv_trans_4x8_neon(uint8_t *dest, ptrdiff_t stride, int16_t *block);
+void ff_vc1_inv_trans_8x4_neon(uint8_t *dest, ptrdiff_t stride, int16_t *block);
+void ff_vc1_inv_trans_4x4_neon(uint8_t *dest, ptrdiff_t stride, int16_t *block);
 
-void ff_vc1_inv_trans_8x8_dc_neon(uint8_t *dest, int linesize, int16_t *block);
-void ff_vc1_inv_trans_4x8_dc_neon(uint8_t *dest, int linesize, int16_t *block);
-void ff_vc1_inv_trans_8x4_dc_neon(uint8_t *dest, int linesize, int16_t *block);
-void ff_vc1_inv_trans_4x4_dc_neon(uint8_t *dest, int linesize, int16_t *block);
+void ff_vc1_inv_trans_8x8_dc_neon(uint8_t *dest, ptrdiff_t stride, int16_t *block);
+void ff_vc1_inv_trans_4x8_dc_neon(uint8_t *dest, ptrdiff_t stride, int16_t *block);
+void ff_vc1_inv_trans_8x4_dc_neon(uint8_t *dest, ptrdiff_t stride, int16_t *block);
+void ff_vc1_inv_trans_4x4_dc_neon(uint8_t *dest, ptrdiff_t stride, int16_t *block);
 
 void ff_put_pixels8x8_neon(uint8_t *block, const uint8_t *pixels,
                            ptrdiff_t line_size, int rnd);
@@ -72,14 +70,14 @@ void ff_put_vc1_mspel_mc32_neon(uint8_t *dst, const uint8_t *src,
 void ff_put_vc1_mspel_mc33_neon(uint8_t *dst, const uint8_t *src,
                                 ptrdiff_t stride, int rnd);
 
-void ff_put_vc1_chroma_mc8_neon(uint8_t *dst, uint8_t *src, int stride, int h,
-                                int x, int y);
-void ff_avg_vc1_chroma_mc8_neon(uint8_t *dst, uint8_t *src, int stride, int h,
-                                int x, int y);
-void ff_put_vc1_chroma_mc4_neon(uint8_t *dst, uint8_t *src, int stride, int h,
-                                int x, int y);
-void ff_avg_vc1_chroma_mc4_neon(uint8_t *dst, uint8_t *src, int stride, int h,
-                                int x, int y);
+void ff_put_vc1_chroma_mc8_neon(uint8_t *dst, uint8_t *src, ptrdiff_t stride,
+                                int h, int x, int y);
+void ff_avg_vc1_chroma_mc8_neon(uint8_t *dst, uint8_t *src, ptrdiff_t stride,
+                                int h, int x, int y);
+void ff_put_vc1_chroma_mc4_neon(uint8_t *dst, uint8_t *src, ptrdiff_t stride,
+                                int h, int x, int y);
+void ff_avg_vc1_chroma_mc4_neon(uint8_t *dst, uint8_t *src, ptrdiff_t stride,
+                                int h, int x, int y);
 
 av_cold void ff_vc1dsp_init_neon(VC1DSPContext *dsp)
 {
@@ -93,7 +91,6 @@ av_cold void ff_vc1dsp_init_neon(VC1DSPContext *dsp)
     dsp->vc1_inv_trans_4x4_dc = ff_vc1_inv_trans_4x4_dc_neon;
 
     dsp->put_vc1_mspel_pixels_tab[ 0] = ff_put_pixels8x8_neon;
-    if (HAVE_AS_DN_DIRECTIVE) {
     dsp->put_vc1_mspel_pixels_tab[ 1] = ff_put_vc1_mspel_mc10_neon;
     dsp->put_vc1_mspel_pixels_tab[ 2] = ff_put_vc1_mspel_mc20_neon;
     dsp->put_vc1_mspel_pixels_tab[ 3] = ff_put_vc1_mspel_mc30_neon;
@@ -109,7 +106,6 @@ av_cold void ff_vc1dsp_init_neon(VC1DSPContext *dsp)
     dsp->put_vc1_mspel_pixels_tab[13] = ff_put_vc1_mspel_mc13_neon;
     dsp->put_vc1_mspel_pixels_tab[14] = ff_put_vc1_mspel_mc23_neon;
     dsp->put_vc1_mspel_pixels_tab[15] = ff_put_vc1_mspel_mc33_neon;
-    }
 
     dsp->put_no_rnd_vc1_chroma_pixels_tab[0] = ff_put_vc1_chroma_mc8_neon;
     dsp->avg_no_rnd_vc1_chroma_pixels_tab[0] = ff_avg_vc1_chroma_mc8_neon;

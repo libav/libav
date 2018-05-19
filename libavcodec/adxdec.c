@@ -20,9 +20,10 @@
  */
 
 #include "libavutil/intreadwrite.h"
+
 #include "avcodec.h"
 #include "adx.h"
-#include "get_bits.h"
+#include "bitstream.h"
 #include "internal.h"
 
 /**
@@ -66,7 +67,7 @@ static int adx_decode(ADXContext *c, int16_t *out, int offset,
                       const uint8_t *in, int ch)
 {
     ADXChannelState *prev = &c->prev[ch];
-    GetBitContext gb;
+    BitstreamContext bc;
     int scale = AV_RB16(in);
     int i;
     int s0, s1, s2, d;
@@ -75,12 +76,12 @@ static int adx_decode(ADXContext *c, int16_t *out, int offset,
     if (scale & 0x8000)
         return -1;
 
-    init_get_bits(&gb, in + 2, (BLOCK_SIZE - 2) * 8);
+    bitstream_init8(&bc, in + 2, BLOCK_SIZE - 2);
     out += offset;
     s1 = prev->s1;
     s2 = prev->s2;
     for (i = 0; i < BLOCK_SAMPLES; i++) {
-        d  = get_sbits(&gb, 4);
+        d  = bitstream_read_signed(&bc, 4);
         s0 = ((d << COEFF_BITS) * scale + c->coeff[0] * s1 + c->coeff[1] * s2) >> COEFF_BITS;
         s2 = s1;
         s1 = av_clip_int16(s0);
@@ -182,7 +183,7 @@ AVCodec ff_adpcm_adx_decoder = {
     .init           = adx_decode_init,
     .decode         = adx_decode_frame,
     .flush          = adx_decode_flush,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
     .sample_fmts    = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_S16P,
                                                       AV_SAMPLE_FMT_NONE },
 };

@@ -34,6 +34,7 @@ extern const uint8_t  ff_reverse[256];
 extern const uint8_t ff_sqrt_tab[256];
 extern const uint8_t ff_crop_tab[256 + 2 * MAX_NEG_CROP];
 extern const uint8_t ff_zigzag_direct[64];
+extern const uint8_t ff_zigzag_scan[16];
 
 #if   ARCH_ARM
 #   include "arm/mathops.h"
@@ -98,15 +99,6 @@ static av_always_inline unsigned UMULH(unsigned a, unsigned b){
 #define mid_pred mid_pred
 static inline av_const int mid_pred(int a, int b, int c)
 {
-#if 0
-    int t= (a-b)&((a-b)>>31);
-    a-=t;
-    b+=t;
-    b-= (b-c)&((b-c)>>31);
-    b+= (a-b)&((a-b)>>31);
-
-    return b;
-#else
     if(a>b){
         if(c>b){
             if(c>a) b=a;
@@ -119,7 +111,6 @@ static inline av_const int mid_pred(int a, int b, int c)
         }
     }
     return b;
-#endif
 }
 #endif
 

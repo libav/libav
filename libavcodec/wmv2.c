@@ -25,13 +25,14 @@
 #include "msmpeg4data.h"
 #include "simple_idct.h"
 #include "wmv2.h"
+#include "wmv2data.h"
 
 
 av_cold void ff_wmv2_common_init(Wmv2Context *w)
 {
     MpegEncContext *const s = &w->s;
 
-    ff_blockdsp_init(&s->bdsp, s->avctx);
+    ff_blockdsp_init(&s->bdsp);
     ff_wmv2dsp_init(&w->wdsp);
     s->idsp.perm_type = w->wdsp.idct_perm;
     ff_init_scantable_permutation(s->idsp.idct_permutation,
@@ -89,7 +90,7 @@ void ff_wmv2_add_mb(MpegEncContext *s, int16_t block1[6][64],
     wmv2_add_block(w, block1[2], dest_y + 8 * s->linesize,     s->linesize, 2);
     wmv2_add_block(w, block1[3], dest_y + 8 + 8 * s->linesize, s->linesize, 3);
 
-    if (s->avctx->flags & CODEC_FLAG_GRAY)
+    if (s->avctx->flags & AV_CODEC_FLAG_GRAY)
         return;
 
     wmv2_add_block(w, block1[4], dest_cb, s->uvlinesize, 4);
@@ -141,7 +142,7 @@ void ff_mspel_motion(MpegEncContext *s, uint8_t *dest_y,
     w->wdsp.put_mspel_pixels_tab[dxy](dest_y     + 8 * linesize, ptr     + 8 * linesize, linesize);
     w->wdsp.put_mspel_pixels_tab[dxy](dest_y + 8 + 8 * linesize, ptr + 8 + 8 * linesize, linesize);
 
-    if (s->avctx->flags & CODEC_FLAG_GRAY)
+    if (s->avctx->flags & AV_CODEC_FLAG_GRAY)
         return;
 
     if (s->out_format == FMT_H263) {

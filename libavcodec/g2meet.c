@@ -31,14 +31,15 @@
 #include "libavutil/intreadwrite.h"
 
 #include "avcodec.h"
+#include "bitstream.h"
 #include "blockdsp.h"
 #include "bytestream.h"
 #include "elsdec.h"
-#include "get_bits.h"
 #include "idctdsp.h"
 #include "internal.h"
 #include "jpegtables.h"
 #include "mjpeg.h"
+#include "vlc.h"
 
 #define EPIC_PIX_STACK_SIZE 1024
 #define EPIC_PIX_STACK_MAX  (EPIC_PIX_STACK_SIZE - 1)
@@ -199,7 +200,7 @@ static av_cold int jpg_init(AVCodecContext *avctx, JPGContext *c)
     if (ret)
         return ret;
 
-    ff_blockdsp_init(&c->bdsp, avctx);
+    ff_blockdsp_init(&c->bdsp);
     ff_idctdsp_init(&c->idsp, avctx);
     ff_init_scantable(c->idsp.idct_permutation, &c->scantable,
                       ff_zigzag_direct);
@@ -236,7 +237,7 @@ static void jpg_unescape(const uint8_t *src, int src_size,
     *dst_size = dst - dst_start;
 }
 
-static int jpg_decode_block(JPGContext *c, GetBitContext *gb,
+static int jpg_decode_block(JPGContext *c, BitstreamContext *bc,
                             int plane, int16_t *block)
 {
     int dc, val, pos;
@@ -244,18 +245,18 @@ static int jpg_decode_block(JPGContext *c, GetBitContext *gb,
     const uint8_t *qmat = is_chroma ? chroma_quant : luma_quant;
 
     c->bdsp.clear_block(block);
-    dc = get_vlc2(gb, c->dc_vlc[is_chroma].table, 9, 3);
+    dc = bitstream_read_vlc(bc, c->dc_vlc[is_chroma].table, 9, 3);
     if (dc < 0)
         return AVERROR_INVALIDDATA;
     if (dc)
-        dc = get_xbits(gb, dc);
+        dc = bitstream_read_xbits(bc, dc);
     dc                = dc * qmat[0] + c->prev_dc[plane];
     block[0]          = dc;
     c->prev_dc[plane] = dc;
 
     pos = 0;
     while (pos < 63) {
-        val = get_vlc2(gb, c->ac_vlc[is_chroma].table, 9, 3);
+        val = bitstream_read_vlc(bc, c->ac_vlc[is_chroma].table, 9, 3);
         if (val < 0)
             return AVERROR_INVALIDDATA;
         pos += val >> 4;
@@ -265,7 +266,7 @@ static int jpg_decode_block(JPGContext *c, GetBitContext *gb,
         if (val) {
             int nbits = val;
 
-            val                                 = get_xbits(gb, nbits);
+            val                                 = bitstream_read_xbits(bc, nbits);
             val                                *= qmat[ff_zigzag_direct[pos]];
             block[c->scantable.permutated[pos]] = val;
         }
@@ -286,7 +287,7 @@ static int jpg_decode_data(JPGContext *c, int width, int height,
                            const uint8_t *mask, int mask_stride, int num_mbs,
                            int swapuv)
 {
-    GetBitContext gb;
+    BitstreamContext bc;
     int mb_w, mb_h, mb_x, mb_y, i, j;
     int bx, by;
     int unesc_size;
@@ -294,11 +295,11 @@ static int jpg_decode_data(JPGContext *c, int width, int height,
     const int ridx = swapuv ? 2 : 0;
 
     if ((ret = av_reallocp(&c->buf,
-                           src_size + FF_INPUT_BUFFER_PADDING_SIZE)) < 0)
+                           src_size + AV_INPUT_BUFFER_PADDING_SIZE)) < 0)
         return ret;
     jpg_unescape(src, src_size, c->buf, &unesc_size);
-    memset(c->buf + unesc_size, 0, FF_INPUT_BUFFER_PADDING_SIZE);
-    init_get_bits(&gb, c->buf, unesc_size * 8);
+    memset(c->buf + unesc_size, 0, AV_INPUT_BUFFER_PADDING_SIZE);
+    bitstream_init8(&bc, c->buf, unesc_size);
 
     width = FFALIGN(width, 16);
     mb_w  =  width        >> 4;
@@ -325,14 +326,14 @@ static int jpg_decode_data(JPGContext *c, int width, int height,
                     if (mask && !mask[mb_x * 2 + i + j * mask_stride])
                         continue;
                     num_mbs--;
-                    if ((ret = jpg_decode_block(c, &gb, 0,
+                    if ((ret = jpg_decode_block(c, &bc, 0,
                                                 c->block[i + j * 2])) != 0)
                         return ret;
                     c->idsp.idct(c->block[i + j * 2]);
                 }
             }
             for (i = 1; i < 3; i++) {
-                if ((ret = jpg_decode_block(c, &gb, i, c->block[i + 3])) != 0)
+                if ((ret = jpg_decode_block(c, &bc, i, c->block[i + 3])) != 0)
                     return ret;
                 c->idsp.idct(c->block[i + 3]);
             }
@@ -1011,11 +1012,11 @@ static void kempf_restore_buf(const uint8_t *src, int len,
                               int width, int height,
                               const uint8_t *pal, int npal, int tidx)
 {
-    GetBitContext gb;
+    BitstreamContext bc;
     int i, j, nb, col;
     int align_width = FFALIGN(width, 16);
 
-    init_get_bits(&gb, src, len * 8);
+    bitstream_init8(&bc, src, len);
 
     if (npal <= 2)       nb = 1;
     else if (npal <= 4)  nb = 2;
@@ -1023,16 +1024,16 @@ static void kempf_restore_buf(const uint8_t *src, int len,
     else                 nb = 8;
 
     for (j = 0; j < height; j++, dst += stride, jpeg_tile += tile_stride) {
-        if (get_bits(&gb, 8))
+        if (bitstream_read(&bc, 8))
             continue;
         for (i = 0; i < width; i++) {
-            col = get_bits(&gb, nb);
+            col = bitstream_read(&bc, nb);
             if (col != tidx)
                 memcpy(dst + i * 3, pal + col * 3, 3);
             else
                 memcpy(dst + i * 3, jpeg_tile + i * 3, 3);
         }
-        skip_bits_long(&gb, nb * (align_width - width));
+        bitstream_skip(&bc, nb * (align_width - width));
     }
 }
 
@@ -1170,7 +1171,7 @@ static int g2m_init_buffers(G2MContext *c)
         c->synth_tile  = av_mallocz(c->tile_stride      * aligned_height);
         c->jpeg_tile   = av_mallocz(c->tile_stride      * aligned_height);
         c->kempf_buf   = av_mallocz((c->tile_width + 1) * aligned_height +
-                                    FF_INPUT_BUFFER_PADDING_SIZE);
+                                    AV_INPUT_BUFFER_PADDING_SIZE);
         c->kempf_flags = av_mallocz(c->tile_width       * aligned_height);
         if (!c->synth_tile || !c->jpeg_tile ||
             !c->kempf_buf || !c->kempf_flags)
@@ -1410,8 +1411,7 @@ static int g2m_decode_frame(AVCodecContext *avctx, void *data,
             }
             c->width  = bytestream2_get_be32(&bc);
             c->height = bytestream2_get_be32(&bc);
-            if (c->width  < 16 || c->width  > c->orig_width ||
-                c->height < 16 || c->height > c->orig_height) {
+            if (c->width < 16 || c->height < 16) {
                 av_log(avctx, AV_LOG_ERROR,
                        "Invalid frame dimensions %dx%d\n",
                        c->width, c->height);
@@ -1425,9 +1425,8 @@ static int g2m_decode_frame(AVCodecContext *avctx, void *data,
             }
             c->compression = bytestream2_get_be32(&bc);
             if (c->compression != 2 && c->compression != 3) {
-                av_log(avctx, AV_LOG_ERROR,
-                       "Unknown compression method %d\n",
-                       c->compression);
+                avpriv_report_missing_feature(avctx, "Compression method %d",
+                                              c->compression);
                 return AVERROR_PATCHWELCOME;
             }
             c->tile_width  = bytestream2_get_be32(&bc);
@@ -1454,9 +1453,9 @@ static int g2m_decode_frame(AVCodecContext *avctx, void *data,
                 g_mask = bytestream2_get_be32(&bc);
                 b_mask = bytestream2_get_be32(&bc);
                 if (r_mask != 0xFF0000 || g_mask != 0xFF00 || b_mask != 0xFF) {
-                    av_log(avctx, AV_LOG_ERROR,
-                           "Invalid or unsupported bitmasks: R=%"PRIX32", G=%"PRIX32", B=%"PRIX32"\n",
-                           r_mask, g_mask, b_mask);
+                    avpriv_report_missing_feature(avctx,
+                                                  "Bitmasks: R=%"PRIX32", G=%"PRIX32", B=%"PRIX32,
+                                                  r_mask, g_mask, b_mask);
                     return AVERROR_PATCHWELCOME;
                 }
             } else {
@@ -1612,6 +1611,6 @@ AVCodec ff_g2m_decoder = {
     .init           = g2m_decode_init,
     .close          = g2m_decode_end,
     .decode         = g2m_decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
     .caps_internal  = FF_CODEC_CAP_INIT_THREADSAFE,
 };

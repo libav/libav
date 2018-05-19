@@ -93,13 +93,9 @@ static int process_callback(jack_nframes_t nframes, void *arg)
 
     /* Copy and interleave audio data from the JACK buffer into the packet */
     for (i = 0; i < self->nports; i++) {
-    #if HAVE_JACK_PORT_GET_LATENCY_RANGE
         jack_latency_range_t range;
         jack_port_get_latency_range(self->ports[i], JackCaptureLatency, &range);
         latency += range.max;
-    #else
-        latency += jack_port_get_total_latency(self->client, self->ports[i]);
-    #endif
         buffer = jack_port_get_buffer(self->ports[i], self->buffer_size);
         for (j = 0; j < self->buffer_size; j++)
             pkt_data[j * self->nports + i] = buffer[j];
@@ -220,7 +216,7 @@ static void free_pkt_fifo(AVFifoBuffer *fifo)
     AVPacket pkt;
     while (av_fifo_size(fifo)) {
         av_fifo_generic_read(fifo, &pkt, sizeof(pkt), NULL);
-        av_free_packet(&pkt);
+        av_packet_unref(&pkt);
     }
     av_fifo_free(fifo);
 }
@@ -254,14 +250,14 @@ static int audio_read_header(AVFormatContext *context)
         return AVERROR(ENOMEM);
     }
 
-    stream->codec->codec_type   = AVMEDIA_TYPE_AUDIO;
+    stream->codecpar->codec_type   = AVMEDIA_TYPE_AUDIO;
 #if HAVE_BIGENDIAN
-    stream->codec->codec_id     = AV_CODEC_ID_PCM_F32BE;
+    stream->codecpar->codec_id     = AV_CODEC_ID_PCM_F32BE;
 #else
-    stream->codec->codec_id     = AV_CODEC_ID_PCM_F32LE;
+    stream->codecpar->codec_id     = AV_CODEC_ID_PCM_F32LE;
 #endif
-    stream->codec->sample_rate  = self->sample_rate;
-    stream->codec->channels     = self->nports;
+    stream->codecpar->sample_rate  = self->sample_rate;
+    stream->codecpar->channels     = self->nports;
 
     avpriv_set_pts_info(stream, 64, 1, 1000000);  /* 64 bits pts in us */
     return 0;

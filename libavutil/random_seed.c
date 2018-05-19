@@ -23,9 +23,9 @@
 #if HAVE_UNISTD_H
 #include <unistd.h>
 #endif
-#if HAVE_CRYPTGENRANDOM
+#if HAVE_BCRYPT
 #include <windows.h>
-#include <wincrypt.h>
+#include <bcrypt.h>
 #endif
 #include <fcntl.h>
 #include <math.h>
@@ -79,7 +79,7 @@ static uint32_t get_generic_seed(void)
     if (!sha) {
         uint32_t seed = 0;
         int j;
-        // Unable to allocate an sha context, just xor the buffer together
+        // Unable to allocate an SHA context, just XOR the buffer together
         // to create something hopefully unique.
         for (j = 0; j < 512; j++)
             seed ^= buffer[j];
@@ -96,13 +96,14 @@ uint32_t av_get_random_seed(void)
 {
     uint32_t seed;
 
-#if HAVE_CRYPTGENRANDOM
-    HCRYPTPROV provider;
-    if (CryptAcquireContext(&provider, NULL, NULL, PROV_RSA_FULL,
-                            CRYPT_VERIFYCONTEXT | CRYPT_SILENT)) {
-        BOOL ret = CryptGenRandom(provider, sizeof(seed), (PBYTE) &seed);
-        CryptReleaseContext(provider, 0);
-        if (ret)
+#if HAVE_BCRYPT
+    BCRYPT_ALG_HANDLE algo_handle;
+    NTSTATUS ret = BCryptOpenAlgorithmProvider(&algo_handle, BCRYPT_RNG_ALGORITHM,
+                                               MS_PRIMITIVE_PROVIDER, 0);
+    if (BCRYPT_SUCCESS(ret)) {
+        NTSTATUS ret = BCryptGenRandom(algo_handle, (UCHAR*)&seed, sizeof(seed), 0);
+        BCryptCloseAlgorithmProvider(algo_handle, 0);
+        if (BCRYPT_SUCCESS(ret))
             return seed;
     }
 #endif

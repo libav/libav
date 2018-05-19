@@ -39,8 +39,8 @@
 #include "libavutil/opt.h"
 
 #include "avcodec.h"
+#include "bitstream.h"
 #include "bytestream.h"
-#include "get_bits.h"
 #include "internal.h"
 #include "mathops.h"
 #include "thread.h"
@@ -159,13 +159,13 @@ static union av_intfloat32 exr_half2float(uint16_t hf)
                 mantissa <<= 1;
                 exp -= (1 << 23);
             }
-            // clamp the mantissa to 10-bits
+            // clamp the mantissa to 10 bits
             mantissa &= ((1 << 10) - 1);
-            // shift left to generate single-precision mantissa of 23-bits
+            // shift left to generate single-precision mantissa of 23 bits
             mantissa <<= 13;
         }
     } else {
-        // shift left to generate single-precision mantissa of 23-bits
+        // shift left to generate single-precision mantissa of 23 bits
         mantissa <<= 13;
         // generate single precision biased exponent value
         exp = (exp << 13) + HALF_FLOAT_MIN_BIASED_EXP_AS_SINGLE_FP_EXP;
@@ -379,16 +379,16 @@ static void huf_canonical_code_table(uint64_t *hcode)
 static int huf_unpack_enc_table(GetByteContext *gb,
                                 int32_t im, int32_t iM, uint64_t *hcode)
 {
-    GetBitContext gbit;
-    int ret = init_get_bits8(&gbit, gb->buffer, bytestream2_get_bytes_left(gb));
+    BitstreamContext bc;
+    int ret = bitstream_init8(&bc, gb->buffer, bytestream2_get_bytes_left(gb));
     if (ret < 0)
         return ret;
 
     for (; im <= iM; im++) {
-        uint64_t l = hcode[im] = get_bits(&gbit, 6);
+        uint64_t l = hcode[im] = bitstream_read(&bc, 6);
 
         if (l == LONG_ZEROCODE_RUN) {
-            int zerun = get_bits(&gbit, 8) + SHORTEST_LONG_RUN;
+            int zerun = bitstream_read(&bc, 8) + SHORTEST_LONG_RUN;
 
             if (im + zerun > iM + 1)
                 return AVERROR_INVALIDDATA;
@@ -410,7 +410,7 @@ static int huf_unpack_enc_table(GetByteContext *gb,
         }
     }
 
-    bytestream2_skip(gb, (get_bits_count(&gbit) + 7) / 8);
+    bytestream2_skip(gb, (bitstream_tell(&bc) + 7) / 8);
     huf_canonical_code_table(hcode);
 
     return 0;
@@ -459,7 +459,7 @@ static int huf_build_dec_table(const uint64_t *hcode, int im,
         lc += 8;                                                              \
 }
 
-#define get_code(po, rlc, c, lc, gb, out, oe)                                 \
+#define get_code(po, rlc, c, lc, gb, out, oe, outb)                           \
 {                                                                             \
         if (po == rlc) {                                                      \
             if (lc < 8)                                                       \
@@ -468,7 +468,7 @@ static int huf_build_dec_table(const uint64_t *hcode, int im,
                                                                               \
             cs = c >> lc;                                                     \
                                                                               \
-            if (out + cs > oe)                                                \
+            if (out + cs > oe || out == outb)                                 \
                 return AVERROR_INVALIDDATA;                                   \
                                                                               \
             s = out[-1];                                                      \
@@ -501,7 +501,7 @@ static int huf_decode(const uint64_t *hcode, const HufDec *hdecod,
 
             if (pl.len) {
                 lc -= pl.len;
-                get_code(pl.lit, rlc, c, lc, gb, out, oe);
+                get_code(pl.lit, rlc, c, lc, gb, out, oe, outb);
             } else {
                 int j;
 
@@ -518,7 +518,7 @@ static int huf_decode(const uint64_t *hcode, const HufDec *hdecod,
                         if ((hcode[pl.p[j]] >> 6) ==
                             ((c >> (lc - l)) & ((1LL << l) - 1))) {
                             lc -= l;
-                            get_code(pl.p[j], rlc, c, lc, gb, out, oe);
+                            get_code(pl.p[j], rlc, c, lc, gb, out, oe, outb);
                             break;
                         }
                     }
@@ -539,7 +539,7 @@ static int huf_decode(const uint64_t *hcode, const HufDec *hdecod,
 
         if (pl.len) {
             lc -= pl.len;
-            get_code(pl.lit, rlc, c, lc, gb, out, oe);
+            get_code(pl.lit, rlc, c, lc, gb, out, oe, outb);
         } else {
             return AVERROR_INVALIDDATA;
         }
@@ -1092,8 +1092,7 @@ static int decode_header(EXRContext *s)
 
                 current_pixel_type = bytestream2_get_le32(&ch_gb);
                 if (current_pixel_type >= EXR_UNKNOWN) {
-                    avpriv_report_missing_feature(s->avctx,
-                                                  "Pixel type %d.\n",
+                    avpriv_report_missing_feature(s->avctx, "Pixel type %d",
                                                   current_pixel_type);
                     return AVERROR_PATCHWELCOME;
                 }
@@ -1382,7 +1381,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
         }
     }
 
-    // allocate thread data, used for non EXR_RAW compreesion types
+    // allocate thread data, used for non EXR_RAW compression types
     s->thread_data = av_mallocz_array(avctx->thread_count, sizeof(EXRThreadData));
     if (!s->thread_data)
         return AVERROR_INVALIDDATA;
@@ -1393,7 +1392,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
 static int decode_init_thread_copy(AVCodecContext *avctx)
 {    EXRContext *s = avctx->priv_data;
 
-    // allocate thread data, used for non EXR_RAW compreesion types
+    // allocate thread data, used for non EXR_RAW compression types
     s->thread_data = av_mallocz_array(avctx->thread_count, sizeof(EXRThreadData));
     if (!s->thread_data)
         return AVERROR_INVALIDDATA;
@@ -1446,7 +1445,7 @@ AVCodec ff_exr_decoder = {
     .init_thread_copy = ONLY_IF_THREADS_ENABLED(decode_init_thread_copy),
     .close            = decode_end,
     .decode           = decode_frame,
-    .capabilities     = CODEC_CAP_DR1 | CODEC_CAP_FRAME_THREADS |
-                        CODEC_CAP_SLICE_THREADS,
+    .capabilities     = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_FRAME_THREADS |
+                        AV_CODEC_CAP_SLICE_THREADS,
     .priv_class       = &exr_class,
 };

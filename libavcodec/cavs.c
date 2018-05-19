@@ -26,7 +26,7 @@
  */
 
 #include "avcodec.h"
-#include "get_bits.h"
+#include "bitstream.h"
 #include "golomb.h"
 #include "h264chroma.h"
 #include "idctdsp.h"
@@ -104,7 +104,6 @@ static inline int get_bs(cavs_vector *mvP, cavs_vector *mvQ, int b)
  * | 6 | 7 |
  * 1   3   |
  * ---------
- *
  */
 void ff_cavs_filter(AVSContext *h, enum cavs_mb mb_type)
 {
@@ -247,7 +246,7 @@ void ff_cavs_load_intra_pred_chroma(AVSContext *h)
     }
 }
 
-static void intra_pred_vert(uint8_t *d, uint8_t *top, uint8_t *left, int stride)
+static void intra_pred_vert(uint8_t *d, uint8_t *top, uint8_t *left, ptrdiff_t stride)
 {
     int y;
     uint64_t a = AV_RN64(&top[1]);
@@ -255,7 +254,7 @@ static void intra_pred_vert(uint8_t *d, uint8_t *top, uint8_t *left, int stride)
         *((uint64_t *)(d + y * stride)) = a;
 }
 
-static void intra_pred_horiz(uint8_t *d, uint8_t *top, uint8_t *left, int stride)
+static void intra_pred_horiz(uint8_t *d, uint8_t *top, uint8_t *left, ptrdiff_t stride)
 {
     int y;
     uint64_t a;
@@ -265,7 +264,7 @@ static void intra_pred_horiz(uint8_t *d, uint8_t *top, uint8_t *left, int stride
     }
 }
 
-static void intra_pred_dc_128(uint8_t *d, uint8_t *top, uint8_t *left, int stride)
+static void intra_pred_dc_128(uint8_t *d, uint8_t *top, uint8_t *left, ptrdiff_t stride)
 {
     int y;
     uint64_t a = 0x8080808080808080ULL;
@@ -273,7 +272,7 @@ static void intra_pred_dc_128(uint8_t *d, uint8_t *top, uint8_t *left, int strid
         *((uint64_t *)(d + y * stride)) = a;
 }
 
-static void intra_pred_plane(uint8_t *d, uint8_t *top, uint8_t *left, int stride)
+static void intra_pred_plane(uint8_t *d, uint8_t *top, uint8_t *left, ptrdiff_t stride)
 {
     int x, y, ia;
     int ih = 0;
@@ -295,7 +294,7 @@ static void intra_pred_plane(uint8_t *d, uint8_t *top, uint8_t *left, int stride
 #define LOWPASS(ARRAY, INDEX)                                           \
     ((ARRAY[(INDEX) - 1] + 2 * ARRAY[(INDEX)] + ARRAY[(INDEX) + 1] + 2) >> 2)
 
-static void intra_pred_lp(uint8_t *d, uint8_t *top, uint8_t *left, int stride)
+static void intra_pred_lp(uint8_t *d, uint8_t *top, uint8_t *left, ptrdiff_t stride)
 {
     int x, y;
     for (y = 0; y < 8; y++)
@@ -303,7 +302,7 @@ static void intra_pred_lp(uint8_t *d, uint8_t *top, uint8_t *left, int stride)
             d[y * stride + x] = (LOWPASS(top, x + 1) + LOWPASS(left, y + 1)) >> 1;
 }
 
-static void intra_pred_down_left(uint8_t *d, uint8_t *top, uint8_t *left, int stride)
+static void intra_pred_down_left(uint8_t *d, uint8_t *top, uint8_t *left, ptrdiff_t stride)
 {
     int x, y;
     for (y = 0; y < 8; y++)
@@ -311,7 +310,7 @@ static void intra_pred_down_left(uint8_t *d, uint8_t *top, uint8_t *left, int st
             d[y * stride + x] = (LOWPASS(top, x + y + 2) + LOWPASS(left, x + y + 2)) >> 1;
 }
 
-static void intra_pred_down_right(uint8_t *d, uint8_t *top, uint8_t *left, int stride)
+static void intra_pred_down_right(uint8_t *d, uint8_t *top, uint8_t *left, ptrdiff_t stride)
 {
     int x, y;
     for (y = 0; y < 8; y++)
@@ -324,7 +323,7 @@ static void intra_pred_down_right(uint8_t *d, uint8_t *top, uint8_t *left, int s
                 d[y * stride + x] = LOWPASS(left, y - x);
 }
 
-static void intra_pred_lp_left(uint8_t *d, uint8_t *top, uint8_t *left, int stride)
+static void intra_pred_lp_left(uint8_t *d, uint8_t *top, uint8_t *left, ptrdiff_t stride)
 {
     int x, y;
     for (y = 0; y < 8; y++)
@@ -332,7 +331,7 @@ static void intra_pred_lp_left(uint8_t *d, uint8_t *top, uint8_t *left, int stri
             d[y * stride + x] = LOWPASS(left, y + 1);
 }
 
-static void intra_pred_lp_top(uint8_t *d, uint8_t *top, uint8_t *left, int stride)
+static void intra_pred_lp_top(uint8_t *d, uint8_t *top, uint8_t *left, ptrdiff_t stride)
 {
     int x, y;
     for (y = 0; y < 8; y++)
@@ -604,8 +603,8 @@ void ff_cavs_mv(AVSContext *h, enum cavs_mv_loc nP, enum cavs_mv_loc nC,
         mv_pred_median(h, mvP, mvA, mvB, mvC);
 
     if (mode < MV_PRED_PSKIP) {
-        mvP->x += get_se_golomb(&h->gb);
-        mvP->y += get_se_golomb(&h->gb);
+        mvP->x += get_se_golomb(&h->bc);
+        mvP->y += get_se_golomb(&h->bc);
     }
     set_mvs(mvP, size);
 }
@@ -761,7 +760,7 @@ av_cold int ff_cavs_init(AVCodecContext *avctx)
 {
     AVSContext *h = avctx->priv_data;
 
-    ff_blockdsp_init(&h->bdsp, avctx);
+    ff_blockdsp_init(&h->bdsp);
     ff_h264chroma_init(&h->h264chroma, 8);
     ff_idctdsp_init(&h->idsp, avctx);
     ff_videodsp_init(&h->vdsp, 8);

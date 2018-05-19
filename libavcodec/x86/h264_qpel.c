@@ -23,12 +23,12 @@
 #include "libavutil/cpu.h"
 #include "libavutil/x86/asm.h"
 #include "libavutil/x86/cpu.h"
-#include "libavcodec/h264.h"
+#include "libavcodec/h264dec.h"
 #include "libavcodec/h264qpel.h"
 #include "libavcodec/pixels.h"
 #include "fpel.h"
 
-#if HAVE_YASM
+#if HAVE_X86ASM
 void ff_put_pixels4_mmxext(uint8_t *block, const uint8_t *pixels,
                            ptrdiff_t line_size, int h);
 void ff_avg_pixels4_mmxext(uint8_t *block, const uint8_t *pixels,
@@ -75,6 +75,17 @@ void ff_ ## OPNAME ## _pixels8_l2_shift5_mmxext(uint8_t *dst, const int16_t *src
 DEF_QPEL(avg)
 DEF_QPEL(put)
 
+static av_always_inline void ff_put_h264_qpel8or16_hv1_lowpass_mmxext(int16_t *tmp, const uint8_t *src, int tmpStride, int srcStride, int size)
+{
+    int w = (size + 8) >> 2;
+    src -= 2 * srcStride + 2;
+    while (w--) {
+        ff_put_h264_qpel8or16_hv1_lowpass_op_mmxext(src, tmp, srcStride, size);
+        tmp += 4;
+        src += 4;
+    }
+}
+
 #define QPEL_H264(OPNAME, OP, MMX)\
 static av_always_inline void ff_ ## OPNAME ## h264_qpel4_hv_lowpass_ ## MMX(uint8_t *dst, int16_t *tmp, const uint8_t *src, int dstStride, int tmpStride, int srcStride){\
     int w=3;\
@@ -94,15 +105,6 @@ static av_always_inline void ff_ ## OPNAME ## h264_qpel8or16_v_lowpass_ ## MMX(u
     src += 4;\
     dst += 4;\
     ff_ ## OPNAME ## h264_qpel8or16_v_lowpass_op_mmxext(dst, src, dstStride, srcStride, h);\
-}\
-static av_always_inline void ff_ ## OPNAME ## h264_qpel8or16_hv1_lowpass_ ## MMX(int16_t *tmp, const uint8_t *src, int tmpStride, int srcStride, int size){\
-    int w = (size+8)>>2;\
-    src -= 2*srcStride+2;\
-    while(w--){\
-        ff_ ## OPNAME ## h264_qpel8or16_hv1_lowpass_op_mmxext(src, tmp, srcStride, size);\
-        tmp += 4;\
-        src += 4;\
-    }\
 }\
 static av_always_inline void ff_ ## OPNAME ## h264_qpel8or16_hv2_lowpass_ ## MMX(uint8_t *dst, int16_t *tmp, int dstStride, int tmpStride, int size){\
     int w = size>>4;\
@@ -501,7 +503,7 @@ QPEL16_OP(mc33, MMX)
 QPEL16(mmxext)
 #endif
 
-#endif /* HAVE_YASM */
+#endif /* HAVE_X86ASM */
 
 #define SET_QPEL_FUNCS(PFX, IDX, SIZE, CPU, PREFIX)                          \
     do {                                                                     \
@@ -541,7 +543,7 @@ QPEL16(mmxext)
 
 av_cold void ff_h264qpel_init_x86(H264QpelContext *c, int bit_depth)
 {
-#if HAVE_YASM
+#if HAVE_X86ASM
     int high_bit_depth = bit_depth > 8;
     int cpu_flags = av_get_cpu_flags();
 
@@ -566,11 +568,6 @@ av_cold void ff_h264qpel_init_x86(H264QpelContext *c, int bit_depth)
     }
 
     if (EXTERNAL_SSE2(cpu_flags)) {
-        if (!(cpu_flags & AV_CPU_FLAG_SSE2SLOW) && !high_bit_depth) {
-            // these functions are slower than mmx on AMD, but faster on Intel
-            H264_QPEL_FUNCS(0, 0, sse2);
-        }
-
         if (!high_bit_depth) {
             H264_QPEL_FUNCS(0, 1, sse2);
             H264_QPEL_FUNCS(0, 2, sse2);
@@ -594,6 +591,12 @@ av_cold void ff_h264qpel_init_x86(H264QpelContext *c, int bit_depth)
             H264_QPEL_FUNCS_10(1, 0, sse2_cache64);
             H264_QPEL_FUNCS_10(2, 0, sse2_cache64);
             H264_QPEL_FUNCS_10(3, 0, sse2_cache64);
+        }
+    }
+
+    if (EXTERNAL_SSE2_FAST(cpu_flags)) {
+        if (!high_bit_depth) {
+            H264_QPEL_FUNCS(0, 0, sse2);
         }
     }
 

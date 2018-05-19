@@ -1,6 +1,6 @@
 /*
  * AMR Audio encoder stub
- * Copyright (c) 2003 the ffmpeg project
+ * Copyright (c) 2003 The FFmpeg project
  *
  * This file is part of Libav.
  *
@@ -46,12 +46,15 @@ static const AVOption options[] = {
 };
 
 static const AVClass class = {
-    "libvo_amrwbenc", av_default_item_name, options, LIBAVUTIL_VERSION_INT
+    .class_name = "libvo_amrwbenc",
+    .item_name  = av_default_item_name,
+    .option     = options,
+    .version    = LIBAVUTIL_VERSION_INT,
 };
 
 static int get_wb_bitrate_mode(int bitrate, void *log_ctx)
 {
-    /* make the correspondance between bitrate and mode */
+    /* make the correspondence between bitrate and mode */
     static const int rates[] = {  6600,  8850, 12650, 14250, 15850, 18250,
                                  19850, 23050, 23850 };
     int i, best = -1, min_diff = 0;
@@ -151,4 +154,5 @@ AVCodec ff_libvo_amrwbenc_encoder = {
     .sample_fmts    = (const enum AVSampleFormat[]){ AV_SAMPLE_FMT_S16,
                                                      AV_SAMPLE_FMT_NONE },
     .priv_class     = &class,
+    .wrapper_name   = "libvo_amrwbenc",
 };

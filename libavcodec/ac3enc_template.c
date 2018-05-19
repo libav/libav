@@ -36,17 +36,6 @@
 #include "ac3enc.h"
 #include "eac3enc.h"
 
-/* prototypes for static functions in ac3enc_fixed.c and ac3enc_float.c */
-
-static void scale_coefficients(AC3EncodeContext *s);
-
-static int normalize_samples(AC3EncodeContext *s);
-
-static void clip_coefficients(AudioDSPContext *adsp, CoefType *coef,
-                              unsigned int len);
-
-static CoefType calc_cpl_coord(CoefSumType energy_ch, CoefSumType energy_cpl);
-
 
 int AC3_NAME(allocate_sample_buffers)(AC3EncodeContext *s)
 {
@@ -110,10 +99,10 @@ static void apply_mdct(AC3EncodeContext *s)
 #else
             s->ac3dsp.apply_window_int16(s->windowed_samples, input_samples,
                                          s->mdct_window, AC3_WINDOW_SIZE);
-#endif
 
             if (s->fixed_point)
                 block->coeff_shift[ch+1] = normalize_samples(s);
+#endif
 
             s->mdct.mdct_calcw(&s->mdct, block->mdct_coef[ch+1],
                                s->windowed_samples);
@@ -260,7 +249,7 @@ static void apply_channel_coupling(AC3EncodeContext *s)
                 energy_cpl = energy[blk][CPL_CH][bnd];
                 energy_ch = energy[blk][ch][bnd];
                 blk1 = blk+1;
-                while (!s->blocks[blk1].new_cpl_coords[ch] && blk1 < s->num_blocks) {
+                while (blk1 < s->num_blocks && !s->blocks[blk1].new_cpl_coords[ch]) {
                     if (s->blocks[blk1].cpl_in_use) {
                         energy_cpl += energy[blk1][CPL_CH][bnd];
                         energy_ch += energy[blk1][ch][bnd];
@@ -450,7 +439,7 @@ int AC3_NAME(encode_frame)(AVCodecContext *avctx, AVPacket *avpkt,
     ff_ac3_output_frame(s, avpkt->data);
 
     if (frame->pts != AV_NOPTS_VALUE)
-        avpkt->pts = frame->pts - ff_samples_to_time_base(avctx, avctx->delay);
+        avpkt->pts = frame->pts - ff_samples_to_time_base(avctx, avctx->initial_padding);
 
     *got_packet_ptr = 1;
     return 0;

@@ -24,7 +24,6 @@
 #include "libswscale/swscale_internal.h"
 #include "libavutil/attributes.h"
 #include "libavutil/intreadwrite.h"
-#include "libavutil/x86/asm.h"
 #include "libavutil/x86/cpu.h"
 #include "libavutil/cpu.h"
 #include "libavutil/pixdesc.h"
@@ -216,10 +215,12 @@ void ff_hscale ## from_bpc ## to ## to_bpc ## _ ## filter_n ## _ ## opt( \
     SCALE_FUNC(filter_n,  8, 15, opt); \
     SCALE_FUNC(filter_n,  9, 15, opt); \
     SCALE_FUNC(filter_n, 10, 15, opt); \
+    SCALE_FUNC(filter_n, 12, 15, opt); \
     SCALE_FUNC(filter_n, 16, 15, opt); \
     SCALE_FUNC(filter_n,  8, 19, opt); \
     SCALE_FUNC(filter_n,  9, 19, opt); \
     SCALE_FUNC(filter_n, 10, 19, opt); \
+    SCALE_FUNC(filter_n, 12, 19, opt); \
     SCALE_FUNC(filter_n, 16, 19, opt)
 
 #define SCALE_FUNCS_MMX(opt) \
@@ -317,16 +318,19 @@ av_cold void ff_sws_init_swscale_x86(SwsContext *c)
 
 #define ASSIGN_SCALE_FUNC2(hscalefn, filtersize, opt1, opt2) do { \
     if (c->srcBpc == 8) { \
-        hscalefn = c->dstBpc <= 10 ? ff_hscale8to15_ ## filtersize ## _ ## opt2 : \
+        hscalefn = c->dstBpc <= 15 ? ff_hscale8to15_ ## filtersize ## _ ## opt2 : \
                                      ff_hscale8to19_ ## filtersize ## _ ## opt1; \
     } else if (c->srcBpc == 9) { \
-        hscalefn = c->dstBpc <= 10 ? ff_hscale9to15_ ## filtersize ## _ ## opt2 : \
+        hscalefn = c->dstBpc <= 15 ? ff_hscale9to15_ ## filtersize ## _ ## opt2 : \
                                      ff_hscale9to19_ ## filtersize ## _ ## opt1; \
     } else if (c->srcBpc == 10) { \
-        hscalefn = c->dstBpc <= 10 ? ff_hscale10to15_ ## filtersize ## _ ## opt2 : \
+        hscalefn = c->dstBpc <= 15 ? ff_hscale10to15_ ## filtersize ## _ ## opt2 : \
                                      ff_hscale10to19_ ## filtersize ## _ ## opt1; \
-    } else /* c->srcBpc == 16 */ { \
-        hscalefn = c->dstBpc <= 10 ? ff_hscale16to15_ ## filtersize ## _ ## opt2 : \
+    } else if (c->srcBpc == 12) { \
+        hscalefn = c->dstBpc <= 15 ? ff_hscale12to15_ ## filtersize ## _ ## opt2 : \
+                                     ff_hscale12to19_ ## filtersize ## _ ## opt1; \
+    } else if (c->srcBpc == 16) { \
+        hscalefn = c->dstBpc <= 15 ? ff_hscale16to15_ ## filtersize ## _ ## opt2 : \
                                      ff_hscale16to19_ ## filtersize ## _ ## opt1; \
     } \
 } while (0)
@@ -341,14 +345,14 @@ switch(c->dstBpc){ \
     case 16:                          do_16_case;                          break; \
     case 10: if (!isBE(c->dstFormat)) vscalefn = ff_yuv2planeX_10_ ## opt; break; \
     case 9:  if (!isBE(c->dstFormat)) vscalefn = ff_yuv2planeX_9_  ## opt; break; \
-    default: if (condition_8bit)      vscalefn = ff_yuv2planeX_8_  ## opt; break; \
+    case 8:  if (condition_8bit)      vscalefn = ff_yuv2planeX_8_  ## opt; break; \
     }
 #define ASSIGN_VSCALE_FUNC(vscalefn, opt1, opt2, opt2chk) \
     switch(c->dstBpc){ \
     case 16: if (!isBE(c->dstFormat))            vscalefn = ff_yuv2plane1_16_ ## opt1; break; \
     case 10: if (!isBE(c->dstFormat) && opt2chk) vscalefn = ff_yuv2plane1_10_ ## opt2; break; \
     case 9:  if (!isBE(c->dstFormat) && opt2chk) vscalefn = ff_yuv2plane1_9_  ## opt2;  break; \
-    default:                                     vscalefn = ff_yuv2plane1_8_  ## opt1;  break; \
+    case 8:                                      vscalefn = ff_yuv2plane1_8_  ## opt1;  break; \
     }
 #define case_rgb(x, X, opt) \
         case AV_PIX_FMT_ ## X: \

@@ -352,6 +352,7 @@ typedef struct RTSPState {
      * Polling array for udp
      */
     struct pollfd *p;
+    int max_p;
 
     /**
      * Whether the server supports the GET_PARAMETER method.
@@ -398,6 +399,8 @@ typedef struct RTSPState {
 
     char default_lang[4];
     int buffer_size;
+
+    const URLProtocol **protocols;
 } RTSPState;
 
 #define RTSP_FLAG_FILTER_SRC  0x1    /**< Filter incoming UDP packets -
@@ -455,11 +458,15 @@ typedef struct RTSPStream {
     /** Enable sending RTCP feedback messages according to RFC 4585 */
     int feedback;
 
+    /** SSRC for this stream, to allow identifying RTCP packets before the first RTP packet */
+    uint32_t ssrc;
+
     char crypto_suite[40];
     char crypto_params[100];
 } RTSPStream;
 
-void ff_rtsp_parse_line(RTSPMessageHeader *reply, const char *buf,
+void ff_rtsp_parse_line(AVFormatContext *s,
+                        RTSPMessageHeader *reply, const char *buf,
                         RTSPState *rt, const char *method);
 
 /**
