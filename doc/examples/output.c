@@ -438,8 +438,8 @@ static void open_video(AVFormatContext *oc, OutputStream *ost)
      * picture is needed too. It is then converted to the required
      * output format. */
     ost->tmp_frame = NULL;
-    if (c->pix_fmt != AV_PIX_FMT_YUV420P) {
-        ost->tmp_frame = alloc_picture(AV_PIX_FMT_YUV420P, c->width, c->height);
+    if (c->pix_fmt != STREAM_PIX_FMT) {
+        ost->tmp_frame = alloc_picture(STREAM_PIX_FMT, c->width, c->height);
         if (!ost->tmp_frame) {
             fprintf(stderr, "Could not allocate temporary picture\n");
             exit(1);
@@ -493,14 +493,14 @@ static AVFrame *get_video_frame(OutputStream *ost)
                       STREAM_DURATION, (AVRational){ 1, 1 }) >= 0)
         return NULL;
 
-    if (c->pix_fmt != AV_PIX_FMT_YUV420P) {
+    if (c->pix_fmt != STREAM_PIX_FMT) {
         /* as we only generate a YUV420P picture, we must convert it
          * to the codec pixel format if needed */
         if (!ost->sws_ctx) {
             ost->sws_ctx = sws_getContext(c->width, c->height,
-                                          AV_PIX_FMT_YUV420P,
-                                          c->width, c->height,
                                           c->pix_fmt,
+                                          c->width, c->height,
+                                          STREAM_PIX_FMT,
                                           SCALE_FLAGS, NULL, NULL, NULL);
             if (!ost->sws_ctx) {
                 fprintf(stderr,
